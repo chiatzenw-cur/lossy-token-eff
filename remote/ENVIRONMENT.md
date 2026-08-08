@@ -86,6 +86,51 @@ The taxonomy paper's own pairs (Qwen3-32B verifier, tens of GB) don't fit
 without freeing space first, so GPT-OSS-20B+EAGLE3 is effectively the only
 target/drafter pair available right now unless that changes.
 
+## Fresh server per measurement — not optional
+
+**Yes, shut down and start a new server for every measurement.** This isn't
+caution for its own sake; the sibling repo measured the alternative failing.
+
+`--seed` and prompt/sampling params being identical is not enough to make two
+requests comparable if they land on a server that has already served other
+requests. Two failure modes compound:
+
+1. **Prefix-cache reuse takes a different numeric path than a cold
+   compute**, even with the *same* prompt+seed (`--no-enable-prefix-caching`
+   above exists because of this — see that section).
+2. **Continuous batching and RNG state carry over between requests on the
+   same engine.** The sibling repo's `case_001` gave 1,711 output tokens as a
+   server's *first* request and 2,485 tokens as its *second* — same prompt,
+   same seed, same everything except how many prior requests that engine had
+   already served.
+
+The naive fix — run each arm as its own fresh server, but issue all N cases
+to it in the same order — is **not** sufficient either. "Same ordinal
+position" is not "same engine state": by case 2, the two arms have already
+produced different numbers of tokens and consumed different numbers of RNG
+draws, so anything downstream of the first case in a shared run still carries
+a request-history confound.
+
+The sibling repo hit this directly: a 10-problem pilot sharing one server per
+arm reported strict 9/10 → lossy 6/10. Re-run with one fresh server per
+*(arm, case, seed)* triple — every request the first thing its engine ever
+sees — the same ten problems gave strict 7/10 → lossy 7/10, and the one case
+that happened to be ordinal-1 in both runs (`case_001`) reproduced
+**bit-for-bit** (1,711 / 1,587 tokens, same for both). That agreement is also
+useful on its own: it confirms the pipeline is deterministic and the pilot
+and fresh datasets are directly comparable once position is controlled — the
+gap was the confound, not noise.
+
+**So: one server per `(arm, config, case, seed)` tuple, every request
+ordinal 1.** This costs a full server start per measurement (the sibling repo
+priced 60 runs at ~1.5h), which is real but small next to the alternative of
+a dataset with an uncontrolled confound baked in. `scripts/run_experiment_vllm.py`
+in the sibling repo asserts ordinal-1 from `/metrics` and refuses to write a
+run directory otherwise (`--assert-fresh-server`) — port that assertion, not
+just the discipline, when the data-collection runner exists here; a policy
+enforced only by remembering to follow it is the exact way the pilot's
+confound got in.
+
 ## Patching rejection_sampler.py — the hardlink trap
 
 `lossy-spec-decode-repetition/patches/README.md` flags this and it applies
