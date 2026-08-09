@@ -277,26 +277,43 @@ class _Tracer:
                     # when needed (accepted rows already have draft==emitted,
                     # so it would be redundant there).
                     emitted_p = emitted_rank = emitted_shortfall = None
+                    trace_anomaly = None
                     if not accepted:
-                        if source == "recovered":
-                            # The recovery kernel explicitly masks out
+                        # These two conditions are believed invariant (see the
+                        # comments below), but Phase 1 is observation only --
+                        # "nothing here alters acceptance" has to also mean
+                        # nothing here can ever CRASH generation, or a bug in
+                        # this file's own bookkeeping becomes an outage in
+                        # the thing it's supposed to be a side-channel on.
+                        # First hit: case_033/spec-casc-opt took down its
+                        # EngineCore twice in a row on a hard assert here
+                        # (fp32 read-back of an emitted token whose Gumbel-max
+                        # recovery selection ran in fp64 is the leading
+                        # suspect -- a token can be legitimately selected with
+                        # a true probability that then rounds to exactly 0.0
+                        # in the fp32 tensor this module reads back). Recorded
+                        # as an anomaly flag instead of raised, so the run
+                        # completes and the anomaly is still visible in the
+                        # trace for follow-up, rather than losing the whole
+                        # generation to an observation-code bug.
+                        if source == "recovered" and emitted == dt_l[i]:
+                            # The recovery kernel is supposed to exclude
                             # draft_token_id from its candidate pool (see
                             # sample_recovered_tokens_kernel's NO_DRAFT_PROBS
-                            # branch: `mask=(... & (vocab_offset !=
-                            # draft_token_id))`), so this must never fire. A
-                            # violation would mean the trace and the kernel
-                            # have desynced, not that the theory is wrong.
-                            assert emitted != dt_l[i], (
-                                f"recovery emitted the just-rejected draft token "
-                                f"{dt_l[i]} at output_position={self._emitted}"
-                            )
+                            # branch), so this means the trace and the kernel
+                            # have desynced.
+                            trace_anomaly = "recovered_emitted_rejected_draft_token"
                         emitted_p_t = target_probs[i, emitted]
                         emitted_p = round(float(emitted_p_t), 8)
-                        assert emitted_p > 0, (
-                            f"emitted token {emitted} has zero target probability "
-                            f"at output_position={self._emitted} -- should be "
-                            f"unreachable by any residual/recovery sampling"
-                        )
+                        if emitted_p <= 0:
+                            trace_anomaly = (trace_anomaly or "") + "|zero_prob_emission"
+                            print(
+                                f"[RELAXATION TRACE] anomaly: emitted token {emitted} has "
+                                f"target_probs()={emitted_p} at output_position={self._emitted} "
+                                f"(round={self._round}, batch={b}) -- recording, not raising",
+                                file=sys.stderr,
+                                flush=True,
+                            )
                         emitted_rank = int((target_probs[i] > emitted_p_t).sum())
                         emitted_shortfall = round(top1_l[i] - emitted_p, 6)
 
@@ -349,6 +366,7 @@ class _Tracer:
                             "emitted_p": emitted_p,
                             "emitted_target_rank": emitted_rank,
                             "emitted_top1_shortfall": emitted_shortfall,
+                            "trace_anomaly": trace_anomaly,
                             "target_entropy": round(ent_l[i], 5),
                             "draft_entropy": None if draft_ent is None else round(draft_ent[i], 5),
                             "kl_target_draft": None if kl_pq is None else round(kl_pq[i], 5),
