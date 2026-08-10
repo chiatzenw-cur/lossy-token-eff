@@ -1,0 +1,349 @@
+--- a/vllm/v1/sample/rejection_sampler.py
++++ b/vllm/v1/sample/rejection_sampler.py
+@@ -7,9 +7,205 @@
+ from dataclasses import replace
+ from typing import TYPE_CHECKING
+ 
++import collections
++import os
++import sys
++
+ import torch
+ import torch.nn as nn
+ 
++# LOSSY-VERIFICATION PILOT PATCH (not upstream vLLM).
++#
++# (Reducible) Fuzzy Speculative Decoding (r-fuzzy), Holsman et al. 2025,
++# "Fuzzy speculative decoding for a tunable accuracy-runtime tradeoff", as
++# unified into Xia et al. 2026's taxonomy (arXiv:2607.08690 Eq. 10, Table 2).
++# Per position, either trust the drafter completely or run the strict test:
++#
++#   pi_rej(v) = pi_res(v) = q(v)  if Div(p, q) < alpha
++#                          = p(v)  otherwise
++#
++# Div is Jensen-Shannon divergence, the paper's own recommendation (avoids
++# the divide-by-zero KL-divergence can hit under non-overlapping top-p/top-k
++# support). alpha -> -inf makes "Div < alpha" always false, recovering strict
++# spec-dec exactly (same convention as this repo's spec-casc-opt patch);
++# alpha -> +inf always trusts q.
++#
++# Reducible, not the paper's own "fuzzy": the paper's own presentation picks
++# q or p by the divergence test and samples directly from whichever is
++# picked. That is equivalent in distribution to running the *ordinary*
++# accept/residual machinery with the same target (q or p) substituted in --
++# Xia et al. prove this in their Appendix C (Result 1) and additionally show
++# the reducible form has provably-greater-or-equal per-token acceptance for
++# the SAME output distribution, since when the target is q, this substitution
++# accepts the drafted token outright (pi_rej(x)/q(x) == 1) instead of
++# resampling from q "from scratch". This patch implements only the reducible
++# form, per that result.
++#
++# Structurally this mirrors the spec-casc-opt patch in this repo almost
++# exactly: both binary-switch the whole per-token target between q and p
++# based on a full-vocab reduction computed once in plain PyTorch before
++# kernel launch (a JS divergence here, TV/argmax there), passed in as a
++# boolean per-token mask. Neither ever blends q and p, and picking q always
++# means "accept unconditionally" (pi_rej(x)/q(x) == 1), so -- like
++# spec-casc-opt -- this patch does NOT need to touch recovery/residual
++# sampling: rejection can only happen on the strict-test branch, where the
++# residual target is p, already vLLM's stock behaviour.
++#
++# alpha comes from a file, not the environment (vLLM spawns EngineCore with a
++# sanitised environment; env vars never reach it), uid-scoped AND repo-scoped
++# under /tmp so a server from the sibling lossy-spec-decode-repetition repo
++# cannot pick up this repo's (differently-prefixed) knob value if both ever
++# run on this box at once. This variant's own file, distinct from plain
++# r-fuzzy's AND both semantic-guard variants' -- none of the four may ever
++# alias, or the "other arms sit at their strict value" check in
++# scripts/run_experiment_vllm.py's acceptance_rule_record() would read a
++# stale non-strict value through the wrong method's name.
++_R_FUZZY_ALPHA_FILE = f"/tmp/lossy-token-eff-r-fuzzy-window-entropy-guard-alpha-{os.getuid()}"
++try:
++    with open(_R_FUZZY_ALPHA_FILE) as _f:
++        _R_FUZZY_ALPHA = float(_f.read().strip())
++    _R_FUZZY_ALPHA_SOURCE = _R_FUZZY_ALPHA_FILE
++except (OSError, ValueError):
++    _R_FUZZY_ALPHA = float("-inf")  # Div < -inf is never true -> strict spec-dec
++    _R_FUZZY_ALPHA_SOURCE = f"default, no readable {_R_FUZZY_ALPHA_FILE}"
++# WINDOW-ENTROPY GUARD (pilot experiment, analysis/semantic_guard/, not
++# upstream vLLM, not part of Xia et al.'s taxonomy -- a stateful variant on
++# top of r-fuzzy, distinct from and comparable to the token-marker guard in
++# vllm-0.26.0-r-fuzzy-semantic-guard.patch). Hypothesis: a token-identity
++# guard ("is this token literally 'wait'/'but'/...") is a narrow, lexical
++# proxy; the underlying signal is distributional, not lexical -- onset
++# analysis (see the parent conversation, and the sibling repo's own onset
++# table for the same pattern in greedy decoding) shows BOTH target and draft
++# entropy climb steadily over the ~32 tokens preceding a labeled repetition
++# onset, while KL(draft||target) does NOT rise (0.927 at onset vs 1.254
++# baseline) -- so it isn't drafter/target disagreement sharpening, it's the
++# two distributions independently going flatter/more uncertain together.
++# This guard reacts to THAT signal directly, and specifically to its SHAPE,
++# not a calibrated level: onset windows w64->w32->w16->w8->onset show a
++# steady, MONOTONIC ramp (e.g. target_entropy 1.056->1.064->1.086->1.137
++# ->1.662) -- so the trigger condition is exactly that staircase, checked
++# directly rather than fit to a threshold: the mean entropy over the
++# trailing 64/32/16/8 committed tokens must be STRICTLY INCREASING as the
++# window narrows toward the current position (mean_w64 < mean_w32 <
++# mean_w16 < mean_w8), for BOTH target and draft entropy jointly (matching
++# the onset data, which shows both climbing together while
++# KL(draft||target) does NOT rise -- 0.927 at onset vs 1.254 baseline -- so
++# it isn't drafter/target disagreement sharpening, it's the two
++# distributions independently flattening together). No calibrated
++# threshold, deliberately: this is a structural check (is the shape a
++# consistent ramp across four nested scales) rather than a magnitude check
++# against a population percentile. Falls back to strict verification only
++# while the staircase holds, and returns to relaxed verification the moment
++# it breaks -- a temporary local fallback, not a permanent per-request
++# budget.
++#
++# Baseline rate, not a threshold: analysis/semantic_guard/calibrate_window_entropy_guard.py
++# reports how often this exact joint condition holds by chance in ordinary
++# strict decoding -- 8.065% of windows (427,569 windows, 194 strict runs, as
++# of this writing), context for reading how often this guard actually fires
++# on a relaxed method, not a value used anywhere in the trigger itself.
++_WINDOW_ENTROPY_SIZES = (64, 32, 16, 8)  # largest (oldest-inclusive) first, must end strictly increasing
++
++
++def _is_monotonic_ramp(history: list[float]) -> bool:
++    """True iff mean(last 64) < mean(last 32) < mean(last 16) < mean(last 8)
++    -- the exact staircase the onset data shows. `history` must already have
++    at least max(_WINDOW_ENTROPY_SIZES) entries; callers check that."""
++    means = [sum(history[-w:]) / w for w in _WINDOW_ENTROPY_SIZES]
++    return all(means[i] < means[i + 1] for i in range(len(means) - 1))
++
++
++# One request per fresh server under this repo's own protocol (see
++# remote/ENVIRONMENT.md's "fresh server per measurement"), so a per-process
++# global is a per-request state: no keying, no reset needed, the deque is
++# just empty at process start same as the tracer's own per-request state
++# resets via file truncation. maxlen only needs to cover the largest window
++# checked (64); kept a little larger for headroom.
++_window_entropy_target_history: collections.deque[float] = collections.deque(maxlen=256)
++_window_entropy_draft_history: collections.deque[float] = collections.deque(maxlen=256)
++
++
++def _window_entropy_gate_and_update(
++    target_probs: torch.Tensor,   # [num_tokens, V], this round's WHOLE block
++    draft_probs: torch.Tensor | None,  # [num_tokens, V] or None
++    output_token_ids: torch.Tensor,  # [batch, max_spec_len+1], filled after the kernel runs
++    draft_token_ids: torch.Tensor,   # [num_tokens]
++    cu_num_draft_tokens: torch.Tensor,  # [batch]
++    num_draft_tokens: list[int],
++) -> torch.Tensor | None:
++    """Returns a [num_tokens] bool guard mask for THIS round (computed
++    BEFORE the kernel launch, from history + this round's own optimistic
++    per-position entropy -- see module comment on why this is valid to do
++    ahead of the accept/reject walk), and as a side effect appends this
++    round's ACTUALLY-COMMITTED entropies to history (which requires
++    `output_token_ids`, only available AFTER the kernel runs -- so despite
++    returning a pre-kernel value, this function is called twice around the
++    kernel launch: once to get the mask, once (with output_token_ids filled
++    in) to update history. See call sites in rejection_sample() below.
++    """
++    if draft_probs is None:
++        return None  # no q to gate against; NO_DRAFT_PROBS already forces the strict branch
++    if output_token_ids is None:
++        # Pre-kernel call: compute the guard mask from history + optimistic
++        # in-block entropy, mutate nothing.
++        ent_t = -(target_probs * torch.log(target_probs.clamp_min(1e-12))).sum(dim=-1)
++        ent_d = -(draft_probs * torch.log(draft_probs.clamp_min(1e-12))).sum(dim=-1)
++        ent_t_l = ent_t.tolist()
++        ent_d_l = ent_d.tolist()
++        guard = [False] * len(ent_t_l)
++        start = 0
++        for n in num_draft_tokens:
++            hist_t = list(_window_entropy_target_history)
++            hist_d = list(_window_entropy_draft_history)
++            for j in range(n):
++                hist_t.append(ent_t_l[start + j])
++                hist_d.append(ent_d_l[start + j])
++                if len(hist_t) >= max(_WINDOW_ENTROPY_SIZES):
++                    guard[start + j] = _is_monotonic_ramp(hist_t) and _is_monotonic_ramp(hist_d)
++                # else: not enough history yet (start of run) -- never guard
++            start += n
++        return torch.tensor(guard, dtype=torch.bool, device=target_probs.device)
++    else:
++        # Post-kernel call: append only the ACTUALLY-COMMITTED positions'
++        # entropy to history (accepted_draft + recovered; bonus tokens carry
++        # no entropy value at all -- see module comment -- and are skipped,
++        # same simplification the analysis-side calibration script makes).
++        # A position is "reached" iff it wasn't skipped by an earlier
++        # rejection in the same round: walk forward from output_token_ids
++        # until a placeholder (-1) or a token that isn't the draft proposal
++        # AND isn't a legitimate recovery is hit. This mirrors
++        # relaxation_trace.py's own walk, kept independent of it (Phase 1
++        # tracing must stay observation-only; this one has to run whether or
++        # not tracing is enabled, since the guard's own state can't depend
++        # on an unrelated debug flag).
++        ent_t = -(target_probs * torch.log(target_probs.clamp_min(1e-12))).sum(dim=-1)
++        ent_d = -(draft_probs * torch.log(draft_probs.clamp_min(1e-12))).sum(dim=-1)
++        ent_t_l = ent_t.tolist()
++        ent_d_l = ent_d.tolist()
++        dt_l = draft_token_ids.tolist()
++        out = output_token_ids.tolist()
++        start = 0
++        for b, n in enumerate(num_draft_tokens):
++            for j in range(n):
++                emitted = out[b][j]
++                if emitted == -1:
++                    break  # slot never evaluated: an earlier position in this round was rejected
++                _window_entropy_target_history.append(ent_t_l[start + j])
++                _window_entropy_draft_history.append(ent_d_l[start + j])
++                if emitted != dt_l[start + j]:
++                    break  # this position was itself the rejection; nothing after it in-round ran
++            start += n
++        return None
++
++
++print(
++    f"[R-FUZZY-WINDOW-ENTROPY-GUARD PATCH] pid={os.getpid()} alpha={_R_FUZZY_ALPHA} "
++    f"({_R_FUZZY_ALPHA_SOURCE}) window_sizes={_WINDOW_ENTROPY_SIZES} (unquantified monotonic-ramp trigger)",
++    file=sys.stderr,
++    flush=True,
++)
++
++from vllm.v1.sample.relaxation_trace import TRACER as _TRACER
+ from vllm.logger import init_logger
+ from vllm.triton_utils import tl, triton
+ from vllm.v1.outputs import LogprobsLists, LogprobsTensors, SamplerOutput
+@@ -490,6 +686,50 @@
+ 
+     # Rejection sampling for random sampling requests.
+     assert uniform_probs is not None
++
++    # r-fuzzy defer decision, computed once here in plain PyTorch (same
++    # pre-reduction-before-kernel-launch style as this repo's spec-casc-opt
++    # patch) rather than as a new full-vocab Triton reduction. None when
++    # draft_probs is unavailable (NO_DRAFT_PROBS): there is no q to compare
++    # against p, so the kernel keeps its original always-strict behaviour.
++    # jsd_defer_mask: r-fuzzy's OWN decision, unmodified -- kept separate
++    # from the merged mask actually handed to the kernel so the tracer can
++    # report a real counterfactual ("what would plain r-fuzzy have done
++    # here") instead of a tautology. Feeding the MERGED mask to the tracer
++    # (an earlier version of this patch did exactly that) makes
++    # lossy_would_accept == strict_would_accept at every guarded position BY
++    # CONSTRUCTION, since lossy_ok = strict_ok | (~defer_mask) collapses to
++    # strict_ok whenever defer_mask is True regardless of WHY it's True --
++    # so "did the guard actually change anything vs plain r-fuzzy" comes out
++    # as a trivial always-zero no matter what the guard does, not a finding.
++    jsd_defer_mask: torch.Tensor | None = None
++    merged_defer_mask: torch.Tensor | None = None
++    window_guard_mask: torch.Tensor | None = None
++    if draft_probs is not None:
++        _eps = 1e-12
++        m = 0.5 * (target_probs + draft_probs)
++        log_m = torch.log(m.clamp_min(_eps))
++        kl_pm = (target_probs * (torch.log(target_probs.clamp_min(_eps)) - log_m)).sum(dim=-1)
++        kl_qm = (draft_probs * (torch.log(draft_probs.clamp_min(_eps)) - log_m)).sum(dim=-1)
++        jsd = (0.5 * kl_pm + 0.5 * kl_qm).clamp_min(0.0)
++        # Div(p,q) < alpha means "trust q completely" (pi_rej == q, always
++        # accept); everything else defers to the strict p/q test. alpha=-inf
++        # makes this branch always defer, i.e. exactly strict spec-dec.
++        jsd_defer_mask = (jsd >= _R_FUZZY_ALPHA).contiguous()
++
++        # Window-entropy guard: OR in a second, independent deferral source
++        # on top of r-fuzzy's own JSD test (see module comment). Computed
++        # from history + this round's own optimistic in-block entropy,
++        # BEFORE the kernel runs -- pure addition to defer_mask, so (like
++        # the token-marker guard) this can only make acceptance MORE
++        # conservative than plain r-fuzzy at the same alpha, never less.
++        window_guard_mask = _window_entropy_gate_and_update(
++            target_probs, draft_probs, None, draft_token_ids, cu_num_draft_tokens, num_draft_tokens
++        )
++        merged_defer_mask = jsd_defer_mask
++        if window_guard_mask is not None:
++            merged_defer_mask = (jsd_defer_mask | window_guard_mask).contiguous()
++
+     rejection_random_sample_kernel[(batch_size,)](
+         output_token_ids,
+         cu_num_draft_tokens,
+@@ -503,9 +743,43 @@
+         max_spec_len,
+         vocab_size,
+         synthetic_conditional_rates,
++        merged_defer_mask,  # the kernel gets the REAL, merged decision -- generation must reflect what actually ran
+         NO_DRAFT_PROBS=draft_probs is None,
+         SYNTHETIC_MODE=synthetic_mode,
+     )
++    # Update the window-entropy guard's rolling history with what ACTUALLY
++    # got committed this round (needs output_token_ids, hence after the
++    # kernel launch -- see _window_entropy_gate_and_update's own docstring
++    # for why this is a second, separate call rather than reusing the
++    # pre-kernel one). Runs unconditionally, not gated on _TRACER.enabled:
++    # the guard's own state must not depend on an unrelated debug flag.
++    if draft_probs is not None:
++        _window_entropy_gate_and_update(
++            target_probs, draft_probs, output_token_ids, draft_token_ids, cu_num_draft_tokens, num_draft_tokens
++        )
++    # Phase-1 observation hook. No-op unless a trace destination is configured;
++    # never influences acceptance, only records what the kernel just decided.
++    if _TRACER.enabled:
++        _TRACER.record(
++            draft_token_ids=draft_token_ids,
++            draft_probs=draft_probs,
++            target_probs=target_probs,
++            uniform_probs=uniform_probs,
++            recovered_token_ids=recovered_token_ids,
++            bonus_token_ids=bonus_token_ids,
++            output_token_ids=output_token_ids,
++            cu_num_draft_tokens=cu_num_draft_tokens,
++            num_draft_tokens=num_draft_tokens,
++            scalar_multiplier=_R_FUZZY_ALPHA,
++            # jsd_defer_mask, NOT merged_defer_mask -- see the comment above
++            # where these are computed. This is what makes
++            # lossy_would_accept a genuine "what would plain r-fuzzy do"
++            # counterfactual instead of a tautology that always agrees with
++            # strict_would_accept wherever the guard fired.
++            defer_mask=jsd_defer_mask,
++            window_guard_mask=window_guard_mask,
++            relaxation_method="r_fuzzy_window_entropy_guard",
++        )
+     return output_token_ids
+ 
+ 
+@@ -786,6 +1060,7 @@
+     max_spec_len,
+     vocab_size,
+     synthetic_conditional_rates_ptr,  # [num_speculative_tokens] or None
++    defer_mask_ptr,  # [num_tokens] bool, or None iff NO_DRAFT_PROBS; r-fuzzy
+     NO_DRAFT_PROBS: tl.constexpr,
+     SYNTHETIC_MODE: tl.constexpr,
+ ):
+@@ -815,20 +1090,31 @@
+                 rate = tl.load(synthetic_conditional_rates_ptr + pos)
+                 accepted = uniform_prob < rate
+             else:
++                target_prob = tl.load(
++                    target_probs_ptr + (start_idx + pos) * vocab_size + draft_token_id
++                )
+                 if NO_DRAFT_PROBS:
+                     draft_prob = 1
++                    # No q to compare against p: unchanged from upstream.
++                    accepted = draft_prob > 0 and target_prob / draft_prob >= uniform_prob
+                 else:
+                     draft_prob = tl.load(
+                         draft_probs_ptr
+                         + (start_idx + pos) * vocab_size
+                         + draft_token_id
+                     )
+-                target_prob = tl.load(
+-                    target_probs_ptr + (start_idx + pos) * vocab_size + draft_token_id
+-                )
+-                # NOTE(woosuk): While the draft probability should never be 0,
+-                # we check it to avoid NaNs. If it happens to be 0, we reject.
+-                accepted = draft_prob > 0 and target_prob / draft_prob >= uniform_prob
++                    # NOTE(woosuk): While the draft probability should never
++                    # be 0, we check it to avoid NaNs. If it happens to be 0,
++                    # we reject.
++                    # r-fuzzy: defer=True runs exactly the strict test above;
++                    # defer=False means pi_rej == q, so pi_rej(x)/q(x) == 1
++                    # and the draft token is always kept regardless of u
++                    # (Xia et al. Eq. 10 / Holsman et al. 2025).
++                    defer = tl.load(defer_mask_ptr + start_idx + pos)
++                    if defer:
++                        accepted = draft_prob > 0 and target_prob / draft_prob >= uniform_prob
++                    else:
++                        accepted = True
+             if accepted:
+                 token_id = draft_token_id
+             else:

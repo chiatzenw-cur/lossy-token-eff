@@ -120,10 +120,11 @@ Every method's α is read from a `/tmp/lossy-token-eff-<method>-alpha-$UID`
 file, never an environment variable — vLLM spawns `EngineCore` with a
 sanitised environment, confirmed via `/proc/<pid>/environ`, so an env var
 silently leaves every knob at its default and the "lossy" arm is an
-unlabelled copy of strict. `remote/run_server_vllm.sh` writes **all five**
-files in every mode (baseline, strict, and lossy for whichever method is
-active), each to its own strict-equivalent value, so a value left over from
-an earlier run can never leak into a control arm.
+unlabelled copy of strict. `remote/run_server_vllm.sh` writes **all six**
+files (the five taxonomy methods plus `r-fuzzy-semantic-guard`, see below)
+in every mode (baseline, strict, and lossy for whichever method is active),
+each to its own strict-equivalent value, so a value left over from an
+earlier run can never leak into a control arm.
 
 ## Testing without a model
 
@@ -146,3 +147,91 @@ Version-specific: hunks are line-addressed against 0.26.0. After any vLLM
 change, re-derive the diffs by hand rather than forcing them — this is
 exactly what porting from the sibling repo's 0.20.1-era `lenience` patch to
 this repo's 0.26.0 install required in the first place.
+
+## A sixth, experimental variant: `r-fuzzy-semantic-guard`
+
+Not one of Xia et al.'s five methods — a pilot built on top of plain
+`r-fuzzy`, testing a hypothesis from `analysis/semantic_guard/`: that
+hesitation/self-correction marker tokens (`wait`, `hmm`, `actually`, `but`,
+`let's`) disproportionately seed later trajectory corruption when relaxed
+acceptance lets one through that strict verification would have rejected.
+`vllm-0.26.0-r-fuzzy-semantic-guard.patch` is r-fuzzy's own patch plus one
+addition: an unconditional OR of a hesitation-marker token-id check into
+r-fuzzy's `defer_mask`, computed in plain PyTorch before the kernel launch —
+the kernel itself is byte-identical to plain r-fuzzy's. See the patch's own
+module-level comment for the full token-id derivation and
+`analysis/semantic_guard/README.md` for the offline evidence motivating the
+experiment and (once run) its results.
+
+Mutually exclusive with plain `r-fuzzy` at the file level, like every other
+pair here (`bash patches/apply.sh r-fuzzy-semantic-guard`), with its own
+`HASHES.txt` label, its own alpha file
+(`/tmp/lossy-token-eff-r-fuzzy-semantic-guard-alpha-$UID` — r-fuzzy's own
+alpha; the guard override itself has no separate on/off knob, it's always
+active in this patch), and its own registry entry in
+`scripts/lossy_methods.py` (`r_fuzzy_semantic_guard`), so it runs through
+the exact same experiment/grading pipeline as the other five arms rather
+than a bespoke script.
+
+## A seventh, wider variant: `r-fuzzy-semantic-guard-v2`
+
+Same mechanism as v1 above, wider token set: v1's 18 ids (the 5
+hesitation/self-correction markers) plus 17 more covering
+`Thus`/`We`/`So`/`Now`/`Let`/`Compute`/`Similarly`/`Define`/`From`, added at
+the user's request from a frequency count of AIME24 sentence-initial
+tokens. **Read `vllm-0.26.0-r-fuzzy-semantic-guard-v2.patch`'s own module
+comment before treating this as "v1 but better"**: most of the additions
+are generic reasoning-transition words, not hesitation markers — they open
+correct reasoning as often as corrupted reasoning, so this is a broader,
+more aggressive intervention, not a refinement, and the two should be read
+as separate experiments (see `analysis/semantic_guard/README.md` for how
+they compare once both have data). Same wiring pattern as v1: own
+`HASHES.txt` label (`r-fuzzy-semantic-guard-v2`), own alpha file
+(`/tmp/lossy-token-eff-r-fuzzy-semantic-guard-v2-alpha-$UID`), own registry
+entry (`r_fuzzy_semantic_guard_v2`).
+
+## An eighth variant, a different axis: `r-fuzzy-window-entropy-guard`
+
+Not a wider token list — a genuinely different signal. The two guards above
+gate on token *identity* (is the drafted token literally "wait"/"but"/...);
+this one gates on the *shape* of the distribution the token was drawn from
+over time: whether mean entropy over the trailing 64/32/16/8 committed
+tokens is STRICTLY INCREASING as the window narrows toward the current
+position (mean_w64 < mean_w32 < mean_w16 < mean_w8) — the exact staircase
+onset analysis shows preceding a labeled repetition (e.g. target_entropy
+1.056→1.064→1.086→1.137→1.662), checked directly for both target and draft
+entropy jointly rather than fit to a threshold. Deliberately unquantified:
+no calibrated cutoff, no percentile — a structural check on the *shape*
+across four nested scales, not a magnitude check against a population
+distribution, precisely because a level threshold can't distinguish "high
+and flat" from "climbing into now" and would guard both alike.
+`analysis/semantic_guard/calibrate_window_entropy_guard.py` reports the
+condition's baseline rate on strict decoding for context (8.065% of windows
+trigger the joint condition by chance — not a threshold, just what "normal"
+looks like), not to derive anything used in the trigger itself. Falls back
+to strict verification only while the staircase holds, and returns to
+relaxed verification the moment it breaks — a temporary local fallback, not
+a permanent per-request budget — see
+`vllm-0.26.0-r-fuzzy-window-entropy-guard.patch`'s own module comment for
+the full derivation (including why joint target-AND-draft rather than
+target alone: KL(draft‖target) does *not* rise before a repetition onset in
+the motivating analysis, so it isn't drafter/target disagreement
+sharpening, it's the two distributions independently flattening together).
+
+Mechanically distinct from the two token guards in one respect worth
+knowing before reading the patch: it's *stateful* across rounds (a
+module-level rolling-entropy history, correct without per-request keying
+only because this repo's protocol serves exactly one request per fresh
+server — see the patch's own comment), and it updates that history from
+`output_token_ids` *after* the kernel runs, not before — the gate mask
+itself is still computed pre-kernel like every other patch here, from
+history plus an optimistic in-block extrapolation of this round's own
+already-available target/draft probabilities.
+
+Also extends the shared `relaxation_trace.py` (one new optional field,
+`window_guard_active`, null for every other method) so the guard's own
+activity is directly visible in the trace rather than only inferable.
+Same wiring pattern as the other two: own `HASHES.txt` label
+(`r-fuzzy-window-entropy-guard`), own alpha file
+(`/tmp/lossy-token-eff-r-fuzzy-window-entropy-guard-alpha-$UID`), own
+registry entry (`r_fuzzy_window_entropy_guard`).

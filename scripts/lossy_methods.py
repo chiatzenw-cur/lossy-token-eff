@@ -62,6 +62,24 @@ class MethodSpec:
             return f"defer to strict p/q test iff max_u q(u) < max_u p(u) - {alpha:g}*TV(p,q), else accept unconditionally"
         if self.name == "r_fuzzy":
             return f"accept iff JSD(p,q) < {alpha:g} (then pi_rej=q, unconditional accept), else strict p/q test"
+        if self.name == "r_fuzzy_semantic_guard":
+            return (
+                f"accept iff JSD(p,q) < {alpha:g} AND draft token is not a hesitation marker "
+                "(else strict p/q test) -- r_fuzzy plus an always-on token-id override, "
+                "see analysis/semantic_guard/README.md"
+            )
+        if self.name == "r_fuzzy_semantic_guard_v2":
+            return (
+                f"accept iff JSD(p,q) < {alpha:g} AND draft token is not in the wider v2 "
+                "marker/connective set (else strict p/q test) -- see the patch's own module "
+                "comment for the v1-vs-v2 scope difference and analysis/semantic_guard/README.md"
+            )
+        if self.name == "r_fuzzy_window_entropy_guard":
+            return (
+                f"accept iff JSD(p,q) < {alpha:g} AND rolling-32 mean target+draft entropy over "
+                "committed tokens is below its strict-calibrated Q90 (else strict p/q test) -- "
+                "distributional sibling of the token-marker guards, see analysis/semantic_guard/README.md"
+            )
         if self.name == "spec_casc_tok":
             return (
                 f"pi_rej(v) = q(v)+eta*p(v) for v with p(v) >= (1-{alpha:g})*max(p), else eta*p(v); "
@@ -136,6 +154,51 @@ METHODS: dict[str, MethodSpec] = {
                 "family": "(reducible) fuzzy speculative decoding (Holsman et al. 2025)",
                 "paper_name": "r-fuzzy",
                 "reference": "Xia et al. 2026 (arXiv:2607.08690) Table 2 / Eq. 10",
+            },
+        ),
+        MethodSpec(
+            name="r_fuzzy_semantic_guard",
+            hashes_label="r-fuzzy-semantic-guard",
+            env_var="R_FUZZY_GUARD_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-r-fuzzy-semantic-guard-alpha-{_uid()}"),
+            log_prefix="[R-FUZZY-SEMANTIC-GUARD PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf)",
+            default_alpha=0.3,
+            taxonomy={
+                "family": "r-fuzzy + semantic guard (this repo's own pilot experiment, not in Xia et al.)",
+                "paper_name": "r-fuzzy-semantic-guard",
+                "reference": "analysis/semantic_guard/README.md",
+            },
+        ),
+        MethodSpec(
+            name="r_fuzzy_semantic_guard_v2",
+            hashes_label="r-fuzzy-semantic-guard-v2",
+            env_var="R_FUZZY_GUARD_V2_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-r-fuzzy-semantic-guard-v2-alpha-{_uid()}"),
+            log_prefix="[R-FUZZY-SEMANTIC-GUARD-V2 PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf)",
+            default_alpha=0.3,
+            taxonomy={
+                "family": "r-fuzzy + wider semantic guard (this repo's own pilot experiment, not in Xia et al.)",
+                "paper_name": "r-fuzzy-semantic-guard-v2",
+                "reference": "analysis/semantic_guard/README.md",
+            },
+        ),
+        MethodSpec(
+            name="r_fuzzy_window_entropy_guard",
+            hashes_label="r-fuzzy-window-entropy-guard",
+            env_var="R_FUZZY_WENTROPY_GUARD_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-r-fuzzy-window-entropy-guard-alpha-{_uid()}"),
+            log_prefix="[R-FUZZY-WINDOW-ENTROPY-GUARD PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf)",
+            default_alpha=0.3,
+            taxonomy={
+                "family": "r-fuzzy + window-entropy guard (this repo's own pilot experiment, not in Xia et al.)",
+                "paper_name": "r-fuzzy-window-entropy-guard",
+                "reference": "analysis/semantic_guard/README.md",
             },
         ),
         MethodSpec(

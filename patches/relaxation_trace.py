@@ -100,6 +100,11 @@ class _Tracer:
         self._emitted = 0  # running output position
         self._skipped_warmup = 0
         self._lock = threading.Lock()
+        # Lazily loaded on first decode, not here: importing/loading the
+        # o200k_harmony encoding is fast (~tens of ms) but there's no reason
+        # to pay it in __init__ if a run somehow never calls record().
+        self._encoding = None
+        self._encoding_load_failed = False
         if self.enabled:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             # Truncate: one engine serves one request under the fresh-server
@@ -110,6 +115,42 @@ class _Tracer:
                 file=sys.stderr,
                 flush=True,
             )
+
+    def _decode_token(self, token_id: int | None) -> str | None:
+        """Best-effort human-readable text for one token id -- gpt-oss-20b's
+        own o200k_harmony encoding (hardcoded: every run in this repo serves
+        that one model, same assumption analysis/semantic_guard/'s own
+        reconstruction scripts already make). Never raises: Phase 1 tracing
+        must not be able to take down generation just by trying to decode a
+        token for a human to read later (same principle as the trace_anomaly
+        handling below, for the same reason -- a single-token decode_utf8
+        call can legitimately fail on an orphaned multi-byte lead byte, see
+        analysis/semantic_guard/count_relaxed_only_hesitation.py's own note
+        on this). Falls back to a lossy per-token decode (replacement
+        character for anything that still doesn't stand alone) rather than
+        returning None on that specific, expected failure mode; returns None
+        only if the encoding itself never loaded or token_id is None.
+        """
+        if token_id is None:
+            return None
+        if self._encoding is None:
+            if self._encoding_load_failed:
+                return None
+            try:
+                from openai_harmony import HarmonyEncodingName, load_harmony_encoding
+
+                self._encoding = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
+            except Exception as exc:  # pragma: no cover -- defensive, see docstring
+                self._encoding_load_failed = True
+                print(f"[RELAXATION TRACE] token-text decoding disabled: {exc}", file=sys.stderr, flush=True)
+                return None
+        try:
+            return self._encoding.decode_utf8([token_id])
+        except Exception:
+            try:
+                return self._encoding.decode([token_id])
+            except Exception:
+                return None
 
     def _flush(self) -> None:
         if not self._rows:
@@ -133,10 +174,23 @@ class _Tracer:
         cu_num_draft_tokens: torch.Tensor,  # [batch]
         num_draft_tokens: list[int],
         scalar_multiplier: float,
-        defer_mask: torch.Tensor | None = None,  # [num_tokens] bool; spec-casc-opt, r-fuzzy
+        # [num_tokens] bool; spec-casc-opt, r-fuzzy. MUST be the BASE
+        # method's own decision (e.g. r-fuzzy's JSD test alone), never a
+        # mask already OR'd with an on-top guard's contribution (window_guard_mask,
+        # or a token-marker guard's own mask) -- lossy_ok below is derived
+        # from this parameter as strict_ok | (~defer_mask), which collapses
+        # to strict_ok wherever defer_mask is True FOR ANY REASON. Passing a
+        # guard-merged mask here makes lossy_would_accept silently equal
+        # strict_would_accept at every guarded position by construction,
+        # turning "did the guard change anything vs the base method" into an
+        # unconditional zero no matter what the guard actually does -- caught
+        # once already in r_fuzzy_window_entropy_guard's own patch (see its
+        # module comment / git history), worth getting right by convention.
+        defer_mask: torch.Tensor | None = None,
         cactus_alpha: float | None = None,
         casc_tok_alpha: float | None = None,
         relaxation_method: str = "mentored_dec",
+        window_guard_mask: torch.Tensor | None = None,  # [num_tokens] bool; r_fuzzy_window_entropy_guard only
     ) -> None:
         if not self.enabled:
             return
@@ -238,6 +292,7 @@ class _Tracer:
         rec_l = recovered_token_ids.to(torch.int64).tolist()
         out = output_token_ids.tolist()
         bonus = bonus_token_ids.reshape(-1).tolist()
+        wg_l = window_guard_mask.tolist() if window_guard_mask is not None else None
 
         with self._lock:
             start = 0
@@ -326,6 +381,16 @@ class _Tracer:
                             "output_position": self._emitted,
                             "draft_token_id": dt_l[i],
                             "emitted_token_id": emitted,
+                            # Human-readable text for the two ids above --
+                            # the ORIGINAL drafted proposal and the token
+                            # that actually made it into the output (equal,
+                            # decoded twice, on accepted rows; different on
+                            # recovered/other rows -- exactly the "what was
+                            # proposed vs what actually got emitted" pair
+                            # for a rejected position). Best-effort, never
+                            # raises -- see _decode_token's own docstring.
+                            "draft_token_text": self._decode_token(dt_l[i]),
+                            "emitted_token_text": self._decode_token(emitted),
                             # p/q/target_rank/target_top1_shortfall: the DRAFT
                             # PROPOSAL's own metrics -- see the comment above.
                             "p": round(p_l[i], 8),
@@ -346,6 +411,15 @@ class _Tracer:
                             # the counterfactual that matters: emitted only
                             # because the bar was lowered
                             "lossy_only_accepted": bool(accepted and l_l[i] and not s_l[i]),
+                            # r_fuzzy_window_entropy_guard only; null for every
+                            # other method. True iff the rolling entropy window
+                            # forced this position to the strict test.
+                            # "guard_changed_decision" (whether that forcing
+                            # actually flipped the outcome vs plain lossy) is
+                            # window_guard_active AND lossy_would_accept AND NOT
+                            # strict_would_accept -- derivable from these three
+                            # fields together, not stored as its own column.
+                            "window_guard_active": None if wg_l is None else bool(wg_l[i]),
                             "emission_source": source,
                             "target_rank": int(rank_l[i]),
                             "target_top1_prob": round(top1_l[i], 6),
@@ -388,6 +462,8 @@ class _Tracer:
                             "output_position": self._emitted,
                             "draft_token_id": None,
                             "emitted_token_id": bonus[b] if b < len(bonus) else None,
+                            "draft_token_text": None,
+                            "emitted_token_text": self._decode_token(bonus[b] if b < len(bonus) else None),
                             "emission_source": "bonus",
                             "consecutive_accepted_length": run,
                             "relaxation_param": scalar_multiplier,

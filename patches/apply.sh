@@ -24,9 +24,9 @@ HASHES="$here/HASHES.txt"
 
 METHOD="${1:-}"
 case "$METHOD" in
-  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok) ;;
+  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard) ;;
   *)
-    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok>" >&2
+    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard>" >&2
     exit 2
     ;;
 esac
@@ -129,6 +129,16 @@ select alpha by writing it to:
   spec-casc-opt:   /tmp/lossy-token-eff-spec-casc-alpha-\$(id -u)      (any real; -inf = strict)
   r-fuzzy:         /tmp/lossy-token-eff-r-fuzzy-alpha-\$(id -u)        (any real; -inf = strict)
   spec-casc-tok:   /tmp/lossy-token-eff-spec-casc-tok-alpha-\$(id -u)  (any real; -inf = strict, NOT 0.0)
-remote/run_server_vllm.sh writes all five for every mode (baseline/strict/lossy)
+  r-fuzzy-semantic-guard: /tmp/lossy-token-eff-r-fuzzy-semantic-guard-alpha-\$(id -u) (any real; -inf = strict)
+    (r-fuzzy's own alpha, PLUS an always-on hesitation-marker override -- see
+    the patch's module comment and analysis/semantic_guard/README.md)
+  r-fuzzy-semantic-guard-v2: /tmp/lossy-token-eff-r-fuzzy-semantic-guard-v2-alpha-\$(id -u) (any real; -inf = strict)
+    (same idea, wider token set -- see the patch's own module comment for
+    the explicit caveat about what that widening trades off)
+  r-fuzzy-window-entropy-guard: /tmp/lossy-token-eff-r-fuzzy-window-entropy-guard-alpha-\$(id -u) (any real; -inf = strict)
+    (distributional sibling of the two above -- gates on a rolling window of
+    target+draft entropy instead of token identity; see the patch's own
+    module comment for the calibration and analysis/semantic_guard/README.md)
+remote/run_server_vllm.sh writes all eight for every mode (baseline/strict/lossy)
 so a stale value from a previous run cannot silently leak into a control arm.
 EOF

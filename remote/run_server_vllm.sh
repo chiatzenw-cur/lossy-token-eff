@@ -29,16 +29,19 @@ MAX_MODEL_LEN="${MAX_MODEL_LEN:-65536}"
 GPU_UTIL="${GPU_UTIL:-0.85}"
 
 # Lossy knob. One of: mentored_dec, cactus, spec_casc_opt, r_fuzzy,
-# spec_casc_tok, synthetic. The first five need the matching patch applied
-# (bash patches/apply.sh <method>); synthetic needs no patch at all -- it's
-# vLLM's stock rejection_sample_method that accepts at a prescribed rate
-# irrespective of p and q.
+# spec_casc_tok, r_fuzzy_semantic_guard, synthetic. The first six need the
+# matching patch applied (bash patches/apply.sh <method>); synthetic needs no
+# patch at all -- it's vLLM's stock rejection_sample_method that accepts at a
+# prescribed rate irrespective of p and q.
 LOSSY_RULE="${LOSSY_RULE:-synthetic}"
 MENTORED_DEC_ALPHA="${MENTORED_DEC_ALPHA:-0.37}"   # Xia et al. Table 2 alpha; lam = 1-alpha
 CACTUS_ALPHA="${CACTUS_ALPHA:-0.25}"                # mid-range of the paper's {0.1,0.25,1,10}
 SPEC_CASC_ALPHA="${SPEC_CASC_ALPHA:-0.05}"          # matches the paper's own repetition-loop example (Fig. 5)
 R_FUZZY_ALPHA="${R_FUZZY_ALPHA:-0.3}"                # Jensen-Shannon divergence threshold
 SPEC_CASC_TOK_ALPHA="${SPEC_CASC_TOK_ALPHA:-0.3}"    # NOT the strict point -- see patches/README.md
+R_FUZZY_GUARD_ALPHA="${R_FUZZY_GUARD_ALPHA:-0.3}"    # r-fuzzy's own alpha; guard override is always on, no separate knob
+R_FUZZY_GUARD_V2_ALPHA="${R_FUZZY_GUARD_V2_ALPHA:-0.3}"  # same idea, wider token set -- see patches/README.md
+R_FUZZY_WENTROPY_GUARD_ALPHA="${R_FUZZY_WENTROPY_GUARD_ALPHA:-0.3}"  # r-fuzzy's own alpha; entropy-window override always on
 SYNTH_LEN="${SYNTH_LEN:-3.0}"
 
 # Every knob file is written in EVERY mode, including baseline and strict, to
@@ -57,6 +60,9 @@ cactus_file="/tmp/lossy-token-eff-cactus-alpha-$(id -u)"
 spec_casc_opt_file="/tmp/lossy-token-eff-spec-casc-alpha-$(id -u)"
 r_fuzzy_file="/tmp/lossy-token-eff-r-fuzzy-alpha-$(id -u)"
 spec_casc_tok_file="/tmp/lossy-token-eff-spec-casc-tok-alpha-$(id -u)"
+r_fuzzy_guard_file="/tmp/lossy-token-eff-r-fuzzy-semantic-guard-alpha-$(id -u)"
+r_fuzzy_guard_v2_file="/tmp/lossy-token-eff-r-fuzzy-semantic-guard-v2-alpha-$(id -u)"
+r_fuzzy_wentropy_guard_file="/tmp/lossy-token-eff-r-fuzzy-window-entropy-guard-alpha-$(id -u)"
 
 neutralise_all_knobs() {
   # Each method's own "no relaxation" value -- NOT uniformly 0.0. See
@@ -66,6 +72,9 @@ neutralise_all_knobs() {
   printf '%s\n' "-inf"   > "$spec_casc_opt_file"
   printf '%s\n' "-inf"   > "$r_fuzzy_file"
   printf '%s\n' "-inf"   > "$spec_casc_tok_file"
+  printf '%s\n' "-inf"   > "$r_fuzzy_guard_file"
+  printf '%s\n' "-inf"   > "$r_fuzzy_guard_v2_file"
+  printf '%s\n' "-inf"   > "$r_fuzzy_wentropy_guard_file"
 }
 
 common_args=(
@@ -190,8 +199,44 @@ case "$MODE" in
         }
         echo "mode=lossy rule=spec_casc_tok alpha=$SPEC_CASC_TOK_ALPHA (via $spec_casc_tok_file) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
         ;;
+      r_fuzzy_semantic_guard)
+        printf '%s\n' "$R_FUZZY_GUARD_ALPHA" > "$r_fuzzy_guard_file"
+        # _SEMANTIC_GUARD_TOKEN_IDS, not _R_FUZZY_ALPHA: both r-fuzzy patches
+        # define the latter, so probing it wouldn't catch plain r-fuzzy
+        # being installed instead of this variant.
+        probe_patched "_SEMANTIC_GUARD_TOKEN_IDS" || {
+          echo "LOSSY_RULE=r_fuzzy_semantic_guard needs the patch: bash patches/apply.sh r-fuzzy-semantic-guard" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=r_fuzzy_semantic_guard alpha=$R_FUZZY_GUARD_ALPHA (via $r_fuzzy_guard_file, hesitation-marker override always on) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      r_fuzzy_semantic_guard_v2)
+        printf '%s\n' "$R_FUZZY_GUARD_V2_ALPHA" > "$r_fuzzy_guard_v2_file"
+        # _SEMANTIC_GUARD_TOKEN_IDS also exists in v1's module -- disambiguate
+        # by the guard-set SIZE (v2's is 35 ids, v1's is 18), the one thing
+        # that differs at the module-attribute level between the two.
+        result="$("$PYTHON" - <<'PY'
+import vllm.v1.sample.rejection_sampler as v1
+print(len(getattr(v1, "_SEMANTIC_GUARD_TOKEN_IDS", ())))
+PY
+)"
+        if [[ "$result" != "35" ]]; then
+          echo "LOSSY_RULE=r_fuzzy_semantic_guard_v2 needs the v2 patch (got guard_token_ids=$result, want 35): bash patches/apply.sh r-fuzzy-semantic-guard-v2" >&2
+          exit 5
+        fi
+        echo "mode=lossy rule=r_fuzzy_semantic_guard_v2 alpha=$R_FUZZY_GUARD_V2_ALPHA (via $r_fuzzy_guard_v2_file, wider hesitation/connective override always on) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      r_fuzzy_window_entropy_guard)
+        printf '%s\n' "$R_FUZZY_WENTROPY_GUARD_ALPHA" > "$r_fuzzy_wentropy_guard_file"
+        # _window_entropy_target_history only exists in this variant's module.
+        probe_patched "_window_entropy_target_history" || {
+          echo "LOSSY_RULE=r_fuzzy_window_entropy_guard needs the patch: bash patches/apply.sh r-fuzzy-window-entropy-guard" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=r_fuzzy_window_entropy_guard alpha=$R_FUZZY_WENTROPY_GUARD_ALPHA (via $r_fuzzy_wentropy_guard_file, rolling-32 entropy override always on) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
       *)
-        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|synthetic)" >&2
+        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|r_fuzzy_semantic_guard|r_fuzzy_semantic_guard_v2|r_fuzzy_window_entropy_guard|synthetic)" >&2
         exit 2
         ;;
     esac
