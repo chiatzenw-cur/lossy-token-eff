@@ -526,3 +526,139 @@ pilot artifact -- v2's much broader intervention (guarding words that open
 module-comment caveat) is not obviously going the right direction either;
 it's queued as a pilot-scale run (same 8 adversarial AIME24 cases as v1's
 pilot) to check before considering anything larger.
+
+## `r-fuzzy-window-entropy-guard`: a distributional sibling, pilot only
+
+Gates on the *shape* of a rolling entropy window instead of token identity
+(see `patches/README.md`'s "An eighth variant" section for the full
+mechanism): strict verification only while mean(w64) < mean(w32) <
+mean(w16) < mean(w8) holds for BOTH target and draft entropy jointly over
+the trailing committed tokens -- deliberately unquantified, no calibrated
+threshold, a pure shape check. Pilot only so far (same 8 AIME24 cases as
+v1's pilot, directly comparable) -- see the data tables below for numbers.
+
+A tracer bug was found and fixed mid-experiment: the trace's
+`lossy_would_accept` field was being computed from the *merged* defer mask
+(JSD OR the guard's own contribution), which makes it trivially equal
+`strict_would_accept` at every guarded position regardless of what the
+guard actually changed -- a tautology, not a finding. Fixed by keeping the
+base method's own (JSD-only) decision separate and passing *that* to the
+tracer; `relaxation_trace.py` now carries an explicit warning comment
+against this mistake for future guards. The pilot's headline metrics
+(accuracy/length/rounds) are unaffected -- those come from real generation,
+not this field -- but the pilot has not yet been re-run with the fix, so
+there's no corrected "did the guard change anything vs plain r_fuzzy"
+number yet.
+
+**Offline validation, independent of the guard itself**: ran the exact same
+trigger condition against *plain, unguarded* `r_fuzzy` traces (same 8
+cases) to check whether it actually marks loop onsets, deliberately without
+the guard's own intervention confounding the answer. 5,737 onset events
+found and saved *before* any judgment call
+(`results/window_entropy_ramp_onsets.jsonl`, each carrying the full
+at-onset distributional profile -- p, q, u, rank, entropy, KL, TV,
+accept-rule flags -- joined straight from the trace). Streak lengths are
+heavily fragmented (mode 1, max 19 across the whole set) -- manually
+reading the 7 longest-streak (most sustained, best-case-for-the-hypothesis)
+onsets gave **1 clear hit, 2 borderline, 4 clear false positives** (three
+of which were coherent, even well-self-correcting reasoning that happened
+to trigger the shape condition). Full annotated read:
+`results/window_entropy_ramp_onsets_manual_read.md`. Reading: even at its
+most sustained, this condition is noisy and low-precision as a standalone
+per-token detector -- consistent with the pilot showing a real accuracy
+cost rather than a clean win.
+
+## Complete data tables (raw values, not just deltas)
+
+Everything measured so far, as absolute numbers. Deltas/percentages
+elsewhere in this document are derived from these; if the two ever
+disagree, these are the source of truth (backed directly by
+`runs/*/summary.json`, `analysis/semantic_guard/results/*_full7*.csv`, and
+`analysis/semantic_guard/results/window_entropy_ramp_onsets.jsonl`).
+
+### Semantic guard v1 -- pilot (8 AIME24 cases)
+
+| metric | r_fuzzy | +semantic guard |
+|---|---:|---:|
+| accuracy | 2/8 (0.250) | 1/8 (0.125) |
+| mean l_bar | 4.0086 | 3.8291 |
+| mean completion length (tokens) | 31,862.88 | 21,672.75 |
+| mean verifier rounds | 6,368.88 | 4,492.38 |
+| errored/no-answer | 3 | 3 |
+
+### Semantic guard v1 -- full sweep
+
+**AIME24 (n=30 each)**
+
+| metric | r_fuzzy | +semantic guard |
+|---|---:|---:|
+| accuracy | 13/30 (0.4333) | 11/30 (0.3667) |
+| mean l_bar | 4.1287 | 3.9566 |
+| mean completion length | 19,505.53 | 16,941.50 |
+| mean verifier rounds | 3,830.63 | 3,457.27 |
+| errored/no-answer | 5 | 6 |
+| total hesitation words | 18,052 | 11,985 |
+| hesitation words, relaxed-only | 4,728 (26.19%) | 1 (0.01%)* |
+| total tokens (all positions) | 583,898 | 507,016 |
+| all-token relaxed-only | 119,651 (20.49%) | 95,981 (18.93%) |
+| total gen wall-time (s) | 1,425.4 | 1,320.4 |
+| total verify rounds (throughput denom.) | 114,889 | 103,689 |
+| mean s/round | 0.01241 | 0.01273 |
+
+**HumanEval (n=164 each)**
+
+| metric | r_fuzzy | +semantic guard |
+|---|---:|---:|
+| accuracy | 93/164 (0.5671) | 86/164 (0.5244) |
+| mean l_bar | 4.2053 | 4.0566 |
+| mean completion length | 1,786.63 | 1,524.74 |
+| mean verifier rounds | 343.07 | 303.77 |
+| errored/no-answer | 6 | 4 |
+| total hesitation words | 6,245 | 3,951 |
+| hesitation words, relaxed-only | 1,541 (24.68%) | 1 (0.03%)* |
+| total tokens (all positions) | 293,655 | 250,812 |
+| all-token relaxed-only | 51,686 (17.60%) | 41,855 (16.69%) |
+| total gen wall-time (s) | 731.5 | 671.7 |
+| total verify rounds | 56,100 | 49,654 |
+| mean s/round | 0.01304 | 0.01353 |
+
+**Combined (n=194 each)**
+
+| metric | r_fuzzy | +semantic guard |
+|---|---:|---:|
+| accuracy | 106/194 (0.5464) | 97/194 (0.5000) |
+| mean completion length | 4,526.7 | 3,908.8 |
+| mean verifier rounds | 882.4 | 791.4 |
+
+\* Tautological under the tracer bug described above -- fixed for the
+window-entropy guard, not retroactively re-run for v1. Every other row in
+these three tables is unaffected (real generation, not this field).
+
+### Window-entropy guard -- pilot (8 AIME24 cases, all three arms)
+
+| metric | r_fuzzy | +semantic guard | +window-entropy guard |
+|---|---:|---:|---:|
+| accuracy | 2/8 (0.250) | 1/8 (0.125) | 1/8 (0.125) |
+| mean l_bar | 4.0086 | 3.8291 | 3.6528 |
+| mean completion length | 31,862.88 | 21,672.75 | 28,229.88 |
+| mean verifier rounds | 6,368.88 | 4,492.38 | 6,098.12 |
+| errored/no-answer | 3 | 3 | 3 |
+| rounds_offset_anomaly | 0 | 0 | 2 |
+| total gen wall-time (s) | 636.2 | -- | 629.9 |
+| total verify rounds | 50,943 | -- | 48,779 |
+| total tokens | 254,903 | -- | 225,839 |
+| mean s/round | 0.01249 | -- | 0.01291 |
+| window guard fired (of all rows) | -- | -- | 15,874 / 225,876 (7.03%) |
+| strict-decoding baseline rate (same joint condition) | -- | -- | 34,484 / 427,569 (8.065%) |
+
+### Onset-detection offline check (plain, unguarded r_fuzzy, same 8 cases)
+
+| | value |
+|---|---:|
+| total onset events found | 5,737 |
+| streak length: mode | 1 |
+| streak length: max | 19 |
+| onsets with streak >=5 | 1,439 |
+| onsets with streak >=10 | 210 |
+| onsets with streak >=20 | 0 |
+| top-7 longest streaks, manual read | 1 clear hit / 2 borderline / 4 false-positive |
