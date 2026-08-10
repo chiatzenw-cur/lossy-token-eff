@@ -26,6 +26,16 @@ Saves the candidate list FIRST (this script), separately from judging it
 (a later, manual pass reading the saved context) -- so the detection step
 stays auditable independent of any interpretation of it.
 
+Each saved onset also carries the full at-onset distributional profile,
+straight-joined from that row of the trace (AT_ONSET_TRACE_FIELDS below):
+p, q, p/q, u, target_rank, target_top1_prob/shortfall, target/draft
+entropy, both KL directions, TV distance, consecutive_accepted_length, the
+three accept-rule flags (strict/lossy_would_accept, actually_accepted,
+lossy_only_accepted), the emitted-side fields (meaningful on non-accepted
+rows), and window_guard_active (present on window-entropy-guard traces,
+None on plain r_fuzzy's) -- not re-derived, just copied through, so this
+stays a join against the trace rather than a second computation of it.
+
 Usage:
     python3 analysis/semantic_guard/find_window_entropy_ramp_onsets.py \\
         --runs-root runs/semantic_guard_pilot/aime24 --tag rFuzzy0p3 \\
@@ -45,6 +55,26 @@ from count_relaxed_only_hesitation import decode_piece, get_encoding, load_token
 
 WINDOW_SIZES = (64, 32, 16, 8)
 CONTEXT_CHARS = 400  # before AND after the onset token
+
+# Every other per-proposal metric relaxation_trace.py already records for
+# THIS row -- copied straight through rather than re-derived, so the onset
+# table stays a join against the trace, not a second computation of it.
+# Covers the same "at-onset distributional metrics" set the sibling repo's
+# onset table uses (p, q, p/q, u, rank, entropy, KL, TV, accept-rule flags),
+# plus the emitted-side fields (only meaningful on non-accepted rows) and
+# this repo's own window_guard_active (present on window-entropy-guard
+# traces; absent/None on plain r_fuzzy's like the ones this script's default
+# arm targets).
+AT_ONSET_TRACE_FIELDS = (
+    "p", "q", "p_over_q", "u",
+    "target_rank", "target_top1_prob", "target_top1_shortfall",
+    "target_entropy", "draft_entropy",
+    "kl_target_draft", "kl_draft_target", "tv_distance",
+    "consecutive_accepted_length",
+    "strict_would_accept", "lossy_would_accept", "actually_accepted", "lossy_only_accepted",
+    "emitted_p", "emitted_target_rank", "emitted_top1_shortfall",
+    "trace_anomaly", "window_guard_active",
+)
 
 
 def is_monotonic_ramp(history: list[float]) -> bool:
@@ -146,6 +176,10 @@ def find_onsets_for_run(run_dir: pathlib.Path) -> list[dict[str, Any]]:
                         "draft_window_means": window_means(draft_hist),
                         "streak_length": 1,
                         "char_offset": pos,  # filled precisely below, after the full pass
+                        # The onset TOKEN's own distributional metrics -- a
+                        # straight join against this row of the trace, not a
+                        # second computation (see AT_ONSET_TRACE_FIELDS above).
+                        **{field: row.get(field) for field in AT_ONSET_TRACE_FIELDS},
                     }
                     onsets.append(current_onset)
                 elif ramp_now and prev_ramp and current_onset is not None:
