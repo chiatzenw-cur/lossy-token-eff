@@ -42,6 +42,7 @@ SPEC_CASC_TOK_ALPHA="${SPEC_CASC_TOK_ALPHA:-0.3}"    # NOT the strict point -- s
 R_FUZZY_GUARD_ALPHA="${R_FUZZY_GUARD_ALPHA:-0.3}"    # r-fuzzy's own alpha; guard override is always on, no separate knob
 R_FUZZY_GUARD_V2_ALPHA="${R_FUZZY_GUARD_V2_ALPHA:-0.3}"  # same idea, wider token set -- see patches/README.md
 R_FUZZY_WENTROPY_GUARD_ALPHA="${R_FUZZY_WENTROPY_GUARD_ALPHA:-0.3}"  # r-fuzzy's own alpha; entropy-window override always on
+SPEC_CASC_TOK_GUARD_ALPHA="${SPEC_CASC_TOK_GUARD_ALPHA:-0.3}"  # spec-casc-tok's own alpha; guard override is always on, no separate knob
 SYNTH_LEN="${SYNTH_LEN:-3.0}"
 
 # Every knob file is written in EVERY mode, including baseline and strict, to
@@ -63,6 +64,7 @@ spec_casc_tok_file="/tmp/lossy-token-eff-spec-casc-tok-alpha-$(id -u)"
 r_fuzzy_guard_file="/tmp/lossy-token-eff-r-fuzzy-semantic-guard-alpha-$(id -u)"
 r_fuzzy_guard_v2_file="/tmp/lossy-token-eff-r-fuzzy-semantic-guard-v2-alpha-$(id -u)"
 r_fuzzy_wentropy_guard_file="/tmp/lossy-token-eff-r-fuzzy-window-entropy-guard-alpha-$(id -u)"
+spec_casc_tok_guard_file="/tmp/lossy-token-eff-spec-casc-tok-semantic-guard-alpha-$(id -u)"
 
 neutralise_all_knobs() {
   # Each method's own "no relaxation" value -- NOT uniformly 0.0. See
@@ -75,6 +77,7 @@ neutralise_all_knobs() {
   printf '%s\n' "-inf"   > "$r_fuzzy_guard_file"
   printf '%s\n' "-inf"   > "$r_fuzzy_guard_v2_file"
   printf '%s\n' "-inf"   > "$r_fuzzy_wentropy_guard_file"
+  printf '%s\n' "-inf"   > "$spec_casc_tok_guard_file"
 }
 
 common_args=(
@@ -235,8 +238,19 @@ PY
         }
         echo "mode=lossy rule=r_fuzzy_window_entropy_guard alpha=$R_FUZZY_WENTROPY_GUARD_ALPHA (via $r_fuzzy_wentropy_guard_file, rolling-32 entropy override always on) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
         ;;
+      spec_casc_tok_semantic_guard)
+        printf '%s\n' "$SPEC_CASC_TOK_GUARD_ALPHA" > "$spec_casc_tok_guard_file"
+        # _SEMANTIC_GUARD_TOKEN_IDS, not _SPEC_CASC_TOK_ALPHA: plain
+        # spec_casc_tok also defines the latter, so probing it wouldn't catch
+        # plain spec_casc_tok being installed instead of this variant.
+        probe_patched "_SEMANTIC_GUARD_TOKEN_IDS" || {
+          echo "LOSSY_RULE=spec_casc_tok_semantic_guard needs the patch: bash patches/apply.sh spec-casc-tok-semantic-guard" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_tok_semantic_guard alpha=$SPEC_CASC_TOK_GUARD_ALPHA (via $spec_casc_tok_guard_file, hesitation-marker override always on) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
       *)
-        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|r_fuzzy_semantic_guard|r_fuzzy_semantic_guard_v2|r_fuzzy_window_entropy_guard|synthetic)" >&2
+        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|r_fuzzy_semantic_guard|r_fuzzy_semantic_guard_v2|r_fuzzy_window_entropy_guard|spec_casc_tok_semantic_guard|synthetic)" >&2
         exit 2
         ;;
     esac

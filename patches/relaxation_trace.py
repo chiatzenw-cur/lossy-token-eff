@@ -191,6 +191,21 @@ class _Tracer:
         casc_tok_alpha: float | None = None,
         relaxation_method: str = "mentored_dec",
         window_guard_mask: torch.Tensor | None = None,  # [num_tokens] bool; r_fuzzy_window_entropy_guard only
+        # [num_tokens] bool; any token-marker (hesitation-word-id) guard --
+        # r_fuzzy_semantic_guard, r_fuzzy_semantic_guard_v2,
+        # spec_casc_tok_semantic_guard. Purely informational, same
+        # window_guard_mask convention: never fed into strict_ok/lossy_ok
+        # above, only recorded so a guard's own effect can be read back
+        # later. MUST be the guard's OWN mask alone (e.g.
+        # _semantic_guard_mask(draft_token_ids)), never OR'd into whatever
+        # was passed as defer_mask/casc_tok_alpha -- see the defer_mask
+        # comment above for exactly the failure mode that produces (an
+        # r_fuzzy_semantic_guard patch generation predating this parameter
+        # did fold its guard into defer_mask directly, which made
+        # lossy_would_accept collapse to strict_would_accept at every
+        # guarded position by construction; fixed alongside this parameter's
+        # introduction, not before).
+        token_marker_guard_mask: torch.Tensor | None = None,
     ) -> None:
         if not self.enabled:
             return
@@ -293,6 +308,7 @@ class _Tracer:
         out = output_token_ids.tolist()
         bonus = bonus_token_ids.reshape(-1).tolist()
         wg_l = window_guard_mask.tolist() if window_guard_mask is not None else None
+        tmg_l = token_marker_guard_mask.tolist() if token_marker_guard_mask is not None else None
 
         with self._lock:
             start = 0
@@ -420,6 +436,12 @@ class _Tracer:
                             # strict_would_accept -- derivable from these three
                             # fields together, not stored as its own column.
                             "window_guard_active": None if wg_l is None else bool(wg_l[i]),
+                            # any token-marker guard (see the parameter's own
+                            # comment above); null for every method without
+                            # one. "guard_changed_decision" is derivable the
+                            # same way window_guard_active's is: this AND
+                            # lossy_would_accept AND NOT strict_would_accept.
+                            "token_marker_guard_active": None if tmg_l is None else bool(tmg_l[i]),
                             "emission_source": source,
                             "target_rank": int(rank_l[i]),
                             "target_top1_prob": round(top1_l[i], 6),

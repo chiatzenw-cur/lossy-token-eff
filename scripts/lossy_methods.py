@@ -46,9 +46,9 @@ class MethodSpec:
             raise ValueError(f"mentored_dec alpha must be in [0, 1); got {alpha}")
         if self.name == "cactus" and alpha < 0.0:
             raise ValueError(f"cactus alpha must be >= 0 (it bounds a KL divergence); got {alpha}")
-        if self.name == "spec_casc_tok" and alpha == 0.0:
+        if self.name in ("spec_casc_tok", "spec_casc_tok_semantic_guard") and alpha == 0.0:
             raise ValueError(
-                "spec_casc_tok alpha=0.0 is NOT the strict point for this method (alpha=-inf is) -- "
+                f"{self.name} alpha=0.0 is NOT the strict point for this method (alpha=-inf is) -- "
                 "see patches/README.md. Passing 0.0 here is almost certainly a copy-paste from a "
                 "different method's convention, not an intentional relaxation value."
             )
@@ -84,6 +84,13 @@ class MethodSpec:
             return (
                 f"pi_rej(v) = q(v)+eta*p(v) for v with p(v) >= (1-{alpha:g})*max(p), else eta*p(v); "
                 f"eta = 1 - sum_{{v in that set}} q(v)"
+            )
+        if self.name == "spec_casc_tok_semantic_guard":
+            return (
+                f"pi_rej(v) = q(v)+eta*p(v) for v with p(v) >= (1-{alpha:g})*max(p), else eta*p(v) -- "
+                "UNLESS the draft token is a hesitation marker, in which case the trusted top set is "
+                "forced empty (pi_rej=p exactly, this method's own strict limit) regardless of alpha -- "
+                "see analysis/semantic_guard/README.md"
             )
         raise ValueError(self.name)
 
@@ -214,6 +221,21 @@ METHODS: dict[str, MethodSpec] = {
                 "family": "speculative cascades [Tok] (Narasimhan et al. 2025 appendix)",
                 "paper_name": "spec-casc-tok",
                 "reference": "Xia et al. 2026 (arXiv:2607.08690) Appendix B, Eq. 15",
+            },
+        ),
+        MethodSpec(
+            name="spec_casc_tok_semantic_guard",
+            hashes_label="spec-casc-tok-semantic-guard",
+            env_var="SPEC_CASC_TOK_GUARD_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-tok-semantic-guard-alpha-{_uid()}"),
+            log_prefix="[SPEC-CASC-TOK-SEMANTIC-GUARD PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf), NOT 0.0 for strict",
+            default_alpha=0.3,
+            taxonomy={
+                "family": "spec-casc-tok + semantic guard (this repo's own pilot experiment, not in Xia et al.)",
+                "paper_name": "spec-casc-tok-semantic-guard",
+                "reference": "analysis/semantic_guard/README.md",
             },
         ),
     )

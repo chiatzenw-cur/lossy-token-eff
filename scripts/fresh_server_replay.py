@@ -38,6 +38,13 @@ from lossy_methods import METHODS, STRICT_TRACE_CARRIER, TRACE_PATH_FILE  # noqa
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 ARMS = ("baseline", "strict", *METHODS.keys())
 
+# Mirrors patches/hidden_state_trace.py's own _DEST_FILE exactly (uid-scoped,
+# same /tmp naming convention as every other knob file here) -- not imported
+# from there directly, since that module is meant to run inside vLLM's own
+# process (imports torch at module scope) and has no reason to be imported
+# by this orchestration script too.
+HIDDEN_STATE_TRACE_PATH_FILE = pathlib.Path(f"/tmp/lossy-token-eff-hidden-state-trace-{os.getuid()}")
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -82,6 +89,16 @@ def parse_args() -> argparse.Namespace:
         help="Record every proposal token to <run dir>/proposals.jsonl. On by default. Observation only.",
     )
     parser.add_argument("--no-trace-proposals", dest="trace_proposals", action="store_false")
+    parser.add_argument(
+        "--capture-hidden-states",
+        action="store_true",
+        help=(
+            "Also capture target hidden states per round to <run dir>/hidden_states.bin "
+            "(patches/hidden_state_trace.py). Off by default -- real per-request storage, "
+            "meant for short diagnostic runs, not full sweeps. Applies "
+            "patches/apply_hidden_state_capture.sh automatically if not already installed."
+        ),
+    )
     parser.add_argument("--overwrite", action="store_true", help="Redo runs that already exist.")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -131,6 +148,35 @@ def set_trace_destination(path: pathlib.Path | None) -> None:
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
         TRACE_PATH_FILE.write_text(str(path), encoding="utf-8")
+
+
+def set_hidden_state_destination(path: pathlib.Path | None) -> None:
+    """Same idea as set_trace_destination, for patches/hidden_state_trace.py's
+    own destination knob -- a separate file so hidden-state capture can be
+    toggled independently of scalar proposal tracing."""
+    if path is None:
+        HIDDEN_STATE_TRACE_PATH_FILE.write_text("", encoding="utf-8")
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        HIDDEN_STATE_TRACE_PATH_FILE.write_text(str(path), encoding="utf-8")
+
+
+def ensure_hidden_state_capture_applied() -> None:
+    """Idempotent: patches/apply_hidden_state_capture.sh already no-ops if
+    already installed (hash match), same as ensure_patch_applied's per-method
+    equivalent. Independent of which method's rejection_sampler.py patch is
+    installed -- touches a different file entirely."""
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "patches" / "apply_hidden_state_capture.sh")],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"patches/apply_hidden_state_capture.sh failed (exit {result.returncode}):\n"
+            f"{result.stdout[-2000:]}\n{result.stderr[-2000:]}"
+        )
 
 
 def _installed_v1_label() -> str | None:
@@ -305,6 +351,9 @@ def main() -> int:
     if not todo:
         return 0
 
+    if args.capture_hidden_states:
+        ensure_hidden_state_capture_applied()
+
     results = []
     failures = 0
     for index, (case, seed, arm, tag) in enumerate(todo, start=1):
@@ -328,6 +377,12 @@ def main() -> int:
                 else None
             )
             set_trace_destination(trace_stage)
+            hidden_state_stage = (
+                REPO_ROOT / args.log_root / f"{tag}_{case}_seed{seed}_hidden_states.bin"
+                if args.capture_hidden_states
+                else None
+            )
+            set_hidden_state_destination(hidden_state_stage)
             process = start_server(args, arm, log_path)
             try:
                 completed = request_once(args, arm, case, seed, tag, log_path)
@@ -343,6 +398,11 @@ def main() -> int:
                         trace_stage.replace(run_dir / "proposals.jsonl")
                     else:
                         print(f"  warning: run dir missing, trace left at {trace_stage}", file=sys.stderr)
+                if hidden_state_stage is not None and hidden_state_stage.is_file():
+                    if run_dir.is_dir():
+                        hidden_state_stage.replace(run_dir / "hidden_states.bin")
+                    else:
+                        print(f"  warning: run dir missing, hidden states left at {hidden_state_stage}", file=sys.stderr)
         except (RuntimeError, OSError) as exc:
             status = f"{type(exc).__name__}: {exc}"
             failures += 1
@@ -351,6 +411,7 @@ def main() -> int:
         finally_trace = None
         try:
             set_trace_destination(None)
+            set_hidden_state_destination(None)
         except OSError as exc:  # non-fatal: only affects the next run's tracing
             finally_trace = str(exc)
         elapsed = time.perf_counter() - started

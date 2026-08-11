@@ -24,9 +24,9 @@ HASHES="$here/HASHES.txt"
 
 METHOD="${1:-}"
 case "$METHOD" in
-  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard) ;;
+  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard) ;;
   *)
-    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard>" >&2
+    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard>" >&2
     exit 2
     ;;
 esac
@@ -139,6 +139,11 @@ select alpha by writing it to:
     (distributional sibling of the two above -- gates on a rolling window of
     target+draft entropy instead of token identity; see the patch's own
     module comment for the calibration and analysis/semantic_guard/README.md)
+  spec-casc-tok-semantic-guard: /tmp/lossy-token-eff-spec-casc-tok-semantic-guard-alpha-\$(id -u) (any real; -inf = strict, NOT 0.0)
+    (spec-casc-tok's own alpha, PLUS the same always-on hesitation-marker
+    override as r-fuzzy-semantic-guard -- forces the trusted top set empty
+    at guarded tokens, provably equal to that method's own alpha=-inf limit;
+    see the patch's module comment and analysis/semantic_guard/README.md)
 remote/run_server_vllm.sh writes all eight for every mode (baseline/strict/lossy)
 so a stale value from a previous run cannot silently leak into a control arm.
 EOF

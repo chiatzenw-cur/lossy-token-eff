@@ -1,0 +1,45 @@
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -247,6 +247,23 @@
+     from vllm.v1.spec_decode.ngram_proposer import NgramProposer
+     from vllm.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
+ 
++# LOSSY-VERIFICATION PILOT PATCH (not upstream vLLM). See
++# patches/hidden_state_trace.py's own module docstring for the full
++# rationale -- this is Phase 1, observation-only, gated on a destination
++# file (no-op, negligible overhead when not configured) exactly like
++# relaxation_trace.py, just capturing the TARGET's own hidden state instead
++# of scalar decode-time quantities. This file (v1/worker/gpu_model_runner.py,
++# the FLAT one, not v1/worker/gpu/model_runner.py under the gpu/
++# subdirectory) is the "V1" model runner -- confirmed active by default in
++# this config (use_v2_model_runner is unset; see gpu_worker.py's own
++# construction branch, and patches/README.md's mentored-dec section, which
++# hit the same V1-vs-V2 distinction from a different angle). The gpu/
++# subdirectory one is V2 and is never instantiated here -- an earlier
++# version of this patch targeted that file by mistake and silently captured
++# nothing (dead code path in this config), caught only by an empty output
++# file after a real test run.
++from vllm.v1.worker.hidden_state_trace import TRACER as _HIDDEN_STATE_TRACER
++
+ logger = init_logger(__name__)
+ 
+ AttnMetadataDict: TypeAlias = dict[str, AttentionMetadata]
+@@ -5209,6 +5226,18 @@
+             else:
+                 mm_embed_inputs = None
+ 
++            # Phase-1 observation hook, gated on a destination file (no-op
++            # otherwise). target_hidden_states here is exactly what the
++            # EAGLE3 drafter is about to consume -- for this repo's config
++            # (use_aux_hidden_state_outputs=True), the concatenation of
++            # several target-model layers (EAGLE3's own aux hidden state
++            # design), not only the final layer; see
++            # patches/hidden_state_trace.py's module docstring for what
++            # that means for interpretation. One row per position in this
++            # call, aligned by round with relaxation_trace.py's own trace
++            # for the same run.
++            if _HIDDEN_STATE_TRACER.enabled:
++                _HIDDEN_STATE_TRACER.record(target_hidden_states)
+             draft_token_ids = self.drafter.propose(
+                 num_speculative_tokens=num_spec_tokens_to_schedule,
+                 target_token_ids=target_token_ids,
