@@ -1079,6 +1079,7 @@ this section is AIME24 only.
 | metric | spec_casc_tok | +guard | change |
 |---|---:|---:|---:|
 | accuracy | 26/30 (86.7%) | 22/30 (73.3%) | **-13.4pp** |
+| mean l̄ (accepted length) | 2.421 | 2.400 | -0.9% |
 | mean completion length | 9,440 | 10,397 | **+10.1%** |
 | mean verifier rounds | 2,896 | 3,276 | **+13.1%** |
 | mean s/round (throughput tax) | 0.01241 | 0.01292 | +4.1% |
@@ -1122,6 +1123,7 @@ loss on every axis, HumanEval shows the opposite:
 | metric | spec_casc_tok | +guard | change |
 |---|---:|---:|---:|
 | pass@1 | 157/164 (95.7%) | **159/164 (97.0%)** | **+1.3pp** |
+| mean l̄ (accepted length) | 2.604 | 2.593 | -0.4% |
 | mean completion length | 918.8 | 850.6 | **-7.4%** |
 | mean verifier rounds | 267.5 | 249.4 | **-6.8%** |
 | mean s/round (throughput tax) | 0.01322 | 0.01429 | +8.1% |
@@ -1139,11 +1141,23 @@ improvements against 6 regressions).
 | metric | spec_casc_tok | +guard | change |
 |---|---:|---:|---:|
 | accuracy (both graded pass/fail) | 183/194 (94.3%) | 181/194 (93.3%) | -1.0pp |
+| mean l̄ (accepted length), run-count-weighted | 2.576 | 2.563 | -0.5% |
 | mean completion length | 2,236 | 2,327 | +4.0% |
 | mean verifier rounds | 674.0 | 717.4 | +6.4% |
 | mean s/round | 0.01268 | 0.01332 | +5.0% |
 | total generation wall-time | 1,658.2s | 1,853.8s | +11.8% |
 | hesitation words, relaxed-only | 249 | **0** | clean |
+
+**l̄ (mean accepted length) barely moves in either benchmark** (-0.9%
+AIME24, -0.4% HumanEval, both far smaller than the length/rounds swings
+above) -- a clarifying detail about the mechanism, not just another metric.
+The guard doesn't make an average verifier round accept meaningfully fewer
+tokens; it changes how many rounds the WHOLE generation needs (rounds moves
+in lockstep with completion length, in opposite directions per benchmark,
+while l̄ stays close to flat throughout). Whatever is driving the
+benchmark-level split above, it's downstream of "does the run as a whole
+converge faster or slower," not a change in per-round acceptance
+generosity.
 
 **Honest read: this is not one verdict, it's two, and they point opposite
 directions.** On AIME24 -- long, multi-thousand-token chain-of-thought
@@ -1180,4 +1194,111 @@ python3 scripts/fresh_server_replay.py \
 python3 scripts/grade_humaneval.py --runs-root runs/humaneval_fresh --prompt-root prompts/humaneval --tags specCascTok0p3 specCascTokSemanticGuard0p3
 python3 analysis/semantic_guard/count_relaxed_only_hesitation.py --runs-root runs/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval_spec_casc_tok_guard_full
 python3 analysis/semantic_guard/check_round_throughput.py --runs-root runs/humaneval_fresh --tags specCascTok0p3 specCascTokSemanticGuard0p3
+```
+
+## Does hidden-state recurrence fire under the TRUE lossless baseline, and is it a real reasoning loop when it does?
+
+Every recurrence check so far in this document ran against a RELAXED
+method (`r_fuzzy`, and implicitly `spec_casc_tok` via the trace but never
+its own hidden states). That leaves the causal question this whole
+investigation keeps circling back to unanswered: is "reasoning loop"
+something relaxed verification induces or amplifies, or is it a property
+of the base model's own reasoning that shows up regardless of how
+verification runs? This section runs the recurrence detector against
+`strict` itself -- lossless, no relaxation of any kind -- to find out, and
+labels each flagged event into a 3-way taxonomy (`reasoning_loop` /
+`no_progress` / `benign`) rather than the earlier binary loop-or-not, since
+"the hidden state recurred" turns out to have several real causes, not one.
+
+**Setup**: `strict` with hidden-state capture, same 8 AIME24 cases as the
+earlier `r_fuzzy` hidden-state pilot (case_005, 028, 002, 020, 021, 015,
+011, 003), full 32,768-token budget. 8 fresh-server runs.
+
+**Only one of 8 cases failed to converge under strict**: case_002 hit the
+full 32,768-token cap with no final answer (`finish=length`,
+`final_ch=False`) -- the SAME case that also failed under plain
+`spec_casc_tok` (also `no_answer`, also the cap) in the guard experiment
+above. This on its own is informative: whatever makes case_002 hard is not
+an artifact of relaxed verification, since the lossless control has the
+identical failure. The other 7 cases all resolved cleanly (3,342-28,934
+tokens, `finish=stop`, reached `final`).
+
+**Macro-loop restarts (the `<|end|><|start|>assistant<|channel|>analysis`
+pattern from earlier)**: zero, across all 8 strict runs, including
+case_002 (which never even opens a `final` channel to abandon -- it just
+never stops exploring in `analysis`). That specific failure shape --
+reaching a real answer and then discarding it to restart -- was found
+exactly once in this whole document, in `r_fuzzy`'s case_028. It does not
+reproduce in strict's case_028 (3,680 tokens, clean finish) or anywhere
+else here. Consistent with that pattern being something relaxed
+verification enables rather than a base-model behavior.
+
+**Recurrence events**: `find_hidden_state_recurrence_onsets.py`, same
+per-run P99 empirical threshold as before, found 309 onset events across
+the 8 runs (dominated by case_002's 90 and case_003's 112 -- the two
+longest runs, more opportunity to cross a per-run threshold). Top 3
+longest-streak events per case (24 total, `results/strict_hidden_state_recurrence_labels.jsonl`)
+read manually and labeled:
+
+| case | outcome | reasoning_loop | no_progress | benign |
+|---|---|---:|---:|---:|
+| case_002 (never converged) | cap, no answer | **3** | 0 | 0 |
+| case_003 | correct | 0 | 0 | 3 |
+| case_005 | correct | 0 | 0 | 3 |
+| case_011 | correct | 0 | 0 | 3 |
+| case_015 | correct | 0 | 1 | 2 |
+| case_020 | correct | 0 | 0 | 3 |
+| case_021 | correct | 0 | 0 | 3 |
+| case_028 | correct | 0 | 0 | 3 |
+| **total** | | **3** | **1** | **20** |
+
+**This is a genuinely clean, informative split.** All 3 `reasoning_loop`
+labels come from the ONE case that actually failed (case_002) -- and
+they're the same persistent episode, not three independent ones: all three
+top-streak candidates (positions 27,882 / 28,334 / 28,957, spanning over
+1,000 tokens) are the model stuck re-deriving whether
+`354,375/3388 = 50,625/484` after finding a numeric contradiction, never
+resolving it. The other 20 of 24 candidates, across all 7 cases that
+resolved correctly, are `benign`: legitimate structurally-repetitive
+computation (per-case number-theory iteration in case_005, a deliberate
+bounded brute-force enumeration in case_021, group-theory case tracking in
+case_003) that *looks* similar to a recurrence detector precisely because
+the underlying algorithm legitimately repeats a procedure across inputs --
+not because the model is stuck. One `no_progress` case (case_015, pos=154):
+the model briefly flip-flops on whether rhombus diagonals are perpendicular
+"only if it's a square" (they always are, for every rhombus) without
+resolving it within the flagged span -- real circular questioning, but
+brief and local, and the case still reaches the correct final answer.
+
+**What this adds to the picture**: hidden-state recurrence is NOT a
+false-positive-prone artifact of relaxed verification specifically --
+under the true lossless baseline it fires exactly where a real problem
+exists (100% of case_002's flagged events are genuine loops) and is
+correctly quiet elsewhere (0 of 63 flagged events in the 7 successful
+cases are loops). This is a much cleaner precision result than the earlier
+`r_fuzzy` check (1 clear hit / 7 longest streaks) -- though not a
+contradiction: that check was reading a RELAXED run's trajectory, where a
+guard's own on-top intervention and a noisier acceptance process both add
+confounds a lossless run doesn't have. It also directly answers this
+section's opening question: at least in this 8-case sample, the one real
+reasoning loop found occurs under **strict**, with no relaxed verification
+involved at all -- reasoning loops are not solely an artifact of lossy
+methods, they can and do happen in the base model's own lossless
+generation. What relaxed verification (specifically `r_fuzzy`, per the
+macro-loop section above) adds is a DIFFERENT failure shape -- abandoning a
+real answer to restart -- that this strict sample shows zero instances of.
+
+Reproduce:
+
+```
+python3 scripts/fresh_server_replay.py \
+    --arms strict --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
+    --prompt-root prompts/aime24 --runs-root runs/hidden_state_strict_pilot/aime24 \
+    --log-root logs/hidden_state_strict_pilot/aime24 --max-new-tokens 32768 --capture-hidden-states
+python3 analysis/semantic_guard/find_hidden_state_recurrence_onsets.py \
+    --runs-root runs/hidden_state_strict_pilot/aime24 --tag strict --k 8 --percentile 99 --min-gap 32 \
+    --out analysis/semantic_guard/results/strict_hidden_state_recurrence_onsets.jsonl
+python3 analysis/semantic_guard/find_macro_loop_restarts.py \
+    --runs-root runs/hidden_state_strict_pilot/aime24 --tag strict \
+    --out analysis/semantic_guard/results/strict_macro_loop_restarts.jsonl
 ```
