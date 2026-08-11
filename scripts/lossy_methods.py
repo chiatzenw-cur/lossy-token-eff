@@ -46,7 +46,7 @@ class MethodSpec:
             raise ValueError(f"mentored_dec alpha must be in [0, 1); got {alpha}")
         if self.name == "cactus" and alpha < 0.0:
             raise ValueError(f"cactus alpha must be >= 0 (it bounds a KL divergence); got {alpha}")
-        if self.name in ("spec_casc_tok", "spec_casc_tok_semantic_guard") and alpha == 0.0:
+        if self.name in ("spec_casc_tok", "spec_casc_tok_semantic_guard", "spec_casc_tok_semantic_guard_and") and alpha == 0.0:
             raise ValueError(
                 f"{self.name} alpha=0.0 is NOT the strict point for this method (alpha=-inf is) -- "
                 "see patches/README.md. Passing 0.0 here is almost certainly a copy-paste from a "
@@ -90,6 +90,13 @@ class MethodSpec:
                 f"pi_rej(v) = q(v)+eta*p(v) for v with p(v) >= (1-{alpha:g})*max(p), else eta*p(v) -- "
                 "UNLESS the draft token is a hesitation marker, in which case the trusted top set is "
                 "forced empty (pi_rej=p exactly, this method's own strict limit) regardless of alpha -- "
+                "see analysis/semantic_guard/README.md"
+            )
+        if self.name == "spec_casc_tok_semantic_guard_and":
+            return (
+                f"pi_rej(v) = q(v)+eta*p(v) for v with p(v) >= (1-{alpha:g})*max(p), else eta*p(v) -- "
+                "UNLESS the draft token is a hesitation marker, in which case accept iff BOTH the "
+                "lossless test AND this rule would accept (min(p,pi_rej) as the effective target) -- "
                 "see analysis/semantic_guard/README.md"
             )
         raise ValueError(self.name)
@@ -235,6 +242,21 @@ METHODS: dict[str, MethodSpec] = {
             taxonomy={
                 "family": "spec-casc-tok + semantic guard (this repo's own pilot experiment, not in Xia et al.)",
                 "paper_name": "spec-casc-tok-semantic-guard",
+                "reference": "analysis/semantic_guard/README.md",
+            },
+        ),
+        MethodSpec(
+            name="spec_casc_tok_semantic_guard_and",
+            hashes_label="spec-casc-tok-semantic-guard-and",
+            env_var="SPEC_CASC_TOK_GUARD_AND_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-tok-semantic-guard-and-alpha-{_uid()}"),
+            log_prefix="[SPEC-CASC-TOK-SEMANTIC-GUARD-AND PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf), NOT 0.0 for strict",
+            default_alpha=0.3,
+            taxonomy={
+                "family": "spec-casc-tok + AND-combined semantic guard (this repo's own pilot experiment, not in Xia et al.)",
+                "paper_name": "spec-casc-tok-semantic-guard-and",
                 "reference": "analysis/semantic_guard/README.md",
             },
         ),

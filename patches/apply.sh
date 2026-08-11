@@ -24,9 +24,9 @@ HASHES="$here/HASHES.txt"
 
 METHOD="${1:-}"
 case "$METHOD" in
-  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard) ;;
+  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-and) ;;
   *)
-    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard>" >&2
+    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-and>" >&2
     exit 2
     ;;
 esac
@@ -144,6 +144,11 @@ select alpha by writing it to:
     override as r-fuzzy-semantic-guard -- forces the trusted top set empty
     at guarded tokens, provably equal to that method's own alpha=-inf limit;
     see the patch's module comment and analysis/semantic_guard/README.md)
+  spec-casc-tok-semantic-guard-and: /tmp/lossy-token-eff-spec-casc-tok-semantic-guard-and-alpha-\$(id -u) (any real; -inf = strict, NOT 0.0)
+    (spec-casc-tok's own alpha, PLUS an AND-combination at guarded tokens --
+    accept iff BOTH lossless AND spec-casc-tok's own relaxed test would
+    accept -- instead of overriding to pure strict; see the patch's module
+    comment for the loophole this closes and analysis/semantic_guard/README.md)
 remote/run_server_vllm.sh writes all eight for every mode (baseline/strict/lossy)
 so a stale value from a previous run cannot silently leak into a control arm.
 EOF
