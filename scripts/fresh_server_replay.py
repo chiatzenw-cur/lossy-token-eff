@@ -64,6 +64,23 @@ def parse_args() -> argparse.Namespace:
             default=spec.default_alpha,
             help=f"{spec.taxonomy['family']}. Domain: {spec.alpha_domain}.",
         )
+    # One-off second knob, not part of the generic MethodSpec (single-knob)
+    # registry -- the two future-guard variants are the only methods here with
+    # two. Default matches each patch's own missing-file default. Own flag
+    # per variant (not shared) so a sweep running both arms at once can use
+    # different K per arm without one overwriting the other.
+    parser.add_argument(
+        "--spec-casc-tok-semantic-guard-future-guard-k",
+        type=int,
+        default=8,
+        help="spec_casc_tok_semantic_guard_future_guard only: length of the strict window after an accepted marker.",
+    )
+    parser.add_argument(
+        "--spec-casc-tok-semantic-guard-future-guard-and-k",
+        type=int,
+        default=8,
+        help="spec_casc_tok_semantic_guard_future_guard_and only: length of the AND-combined window after an accepted marker.",
+    )
     parser.add_argument("--prompt-root", type=pathlib.Path, default=pathlib.Path("prompts/humaneval"))
     parser.add_argument("--runs-root", type=pathlib.Path, default=pathlib.Path("runs/humaneval_fresh"))
     parser.add_argument("--log-root", type=pathlib.Path, default=pathlib.Path("logs/humaneval_fresh"))
@@ -115,6 +132,12 @@ def tag_for(args: argparse.Namespace, arm: str) -> str:
         spec = METHODS[arm]
         camel = "".join(part.capitalize() if i else part for i, part in enumerate(arm.split("_")))
         base = f"{camel}{alpha_for(args, arm):g}".replace(".", "p").replace("-", "neg")
+        if arm == "spec_casc_tok_semantic_guard_future_guard":
+            # K into the tag too, not just alpha -- run directories from
+            # different K sweeps must not collide under the same tag.
+            base += f"k{args.spec_casc_tok_semantic_guard_future_guard_k}"
+        if arm == "spec_casc_tok_semantic_guard_future_guard_and":
+            base += f"k{args.spec_casc_tok_semantic_guard_future_guard_and_k}"
     return base + args.tag_suffix
 
 
@@ -267,6 +290,10 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
     if arm not in ("baseline", "strict"):
         env["LOSSY_RULE"] = arm
         env[METHODS[arm].env_var] = f"{alpha_for(args, arm):g}"
+        if arm == "spec_casc_tok_semantic_guard_future_guard":
+            env["SPEC_CASC_TOK_FUTURE_GUARD_K"] = str(args.spec_casc_tok_semantic_guard_future_guard_k)
+        if arm == "spec_casc_tok_semantic_guard_future_guard_and":
+            env["SPEC_CASC_TOK_FUTURE_GUARD_AND_K"] = str(args.spec_casc_tok_semantic_guard_future_guard_and_k)
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
     handle = log_path.open("w", encoding="utf-8")

@@ -24,9 +24,9 @@ HASHES="$here/HASHES.txt"
 
 METHOD="${1:-}"
 case "$METHOD" in
-  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-and) ;;
+  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and) ;;
   *)
-    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-and>" >&2
+    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and>" >&2
     exit 2
     ;;
 esac
@@ -144,11 +144,28 @@ select alpha by writing it to:
     override as r-fuzzy-semantic-guard -- forces the trusted top set empty
     at guarded tokens, provably equal to that method's own alpha=-inf limit;
     see the patch's module comment and analysis/semantic_guard/README.md)
+  spec-casc-tok-semantic-guard-v2: /tmp/lossy-token-eff-spec-casc-tok-semantic-guard-v2-alpha-\$(id -u) (any real; -inf = strict, NOT 0.0)
+    (identical mechanism to spec-casc-tok-semantic-guard, but the wider
+    35-id/14-word marker set instead of the original 18-id/5-word set --
+    see the patch's module comment and analysis/semantic_guard/README.md)
   spec-casc-tok-semantic-guard-and: /tmp/lossy-token-eff-spec-casc-tok-semantic-guard-and-alpha-\$(id -u) (any real; -inf = strict, NOT 0.0)
     (spec-casc-tok's own alpha, PLUS an AND-combination at guarded tokens --
     accept iff BOTH lossless AND spec-casc-tok's own relaxed test would
     accept -- instead of overriding to pure strict; see the patch's module
     comment for the loophole this closes and analysis/semantic_guard/README.md)
-remote/run_server_vllm.sh writes all eight for every mode (baseline/strict/lossy)
+  spec-casc-tok-semantic-guard-future-guard: /tmp/lossy-token-eff-spec-casc-tok-semantic-guard-future-guard-alpha-\$(id -u) (any real; -inf = strict, NOT 0.0)
+                                           /tmp/lossy-token-eff-spec-casc-tok-semantic-guard-future-guard-k-\$(id -u) (positive int; default 8 if missing)
+    (spec-casc-tok's own alpha, PLUS a K-token strict window that arms the
+    moment tok accepts a hesitation/discourse-marker token -- wider 35-id
+    set, different trigger shape from the other two guards (gates what
+    comes AFTER the marker, not the marker itself); see the patch's module
+    comment and analysis/semantic_guard/README.md)
+  spec-casc-tok-semantic-guard-future-guard-and: /tmp/lossy-token-eff-spec-casc-tok-semantic-guard-future-guard-and-alpha-\$(id -u) (any real; -inf = strict, NOT 0.0)
+                                               /tmp/lossy-token-eff-spec-casc-tok-semantic-guard-future-guard-and-k-\$(id -u) (positive int; default 8 if missing)
+    (same K-token strict-window trigger as spec-casc-tok-semantic-guard-future-guard,
+    but AND-combined inside the window instead of pure strict -- accept iff
+    BOTH lossless AND tok's own relaxed test would accept; see the patch's
+    module comment and analysis/semantic_guard/README.md)
+remote/run_server_vllm.sh writes all ten for every mode (baseline/strict/lossy)
 so a stale value from a previous run cannot silently leak into a control arm.
 EOF

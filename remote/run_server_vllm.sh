@@ -43,7 +43,12 @@ R_FUZZY_GUARD_ALPHA="${R_FUZZY_GUARD_ALPHA:-0.3}"    # r-fuzzy's own alpha; guar
 R_FUZZY_GUARD_V2_ALPHA="${R_FUZZY_GUARD_V2_ALPHA:-0.3}"  # same idea, wider token set -- see patches/README.md
 R_FUZZY_WENTROPY_GUARD_ALPHA="${R_FUZZY_WENTROPY_GUARD_ALPHA:-0.3}"  # r-fuzzy's own alpha; entropy-window override always on
 SPEC_CASC_TOK_GUARD_ALPHA="${SPEC_CASC_TOK_GUARD_ALPHA:-0.3}"  # spec-casc-tok's own alpha; guard override is always on, no separate knob
+SPEC_CASC_TOK_GUARD_V2_ALPHA="${SPEC_CASC_TOK_GUARD_V2_ALPHA:-0.3}"  # spec-casc-tok's own alpha; wider-marker-set guard override always on
 SPEC_CASC_TOK_GUARD_AND_ALPHA="${SPEC_CASC_TOK_GUARD_AND_ALPHA:-0.3}"  # spec-casc-tok's own alpha; AND-combination is always on, no separate knob
+SPEC_CASC_TOK_FUTURE_GUARD_ALPHA="${SPEC_CASC_TOK_FUTURE_GUARD_ALPHA:-0.3}"  # spec-casc-tok's own alpha
+SPEC_CASC_TOK_FUTURE_GUARD_K="${SPEC_CASC_TOK_FUTURE_GUARD_K:-8}"            # strict-window length after an accepted marker
+SPEC_CASC_TOK_FUTURE_GUARD_AND_ALPHA="${SPEC_CASC_TOK_FUTURE_GUARD_AND_ALPHA:-0.3}"  # spec-casc-tok's own alpha
+SPEC_CASC_TOK_FUTURE_GUARD_AND_K="${SPEC_CASC_TOK_FUTURE_GUARD_AND_K:-8}"            # AND-combined window length after an accepted marker
 SYNTH_LEN="${SYNTH_LEN:-3.0}"
 
 # Every knob file is written in EVERY mode, including baseline and strict, to
@@ -66,7 +71,12 @@ r_fuzzy_guard_file="/tmp/lossy-token-eff-r-fuzzy-semantic-guard-alpha-$(id -u)"
 r_fuzzy_guard_v2_file="/tmp/lossy-token-eff-r-fuzzy-semantic-guard-v2-alpha-$(id -u)"
 r_fuzzy_wentropy_guard_file="/tmp/lossy-token-eff-r-fuzzy-window-entropy-guard-alpha-$(id -u)"
 spec_casc_tok_guard_file="/tmp/lossy-token-eff-spec-casc-tok-semantic-guard-alpha-$(id -u)"
+spec_casc_tok_guard_v2_file="/tmp/lossy-token-eff-spec-casc-tok-semantic-guard-v2-alpha-$(id -u)"
 spec_casc_tok_guard_and_file="/tmp/lossy-token-eff-spec-casc-tok-semantic-guard-and-alpha-$(id -u)"
+spec_casc_tok_future_guard_file="/tmp/lossy-token-eff-spec-casc-tok-semantic-guard-future-guard-alpha-$(id -u)"
+spec_casc_tok_future_guard_k_file="/tmp/lossy-token-eff-spec-casc-tok-semantic-guard-future-guard-k-$(id -u)"
+spec_casc_tok_future_guard_and_file="/tmp/lossy-token-eff-spec-casc-tok-semantic-guard-future-guard-and-alpha-$(id -u)"
+spec_casc_tok_future_guard_and_k_file="/tmp/lossy-token-eff-spec-casc-tok-semantic-guard-future-guard-and-k-$(id -u)"
 
 neutralise_all_knobs() {
   # Each method's own "no relaxation" value -- NOT uniformly 0.0. See
@@ -80,7 +90,12 @@ neutralise_all_knobs() {
   printf '%s\n' "-inf"   > "$r_fuzzy_guard_v2_file"
   printf '%s\n' "-inf"   > "$r_fuzzy_wentropy_guard_file"
   printf '%s\n' "-inf"   > "$spec_casc_tok_guard_file"
+  printf '%s\n' "-inf"   > "$spec_casc_tok_guard_v2_file"
   printf '%s\n' "-inf"   > "$spec_casc_tok_guard_and_file"
+  printf '%s\n' "-inf"   > "$spec_casc_tok_future_guard_file"
+  printf '%s\n' "0"      > "$spec_casc_tok_future_guard_k_file"  # moot once alpha=-inf, written for cleanliness
+  printf '%s\n' "-inf"   > "$spec_casc_tok_future_guard_and_file"
+  printf '%s\n' "0"      > "$spec_casc_tok_future_guard_and_k_file"  # moot once alpha=-inf, written for cleanliness
 }
 
 common_args=(
@@ -252,6 +267,19 @@ PY
         }
         echo "mode=lossy rule=spec_casc_tok_semantic_guard alpha=$SPEC_CASC_TOK_GUARD_ALPHA (via $spec_casc_tok_guard_file, hesitation-marker override always on) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
         ;;
+      spec_casc_tok_semantic_guard_v2)
+        printf '%s\n' "$SPEC_CASC_TOK_GUARD_V2_ALPHA" > "$spec_casc_tok_guard_v2_file"
+        # _SPEC_CASC_TOK_GUARD_V2_ALPHA_FILE, not _SEMANTIC_GUARD_TOKEN_IDS:
+        # v2 shares that name with plain spec-casc-tok-semantic-guard (same
+        # variable, different token set), so probing it wouldn't disambiguate
+        # which one is actually installed -- this variant's own alpha-file-
+        # path constant is unique instead.
+        probe_patched "_SPEC_CASC_TOK_GUARD_V2_ALPHA_FILE" || {
+          echo "LOSSY_RULE=spec_casc_tok_semantic_guard_v2 needs the patch: bash patches/apply.sh spec-casc-tok-semantic-guard-v2" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_tok_semantic_guard_v2 alpha=$SPEC_CASC_TOK_GUARD_V2_ALPHA (via $spec_casc_tok_guard_v2_file, wider-marker-set override always on) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
       spec_casc_tok_semantic_guard_and)
         printf '%s\n' "$SPEC_CASC_TOK_GUARD_AND_ALPHA" > "$spec_casc_tok_guard_and_file"
         # _SPEC_CASC_TOK_GUARD_AND_ALPHA_FILE, not _SEMANTIC_GUARD_TOKEN_IDS:
@@ -264,8 +292,37 @@ PY
         }
         echo "mode=lossy rule=spec_casc_tok_semantic_guard_and alpha=$SPEC_CASC_TOK_GUARD_AND_ALPHA (via $spec_casc_tok_guard_and_file, AND-combined hesitation-marker guard always on) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
         ;;
+      spec_casc_tok_semantic_guard_future_guard)
+        printf '%s\n' "$SPEC_CASC_TOK_FUTURE_GUARD_ALPHA" > "$spec_casc_tok_future_guard_file"
+        printf '%s\n' "$SPEC_CASC_TOK_FUTURE_GUARD_K" > "$spec_casc_tok_future_guard_k_file"
+        # _FUTURE_GUARD_STATE, not _SEMANTIC_GUARD_TOKEN_IDS: this is the one
+        # attribute genuinely unique to this variant (the other two guards
+        # share the 18-id set's name, and this one has its own wider set
+        # anyway, but _FUTURE_GUARD_STATE is the clearest, most direct probe
+        # for "is this specifically the future-guard variant installed").
+        probe_patched "_FUTURE_GUARD_STATE" || {
+          echo "LOSSY_RULE=spec_casc_tok_semantic_guard_future_guard needs the patch: bash patches/apply.sh spec-casc-tok-semantic-guard-future-guard" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_tok_semantic_guard_future_guard alpha=$SPEC_CASC_TOK_FUTURE_GUARD_ALPHA k=$SPEC_CASC_TOK_FUTURE_GUARD_K (via $spec_casc_tok_future_guard_file, $spec_casc_tok_future_guard_k_file) draft=$DRAFT_MODEL_PATH k_spec=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      spec_casc_tok_semantic_guard_future_guard_and)
+        printf '%s\n' "$SPEC_CASC_TOK_FUTURE_GUARD_AND_ALPHA" > "$spec_casc_tok_future_guard_and_file"
+        printf '%s\n' "$SPEC_CASC_TOK_FUTURE_GUARD_AND_K" > "$spec_casc_tok_future_guard_and_k_file"
+        # _SPEC_CASC_TOK_GUARD_FUTURE_AND_ALPHA_FILE, not _FUTURE_GUARD_STATE:
+        # both future-guard variants (raw-strict and AND) share the
+        # _FUTURE_GUARD_STATE name (same window-carryover mechanism, only the
+        # in-window accept test differs), so probing it wouldn't
+        # disambiguate which one is actually installed -- this variant's own
+        # alpha-file-path constant is unique instead.
+        probe_patched "_SPEC_CASC_TOK_GUARD_FUTURE_AND_ALPHA_FILE" || {
+          echo "LOSSY_RULE=spec_casc_tok_semantic_guard_future_guard_and needs the patch: bash patches/apply.sh spec-casc-tok-semantic-guard-future-guard-and" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_tok_semantic_guard_future_guard_and alpha=$SPEC_CASC_TOK_FUTURE_GUARD_AND_ALPHA k=$SPEC_CASC_TOK_FUTURE_GUARD_AND_K (via $spec_casc_tok_future_guard_and_file, $spec_casc_tok_future_guard_and_k_file) draft=$DRAFT_MODEL_PATH k_spec=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
       *)
-        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|r_fuzzy_semantic_guard|r_fuzzy_semantic_guard_v2|r_fuzzy_window_entropy_guard|spec_casc_tok_semantic_guard|spec_casc_tok_semantic_guard_and|synthetic)" >&2
+        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|r_fuzzy_semantic_guard|r_fuzzy_semantic_guard_v2|r_fuzzy_window_entropy_guard|spec_casc_tok_semantic_guard|spec_casc_tok_semantic_guard_v2|spec_casc_tok_semantic_guard_and|spec_casc_tok_semantic_guard_future_guard|spec_casc_tok_semantic_guard_future_guard_and|synthetic)" >&2
         exit 2
         ;;
     esac

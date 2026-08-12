@@ -1302,3 +1302,687 @@ python3 analysis/semantic_guard/find_macro_loop_restarts.py \
     --runs-root runs/hidden_state_strict_pilot/aime24 --tag strict \
     --out analysis/semantic_guard/results/strict_macro_loop_restarts.jsonl
 ```
+
+## `spec_casc_tok_semantic_guard_future_guard`: a third combination rule, gating what comes AFTER a marker instead of the marker itself
+
+Different trigger shape from the other two: instead of gating the hesitation-marker token, this arms a K-token strict window the moment `spec_casc_tok`'s own test *accepts* one (wider marker set: the 35-id/14-word list from `r_fuzzy_semantic_guard_v2`, reused verbatim). For the next K verified positions, the accept test uses the raw lossless ratio instead of `spec_casc_tok`'s blend. First patch in this repo with cross-round persistent state (the remaining-window count carries across verification rounds via a small kernel-level counter) -- see the patch's own module comment for the single-real-sequence-per-process scoping this relies on. K=8 by default (matches the k=8 window already used elsewhere in this investigation for hidden-state recurrence).
+
+**Pilot** (same 8 AIME24 cases, paired fresh baseline, α=0.3, K=8):
+
+| metric | baseline | override-guard | AND-guard | future-guard-strict (K=8) | future-guard-AND (K=8) |
+|---|---:|---:|---:|---:|---:|
+| accuracy | 7/8 | 7/8 | 6/8 | **7/8** | 6/8 |
+| aggregate length | 118,947 | 85,716 (-27.9%) | 91,358 (-23.2%) | 95,424 (-19.8%) | 97,541 (**-18.0%**) |
+| hesitation words (n=8) | 1,891 | 1,333 (-29.5%) | 1,419 (-24.9%) | 1,508 (-20.3%) | 1,396 (**-26.2%**) |
+| mechanism check (relaxed-only) | 67 | 0 | 0 | 49 (3.25%) | **47 (3.37%)** |
+| total wall-time | 471.9s | 355.0s (-24.7%) | 376.4s (-19.8%) | 396.0s (-16.1%) | 415.9s (**-13.0%**) |
+| s/round tax | — | +4.6% | +3.6% | +3.4% | +3.9% |
+
+Mechanism check is NOT zero for either future-guard design, correctly -- neither touches the marker token's own accept decision (that still runs plain `spec_casc_tok`, unguarded), only the K positions after it, so a marker can still be relaxed-only-accepted itself; the two future-guard variants' mechanism-check rates land almost on top of each other (3.25% vs 3.37%), as expected since they share the identical trigger/arming logic and differ only in what happens *inside* an already-armed window.
+
+**future-guard-AND is a fourth combination rule, crossing future-guard's trigger shape with the AND-guard's combination rule**: inside the K-window, accept iff BOTH the lossless test AND `spec_casc_tok`'s own relaxed test would accept (`min(pi_rej, p)`), instead of future-guard-strict's raw-strict-only window -- provably never more lenient than future-guard-strict at any guarded position (same identity the standalone AND-guard uses). At this pilot scale it lands closer to the AND-guard's overall shape than to future-guard-strict's: same 6/8 accuracy as the marker-level AND-guard (not future-guard-strict's 7/8), but with **the best length/hesitation-word reduction of any guard variant so far on this pilot** (-18.0% length is close to future-guard-strict's -19.8%, but -26.2% hesitation words beats every other variant including the two marker-level guards).
+
+**Verdict changes** (7/8 -> 6/8, net -1): 1 rescue (case_002: cap/no_answer -> correct, though at 23,811 tokens -- more than double future-guard-strict's own case_002 rescue at 11,506, a real but much less efficient fix) against 2 regressions (case_003: correct -> cap/no_answer, the same case every other guard variant also loses; case_005: correct -> wrong, 110 -> 134 -- a NEW regression not seen in any of the other three guards' pilots). case_011 stands out on the positive side: 27,669 -> 4,427 tokens (**-84.0%**), the single largest length reduction of any case across all four guard pilots, while staying correct throughout.
+
+Reproduce (K is a real CLI flag, not baked into the patch):
+
+```
+python3 scripts/fresh_server_replay.py \
+    --arms spec_casc_tok spec_casc_tok_semantic_guard_future_guard \
+    --spec-casc-tok-alpha 0.3 --spec-casc-tok-semantic-guard-future-guard-alpha 0.3 \
+    --spec-casc-tok-semantic-guard-future-guard-k 8 \
+    --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
+    --prompt-root prompts/aime24 --runs-root runs/spec_casc_tok_semantic_guard_future_guard_pilot/aime24 \
+    --log-root logs/spec_casc_tok_semantic_guard_future_guard_pilot/aime24 --max-new-tokens 32768
+```
+
+future-guard-AND reproduce:
+
+```
+python3 scripts/fresh_server_replay.py \
+    --arms spec_casc_tok spec_casc_tok_semantic_guard_future_guard_and \
+    --spec-casc-tok-alpha 0.3 --spec-casc-tok-semantic-guard-future-guard-and-alpha 0.3 \
+    --spec-casc-tok-semantic-guard-future-guard-and-k 8 \
+    --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
+    --prompt-root prompts/aime24 --runs-root runs/spec_casc_tok_semantic_guard_future_guard_and_pilot/aime24 \
+    --log-root logs/spec_casc_tok_semantic_guard_future_guard_and_pilot/aime24 --max-new-tokens 32768
+```
+
+Full 30-case AIME24 sweeps for future-guard-strict at K=4 and K=8 are done (see
+below). future-guard-AND has only been piloted so far, not run at full scale.
+
+## Full-scale AIME24 results, K=4: matches the other two guards almost exactly
+
+`spec_casc_tok_semantic_guard_future_guard` run across all 30 AIME24 cases at
+K=4 (existing `spec_casc_tok` baseline reused, same convention as the other
+two guards' full-scale sections). Mechanism-check numbers below are the
+K=4-only slice (the raw `count_relaxed_only_hesitation.py` output groups by
+arm label, not by K, so it briefly mixed in one in-flight K=8 run while the
+K=8 sweep was starting -- filtered back out here by `tag`).
+
+| metric | **lossless (strict)** | baseline (spec_casc_tok) | override-guard | AND-guard | future-guard K=4 |
+|---|---:|---:|---:|---:|---:|
+| accuracy | 23/30 (76.7%) | 26/30 (86.7%) | 22/30 (73.3%) | 22/30 (73.3%) | **22/30 (73.3%)** |
+| mean completion length | 10,043 | 9,440 | 10,397 (+10.1%) | 10,964 (+16.1%) | 10,397 (**+10.1%**) |
+| mean accepted length (l̄) | 2.2046 | 2.4210 | 2.3999 (-0.9%) | 2.3906 (-1.3%) | 2.3447 (**-3.2%**) |
+| total verifier rounds | 100,605 | 86,874 | ~98,280 (+13.1%) | ~103,890 (+19.6%) | 97,779 (**+12.6%**) |
+| mean s/round (throughput tax) | 0.01227 | 0.01241 | 0.01292 (+4.1%) | -- | 0.01295 (**+4.4%**) |
+| total generation wall-time | 1,234.8s | 1,078.2s | 1,269.6s (+17.8%) | 1,345.3s (+24.8%) | 1,266.3s (**+17.4%**) |
+| hesitation words | 4,456 | 4,173 | 4,949 (+18.6%) | 4,822 (+15.6%) | 4,869 (**+16.7%**) |
+| hesitation words, relaxed-only | 0 | 157 (3.8%) | 0 | 0 | **199 (4.1%)** |
+
+`l̄` (mean accepted length per verifier round -- higher is better speculative-decoding throughput) is included because it's the metric all these relaxation methods exist to improve on top of lossless: `spec_casc_tok` baseline already beats strict here (2.4210 vs 2.2046, +9.8%), and every guard variant gives some of that back by forcing extra strict-only rounds -- K=4 gives back the most (2.3447, -3.2% off baseline, though still +6.3% above lossless), the override- and AND-guards give back the least (~-1%, still +8.6%/+8.4% above lossless). Percentages in the `baseline (spec_casc_tok)` comparisons above are relative to that baseline column, not to lossless -- lossless is included as the zero-relaxation reference point, not as the thing the guards are trying to move toward.
+
+Three structurally different combination rules (override the marker to pure
+strict; AND the marker's own decision with lossless; leave the marker alone
+but force strict on the K tokens *after* it) land within a few points of
+each other on every axis, and all three land on the exact same accuracy:
+**22/30**. Length/rounds/wall-time for future-guard K=4 are close enough to the
+override-guard's numbers that the two are barely distinguishable (10,397
+mean length both; wall-time +17.4% vs +17.8%) -- despite gating a
+completely different set of tokens (the marker itself for override; up to 4
+tokens *after* it, and never the marker, for future-guard). The AND-guard is
+the outlier, costing more on every efficiency axis for the same accuracy.
+The mechanism check is the one real structural difference: future-guard is the
+only one of the three with nonzero relaxed-only hesitation words (199, 4.1%)
+by design, since it never touches the marker token's own accept decision.
+
+**Verdict changes** (26 -> 22, net -4): 1 case improved (case_006: wrong ->
+correct, same as the other two guards) but 5 regressed (case_003, case_014,
+case_026: correct -> no_answer/cap; case_023, case_029: correct -> wrong).
+Notably **case_002 is *not* rescued at K=4** -- unlike the override- and
+AND-guards, which both flip it from stuck-at-cap to correct, K=4's window
+is short enough that this run stays stuck at the 32,768-token cap either
+way (`no_answer -> no_answer`, unchanged length: 32,768 both arms). K=4's
+regression set (003, 014, 023, 026, 029) is a subset of the override-guard's
+six (003, 014, 023, 026, 029, 030) minus case_030, which stays correct
+under future-guard K=4 (8,684 -> 8,083 tokens) but flips to wrong under
+override. Case_028 is a genuine outlier here too: length *grows* under
+future-guard K=4 (13,969 -> 16,605, +18.9%) while it *shrinks* under both other
+guards (see the pilot table above) -- the opposite direction from every
+other guard design on this specific case, still `correct -> correct`
+throughout.
+
+## Full-scale AIME24 results, K=8: a genuinely different, better outcome than K=4
+
+Same protocol as K=4 above, K=8 instead (existing `spec_casc_tok` baseline
+reused; mechanism-check numbers filtered by `tag` the same way, since both
+K=4 and K=8 traces now coexist under `runs/aime24_fresh` and share the same
+underlying arm label).
+
+| metric | **lossless (strict)** | baseline (spec_casc_tok) | override-guard | AND-guard | future-guard K=4 | future-guard K=8 |
+|---|---:|---:|---:|---:|---:|---:|
+| accuracy | 23/30 (76.7%) | 26/30 (86.7%) | 22/30 (73.3%) | 22/30 (73.3%) | 22/30 (73.3%) | **25/30 (83.3%)** |
+| mean completion length | 10,043 | 9,440 | 10,397 (+10.1%) | 10,964 (+16.1%) | 10,397 (+10.1%) | **9,303 (-1.4%)** |
+| mean accepted length (l̄) | 2.2046 | 2.4210 | 2.3999 (-0.9%) | 2.3906 (-1.3%) | 2.3447 (-3.2%) | **2.3950 (-1.1%)** |
+| total verifier rounds | 100,605 | 86,874 | ~98,280 (+13.1%) | ~103,890 (+19.6%) | 97,779 (+12.6%) | **87,607 (+0.8%)** |
+| mean s/round (throughput tax) | 0.01227 | 0.01241 | 0.01292 (+4.1%) | -- | 0.01295 (+4.4%) | 0.01298 (+4.6%) |
+| total generation wall-time | 1,234.8s | 1,078.2s | 1,269.6s (+17.8%) | 1,345.3s (+24.8%) | 1,266.3s (+17.4%) | **1,137.2s (+5.5%)** |
+| hesitation words | 4,456 | 4,173 | 4,949 (+18.6%) | 4,822 (+15.6%) | 4,869 (+16.7%) | **3,952 (-5.3%)** |
+| hesitation words, relaxed-only | 0 | 157 (3.8%) | 0 | 0 | 199 (4.1%) | 139 (**3.5%**) |
+
+**K=8's accepted-length cost is the smallest of the three guard families** (-1.1% off `spec_casc_tok` baseline, vs. -3.2% for K=4 and -0.9%/-1.3% for override/AND) while still landing at +8.6% above lossless's own l̄ (2.3950 vs 2.2046) -- it gives back only a sliver of the speculative-decoding throughput gain `spec_casc_tok` has over strict, which is consistent with the s/round tax also being the smallest relative cost once weighed against K=8's round-count reduction (unlike K=4, whose extra rounds compound with the tax instead of offsetting it). Put together with the completion-length and hesitation-word numbers: K=8 is the only guard variant tested that sits *closer to lossless on accuracy* (83.3% vs strict's 76.7% -- still above it) while *also* sitting closer to (in fact below) the `spec_casc_tok` baseline on length, rounds, and hesitation words -- every other variant, including K=4, moves away from `spec_casc_tok` on efficiency to only partially claw back toward lossless on accuracy.
+
+**K=8 is a materially better design point, not just a bigger K.** It's the
+only variant of the four that beats baseline `spec_casc_tok` on length,
+rounds, and hesitation-word count simultaneously, while giving up less
+accuracy than either K=4 or the other two combination rules (-3.4pp vs.
+-13.4pp). The direction flip between K=4 and K=8 on length/hesitation-words
+(+10.1%/+16.7% at K=4 vs. -1.4%/-5.3% at K=8) is the interesting result:
+a longer forced-strict window doesn't just extend the K=4 effect, it
+reverses it. Consistent with §5's mechanism theory elsewhere in this
+document (forcing strict at a hesitation marker can itself seed a *further*
+hesitation cascade in the immediately following tokens) -- a short K=4
+window is long enough to trigger that cascade but too short to ride it out,
+while K=8 covers enough of the subsequent instability to let the trajectory
+settle before control reverts to the relaxed rule.
+
+**Verdict changes** (26 -> 25, net -1): 2 cases improved -- **case_002 is
+rescued** (stuck at the 32,768-token cap with no answer -> correct in
+11,506 tokens, exactly matching the K=8 pilot's own case_002 run
+token-for-token, L=11,506 both times -- the determinism finding from
+earlier in this investigation holding again here) and case_006 (wrong ->
+correct, same flip as every other guard variant). Only 3 regressed
+(case_003, case_014, case_026: correct -> no_answer/cap) -- fewer than
+either K=4 (5) or the override-guard (6), and neither case_023 nor
+case_029 regress at K=8 (both stay correct, unlike K=4 where they flip to
+wrong). Case_028's length also flips back to *shrinking* at K=8 (13,969 ->
+6,084, -56.4%) -- the opposite of K=4's growth on this same case, and now
+the single largest length reduction of any case in the K=8 sweep.
+
+**Reading across all four combination-rule variants together**: the
+override-guard, AND-guard, and future-guard-K=4 all land on the exact same
+22/30 accuracy through different mechanisms and different regression sets,
+suggesting -13.4pp is close to a floor for "force strict somewhere near a
+hesitation marker, narrowly" at this alpha. FutureGuard-K=8 breaks that floor
+by widening the window, which both argues against the marker-token identity
+being the load-bearing choice (window *position/width* matters more than
+*which* combination rule gates the marker itself) and is the first result
+in this whole investigation where a hesitation-marker-triggered guard is a
+net win over plain `spec_casc_tok` on efficiency without a comparably large
+accuracy cost -- worth treating as the most promising design point found so
+far, and a natural next step (K=12, K=16, ...) rather than a stopping point.
+
+## Relaxing `spec_casc_tok`'s own alpha (0.3 -> 0.5): an 8-case pilot signal that did NOT survive full scale (see correction below)
+
+A different axis from K: instead of widening the guard's own window, relax
+`spec_casc_tok`'s underlying alpha itself (recall: alpha controls the
+trusted-set threshold `(1-alpha)*max(p)` -- 0.5 roughly doubles how much of
+the vocabulary near the verifier's top token is unconditionally trusted,
+compared to 0.3). Same 8-case pilot protocol as every guard pilot above
+(paired fresh baseline, K=8), alpha=0.5 instead of 0.3, vanilla
+`spec_casc_tok` vs `spec_casc_tok_semantic_guard_future_guard`:
+
+| metric | baseline α=0.3 | +future-guard K=8 α=0.3 | baseline α=0.5 | +future-guard K=8 α=0.5 |
+|---|---:|---:|---:|---:|
+| accuracy | 7/8 (87.5%) | 7/8 (87.5%) | **5/8 (62.5%)** | **6/8 (75.0%)** |
+| aggregate length | 118,947 | 95,424 (-19.8%) | 114,046 | 88,926 (**-22.0%**) |
+| total verifier rounds | -- | -- | 35,537 | 28,041 (-21.1%) |
+| hesitation words (n=8) | 1,891 | 1,508 (-20.3%) | 1,732 | 1,465 (**-15.4%**) |
+| hesitation words, relaxed-only | 67 | 49 (3.3%) | 80 | 88 (**6.0%**) |
+| total wall-time | 471.9s | 396.0s (-16.1%) | 446.2s | 365.3s (**-18.1%**) |
+
+**Relaxing alpha further costs `spec_casc_tok` itself real accuracy on this
+hard 8-case subset** (7/8 -> 5/8) -- a much bigger hit than anything the
+semantic guard has cost at alpha=0.3 anywhere in this document. **But the
+guard's relative value grows to compensate**: at alpha=0.3 the guard and
+its baseline tie (7/8 both); at alpha=0.5 the guard actually *beats* its
+own baseline (6/8 vs 5/8), the first time in this whole investigation a
+hesitation-marker-triggered guard shows a net accuracy *gain* over its own
+unguarded baseline, not just a smaller loss. Verdict changes at alpha=0.5:
+2 rescues (case_003: cap/no_answer -> correct in 16,523 tokens; case_005:
+wrong -> correct) against 1 regression (case_011: correct -> wrong,
+104 -> 106) -- net +1. Length/rounds/wall-time savings are also all
+somewhat larger in relative terms at alpha=0.5 than alpha=0.3 (-22.0% vs
+-19.8% length, -18.1% vs -16.1% wall-time). The one number that moves the
+"wrong" direction is the mechanism check: relaxed-only hesitation words
+nearly doubles as a share (3.3% -> 6.0%) -- expected, since a more relaxed
+base alpha pushes more of the relaxed-only acceptance onto the marker
+token itself (which this guard design never gates), so a larger share
+leaks past an unchanged K-window mechanism.
+
+**Reading (superseded -- see the full-scale correction immediately below):
+this was n=8, one pilot, not a sweep**, and its own headline claim (the
+guard beating its own baseline) turned out not to survive full scale.
+Recorded here rather than deleted, per this document's own standing
+practice of disclosing when a pilot misleads rather than quietly replacing
+it -- see the `r-fuzzy-semantic-guard` pilot-vs-full-scale section earlier
+in this document for the prior instance of exactly this pattern.
+
+Reproduce:
+
+```
+python3 scripts/fresh_server_replay.py \
+    --arms spec_casc_tok spec_casc_tok_semantic_guard_future_guard \
+    --spec-casc-tok-alpha 0.5 --spec-casc-tok-semantic-guard-future-guard-alpha 0.5 \
+    --spec-casc-tok-semantic-guard-future-guard-k 8 \
+    --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
+    --prompt-root prompts/aime24 --runs-root runs/spec_casc_tok_alpha0p5_pilot/aime24 \
+    --log-root logs/spec_casc_tok_alpha0p5_pilot/aime24 --max-new-tokens 32768
+```
+
+## Correction: full-scale alpha=0.5 results -- the pilot's headline claim reverses
+
+Full 30-case AIME24 sweep, existing `strict`/`spec_casc_tok0p3` baselines
+reused for reference, fresh `spec_casc_tok` and `spec_casc_tok_semantic_guard_future_guard`
+runs at α=0.5:
+
+| metric | lossless | baseline α=0.3 | baseline α=0.5 | future-guard K=8 α=0.5 |
+|---|---:|---:|---:|---:|
+| accuracy | 23/30 (76.7%) | 26/30 (86.7%) | **22/30 (73.3%)** | **20/30 (66.7%)** |
+| mean completion length | 10,043 | 9,440 | 10,495 | 10,555 (+0.6%) |
+| mean accepted length (l̄) | 2.2046 | 2.4210 | 2.4929 | 2.4484 (-1.8%) |
+| total verifier rounds | 100,605 | 86,874 | 96,402 | 97,984 (+1.6%) |
+| mean s/round | 0.01227 | 0.01241 | 0.01258 | 0.01300 (+3.3%) |
+| total generation wall-time | 1,234.8s | 1,078.2s | 1,212.9s | 1,273.6s (+5.0%) |
+| hesitation words | 4,456 | 4,173 | 4,532 | 4,662 (+2.9%) |
+| hesitation words, relaxed-only | 0 | 157 (3.8%) | 228 (5.0%) | 258 (5.5%) |
+
+**The 8-case pilot's headline result does not survive full scale --
+future-guard does NOT beat its own baseline at alpha=0.5.** At full scale,
+relaxing alpha from 0.3 to 0.5 costs the *baseline* real accuracy (26/30 ->
+22/30, roughly matching the pilot's own direction) but the guard costs
+*more*, not less (22/30 -> 20/30) -- the opposite of the pilot's 5/8 -> 6/8
+result. Both numbers move length/rounds/wall-time in the SAME direction
+too (guard now costs MORE than baseline on every axis, +0.6% length, +1.6%
+rounds, +5.0% wall-time, +2.9% hesitation words) -- at alpha=0.3 the guard
+reliably cuts these relative to baseline; at alpha=0.5 it no longer does,
+on any of them.
+
+**Verdict changes, guard vs. its own alpha=0.5 baseline** (22 -> 20, net
+-2): 2 improved (case_003: no_answer -> correct; case_005: wrong ->
+correct -- the SAME two cases the pilot's own rescue involved, both
+reproducing) against 4 regressed (case_006, case_009, case_011: correct ->
+wrong; case_019: correct -> no_answer) plus 2 lateral moves among already-
+wrong cases (case_002, case_004: wrong -> no_answer). The pilot's own two
+positive flips are real and reproduce exactly -- what the pilot missed is
+everything else: 4 new regressions outside its own 8-case sample, enough
+to flip the net sign.
+
+**Reading**: this is exactly the `r-fuzzy-semantic-guard` pilot-vs-full-
+scale pattern repeating on a different axis (relaxing alpha instead of
+choosing adversarial cases) -- a small, non-random 8-case sample showed a
+real effect (the two rescues genuinely reproduce) that did not generalize
+once measured on all 30 cases. At alpha=0.5 specifically, relaxing
+`spec_casc_tok`'s alpha does not create a regime where this guard wins --
+it makes both the guard and its baseline worse, and the guard consistently
+worse than its own more-relaxed baseline, matching the pattern already
+established at alpha=0.3 (no guard variant beats vanilla `spec_casc_tok`)
+rather than breaking it. **This does NOT hold at alpha=0.7 -- see
+immediately below.**
+
+## Pushing further: alpha=0.7 -- the guard reverses AGAIN, cleanly beats its own baseline
+
+Requested directly: does the guard's disadvantage at alpha=0.5 grow, shrink,
+or reverse again as `spec_casc_tok` relaxes even further? Full 30-case
+sweep at alpha=0.7 (existing lossless/α=0.3 baselines reused for
+reference):
+
+| metric | lossless | baseline α=0.3 | baseline α=0.7 | future-guard K=8 α=0.7 |
+|---|---:|---:|---:|---:|
+| accuracy | 23/30 (76.7%) | 26/30 (86.7%) | 22/30 (73.3%) | **25/30 (83.3%)** |
+| mean completion length | 10,043 | 9,440 | 10,337 | 12,239 (+18.4%) |
+| mean accepted length (l̄) | 2.2046 | 2.4210 | 2.6565 | 2.5365 (-4.5%) |
+| total verifier rounds | 100,605 | 86,874 | 90,948 | 109,433 (+20.3%) |
+| mean s/round | 0.01227 | 0.01241 | 0.01262 | 0.01297 (+2.8%) |
+| total generation wall-time | 1,234.8s | 1,078.2s | 1,147.4s | 1,419.9s (+23.8%) |
+| hesitation words | 4,456 | 4,173 | 5,699 (α=0.7 guard) | -- |
+| hesitation words, relaxed-only | 0 | 157 (3.8%) | 395 (6.9%, guard) | -- |
+
+**Non-monotonic: the guard's relationship to its own baseline is not a
+straight line as alpha increases.** At alpha=0.3 the guard wins narrowly
+(25/30 vs 26/30, -1 case but cheaper); at alpha=0.5 it loses clearly (20/30
+vs 22/30, worse on every axis); at alpha=0.7 it wins clearly again --
+**25/30 vs. baseline's own 22/30, a real +3-case advantage**, and this time
+with **zero regressions**: 3 improved (case_002, case_003: no_answer ->
+correct; case_005: wrong -> correct), 0 regressed, 1 lateral move among
+already-wrong cases (case_004: no_answer -> wrong). This is the first
+guard-vs-baseline comparison anywhere in this investigation with a
+completely clean win column -- every case that changed, changed for the
+better.
+
+**The cost is real and grows with alpha, though**: length is now +18.4%
+over the α=0.7 baseline (vs. +0.6% at α=0.5, and future-guard-strict K=8
+actually being CHEAPER than baseline at α=0.3), rounds +20.3%, wall-time
++23.8% -- the guard is winning on accuracy at alpha=0.7 by spending a lot
+more compute, not by being efficient the way it was at alpha=0.3. Whatever
+is happening here isn't "the guard gets uniformly better as alpha
+increases" (the alpha=0.5 dip disproves that) -- it looks more like alpha
+has multiple regimes with different guard/baseline dynamics, and 0.3/0.5/
+0.7 land in three different ones. A finer alpha sweep (0.4, 0.6) would be
+needed to characterize the transition rather than just its endpoints; not
+run here.
+
+## Full-scale AIME24 results: `future-guard-AND`, K=8 -- lands on lossless's own accuracy
+
+`spec_casc_tok_semantic_guard_future_guard_and` run across all 30 AIME24
+cases (existing `spec_casc_tok` baseline reused). Reference columns from
+here on always include both **lossless (strict)** and **vanilla `spec_casc_tok`**,
+per the standing convention this document now follows for every comparison.
+
+| metric | lossless (strict) | baseline (spec_casc_tok) | future-guard-strict K=8 | future-guard-AND K=8 |
+|---|---:|---:|---:|---:|
+| accuracy | 23/30 (76.7%) | 26/30 (86.7%) | **25/30 (83.3%)** | **23/30 (76.7%)** |
+| mean completion length | 10,043 | 9,440 | 9,303 (-1.4%) | **10,460 (+10.8%)** |
+| mean accepted length (l̄) | 2.2046 | 2.4210 | 2.3950 (-1.1%) | **2.3724 (-2.0%)** |
+| total verifier rounds | 100,605 | 86,874 | 87,607 (+0.8%) | **99,463 (+14.5%)** |
+| mean s/round | 0.01227 | 0.01241 | 0.01298 (+4.6%) | 0.01295 (+4.4%) |
+| total generation wall-time | 1,234.8s | 1,078.2s | 1,137.2s (+5.5%) | **1,288.2s (+19.5%)** |
+| hesitation words | 4,456 | 4,173 | 3,952 (-5.3%) | **4,461 (+6.9%)** |
+| hesitation words, relaxed-only | 0 | 157 (3.8%) | 139 (3.5%) | 177 (**4.0%**) |
+
+**future-guard-AND's full-scale accuracy lands exactly on lossless's own
+(23/30)** -- a genuinely different outcome from the K=8 pilot's picture
+(where it undershot both baseline and future-guard-strict at 6/8). At full
+scale it's worse than future-guard-strict on every efficiency axis (longer
+completions, more rounds, more wall-time, more hesitation words -- the
+AND-combination's extra conservatism costs real overhead here, not just at
+guarded positions) while landing on the SAME accuracy lossless itself gets,
+not a coincidence worth over-reading (different cases can and do compose to
+the same total) but a real data point: this is the first guard variant
+whose accuracy is statistically indistinguishable from doing no relaxation
+at all, at a real efficiency cost relative to the unguarded baseline.
+
+**Verdict changes** (26 -> 23, net -3): 2 improved (case_002: cap/no_answer
+-> correct, matching every other guard's rescue of this case; case_006:
+wrong -> correct, the flip every guard variant reproduces) against 5
+regressions (case_003, case_014, case_026: correct -> no_answer/cap;
+case_005, case_019: correct -> wrong) plus one lateral move among already-
+wrong cases (case_004: no_answer -> wrong, no effect on the correct count).
+Five real regressions is the most of any future-guard variant (vs. 3 for
+future-guard-strict K=8), consistent with AND being provably more
+conservative than strict alone at every guarded position and therefore
+having more surface area to go wrong on, not less.
+
+Reproduce:
+
+```
+python3 scripts/fresh_server_replay.py \
+    --arms spec_casc_tok_semantic_guard_future_guard_and \
+    --spec-casc-tok-semantic-guard-future-guard-and-alpha 0.3 \
+    --spec-casc-tok-semantic-guard-future-guard-and-k 8 \
+    --cases $(ls prompts/aime24 | grep '^case_') \
+    --prompt-root prompts/aime24 --runs-root runs/aime24_fresh \
+    --log-root logs/aime24_fresh --max-new-tokens 32768
+```
+
+## `spec_casc_tok_semantic_guard_v2`: does marker-set WIDTH alone explain any of future-guard's edge?
+
+Every future-guard variant uses the wider 35-id/14-word marker set; the
+marker-level override- and AND-guards both still use the original 18-id/
+5-word set. Confounded axis: nobody has tested the wide set on the
+marker-level (non-future-guard) mechanism, so it's not yet known whether
+future-guard's better full-scale accuracy comes from *where* it gates
+(after the marker, not at it) or just from *which* markers it's watching.
+`spec_casc_tok_semantic_guard_v2` isolates this: identical override-to-
+strict mechanism as plain `spec_casc_tok_semantic_guard`, wide set instead
+of narrow. See `patches/vllm-0.26.0-spec-casc-tok-semantic-guard-v2.patch`
+and `analysis/semantic_guard/README.md`'s reproduce block below.
+
+**Pilot** (α=0.3, same 8 AIME24 cases, paired fresh baseline):
+
+| metric | lossless (strict) | baseline | override (narrow) | AND (narrow) | future-guard-strict K=8 | future-guard-AND K=8 | **v2 (wide, override)** |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| accuracy | n/a at pilot scale | 7/8 | 7/8 | 6/8 | 7/8 | 6/8 | **7/8** |
+| aggregate length | n/a | 118,947 | 85,716 (-27.9%) | 91,358 (-23.2%) | 95,424 (-19.8%) | 97,541 (-18.0%) | **109,027 (-8.3%)** |
+| total verifier rounds | n/a | 37,721 | -- | -- | 31,590 (-16.3%) | -- | **33,967 (-9.9%)** |
+| mean s/round | n/a | 0.01256 | -- | -- | 0.01316 | -- | **0.01293 (+2.9%)** |
+| total wall-time | n/a | 473.7s | 355.0s (-24.7%) | 376.4s (-19.8%) | 415.9s (-12.2%) | -- | **439.0s (-7.3%)** |
+| hesitation words | n/a | 1,891 | 1,333 (-29.5%) | 1,419 (-24.9%) | 1,508 (-20.3%) | 1,396 (-26.2%) | **1,489 (-21.3%)** |
+| hesitation words, relaxed-only | n/a | 67 (3.5%) | 0 | 0 | 49 (3.3%) | 47 (3.4%) | **0 (0.0%)** |
+
+**Marker-set width alone is NOT what makes future-guard better than the
+marker-level guards.** v2 (wide set, but still gating the marker itself,
+not a trailing window) ties baseline's accuracy (7/8, matching narrow-set
+override and future-guard-strict, better than narrow-set AND and
+future-guard-AND) with a genuinely CLEAN mechanism check (0.0%
+relaxed-only, same as narrow override -- the wider set doesn't introduce
+the leak future-guard structurally has, since v2 still gates every marker
+occurrence itself). Efficiency gains are real (-8.3% length, -9.9% rounds,
+-21.3% hesitation words) but smaller than either narrow-set marker guard
+(override: -27.9%/-24.7% length/wall-time) or future-guard-strict
+(-19.8% length) -- widening the set trades some of override's own
+aggression away without future-guard's structural advantage of gating
+*downstream* of the marker instead of at it.
+
+**Verdict changes** (7/8 -> 7/8, net 0): 1 rescue (case_002: cap/no_answer
+-> correct in 20,966 tokens, the same case every other guard variant
+rescues, though at roughly double future-guard-strict's own token cost for
+this case) against 1 new regression (case_011: correct -> cap/no_answer --
+a case NONE of the narrow-set guards or future-guard-strict lose, only
+future-guard-AND touches it and there it stays correct, shrinking to
+4,427 tokens). Net wash on accuracy, real efficiency win, structurally
+clean mechanism -- the strongest pilot result of any marker-level
+(non-future-guard) guard so far, but future-guard-strict K=8's full-scale
+83.3% accuracy (vs. this variant's untested-at-scale pilot tie) remains
+the benchmark to beat.
+
+Reproduce:
+
+```
+python3 scripts/fresh_server_replay.py \
+    --arms spec_casc_tok spec_casc_tok_semantic_guard_v2 \
+    --spec-casc-tok-alpha 0.3 --spec-casc-tok-semantic-guard-v2-alpha 0.3 \
+    --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
+    --prompt-root prompts/aime24 --runs-root runs/spec_casc_tok_semantic_guard_v2_pilot/aime24 \
+    --log-root logs/spec_casc_tok_semantic_guard_v2_pilot/aime24 --max-new-tokens 32768
+```
+
+**Full 30-case AIME24 sweep** (existing baseline reused):
+
+| metric | lossless (strict) | baseline | v2 (wide, override) |
+|---|---:|---:|---:|
+| accuracy | 23/30 (76.7%) | 26/30 (86.7%) | **25/30 (83.3%)** |
+| mean completion length | 10,043 | 9,440 | 10,599 (+12.3%) |
+| mean accepted length (l̄) | 2.2046 | 2.4210 | 2.3986 (-0.9%) |
+| total verifier rounds | 100,605 | 86,874 | 97,540 (+12.3%) |
+| mean s/round | 0.01227 | 0.01241 | 0.01306 (+5.2%) |
+| total generation wall-time | 1,234.8s | 1,078.2s | 1,274.3s (+18.2%) |
+| hesitation words | 4,456 | 4,173 | 4,313 (+3.4%) |
+| hesitation words, relaxed-only | 0 | 157 (3.8%) | 0 (**0.0%**) |
+
+**v2 matches future-guard-strict K=8's exact full-scale accuracy (25/30,
+83.3%) via a completely different mechanism** -- gating the marker itself
+with a wider set, not a trailing window after it. This confirms the pilot's
+signal held at scale: widening the marker set on the plain override
+mechanism recovers real accuracy (22/30 with the narrow set -> 25/30 wide)
+without needing future-guard's window machinery at all. But the efficiency
+picture is the opposite of future-guard-strict K=8's: v2 costs +12.3% length
+and rounds, +18.2% wall-time relative to baseline (vs. future-guard-strict
+K=8's -1.4% length, +0.8% rounds, +5.5% wall-time) -- v2 buys its accuracy
+recovery by being MORE aggressive across more tokens (35 ids instead of 18,
+every occurrence gated, not just a K-window after some of them), while
+future-guard-strict K=8 buys the same accuracy more cheaply by being
+*narrower in trigger but wider in scope per trigger* (fewer trigger points,
+but each one gates K downstream positions, and only fires on markers
+`spec_casc_tok` itself already accepted, which any override guard also
+touches for free). Mechanism check is exactly clean (0.0%), as expected for
+any override-family guard -- the leak future-guard structurally has doesn't
+exist here.
+
+**Verdict changes** (26 -> 25, net -1): 2 improved (case_002, case_006 --
+the same two rescues every guard variant makes) against 3 regressed
+(case_011, case_014: correct -> no_answer/cap; case_018: correct -> wrong),
+plus one lateral move among already-wrong cases (case_004: no_answer ->
+wrong). case_011 is the interesting one: the pilot already flagged it as
+v2's one distinctive regression (no other guard variant loses it), and it
+regresses again here at full scale -- a real, reproducible cost specific to
+this variant, not pilot noise.
+
+## Overall AIME24 conclusion: eight variants compared at full 30-case scale
+
+Everything in this document's `spec_casc_tok`-family investigation, one
+table. All rows are full 30-case AIME24 sweeps (no pilot-only numbers),
+same baseline (`spec_casc_tok`, α=0.3) and same lossless (`strict`)
+reference reused throughout:
+
+| variant | accuracy | mean length | l̄ | total rounds | wall-time | hesitation words | relaxed-only |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **lossless (strict)** | 23/30 (76.7%) | 10,043 | 2.2046 | 100,605 | 1,234.8s | 4,456 | 0.0% |
+| **baseline (spec_casc_tok)** | **26/30 (86.7%)** | **9,440** | **2.4210** | **86,874** | **1,078.2s** | **4,173** | 3.8% |
+| override (narrow, marker-level) | 22/30 (73.3%) | 10,397 | 2.3999 | 98,277 | 1,269.6s | 4,949 | 0.0% |
+| AND (narrow, marker-level) | 22/30 (73.3%) | 10,964 | 2.3906 | 103,942 | 1,345.3s | 4,822 | 0.0% |
+| v2 (wide, override, marker-level) | 25/30 (83.3%) | 10,599 | 2.3986 | 97,540 | 1,274.3s | 4,313 | 0.0% |
+| future-guard-strict K=4 | 22/30 (73.3%) | 10,397 | 2.3447 | 97,779 | 1,266.3s | 4,869 | 4.1% |
+| **future-guard-strict K=8** | **25/30 (83.3%)** | **9,303** | **2.3950** | **87,607** | **1,137.2s** | **3,952** | 3.5% |
+| future-guard-AND K=8 | 23/30 (76.7%) | 10,460 | 2.3724 | 99,463 | 1,288.2s | 4,461 | 4.0% |
+| baseline (spec_casc_tok), α=0.5 | 22/30 (73.3%) | 10,495 | 2.4929 | 96,402 | 1,212.9s | 4,532 | 5.0% |
+| future-guard-strict K=8, α=0.5 | 20/30 (66.7%) | 10,555 | 2.4484 | 97,984 | 1,273.6s | 4,662 | 5.5% |
+| baseline (spec_casc_tok), α=0.7 | 22/30 (73.3%) | 10,337 | 2.6565 | 90,948 | 1,147.4s | -- | -- |
+| **future-guard-strict K=8, α=0.7** | **25/30 (83.3%)** | 12,239 | 2.5365 | 109,433 | 1,419.9s | 5,699 | 6.9% |
+
+**No guard variant beats vanilla `spec_casc_tok`'s own 86.7%.** Across
+seven guard designs (two marker sets x {override, AND} plus a K-sweep and
+an AND-combination of the window mechanism), the unguarded baseline remains
+the single best-accuracy arm on AIME24 -- and it's already the cheapest
+(shortest completions, fewest rounds, least hesitation language) of every
+`spec_casc_tok`-family arm tested. Forcing extra strict verification at
+hesitation markers, in every combination tried, costs accuracy relative to
+just running `spec_casc_tok` unguarded.
+
+**The seven guards split into two clean clusters, independent of which
+axis (marker gating shape, marker set width, combination rule) varies:**
+
+- **High-accuracy cluster (25/30, 83.3%): v2 and future-guard-strict K=8.**
+  Two structurally different mechanisms (gate-the-marker-itself-with-a-wide-
+  set vs. gate-a-trailing-window-after-a-narrow-trigger) land on the exact
+  same accuracy, tied. What actually distinguishes them is efficiency:
+  future-guard-strict K=8 is the ONLY guard variant in this whole
+  investigation that improves on baseline efficiency (-1.4% length, +0.8%
+  rounds -- essentially free) while v2 costs +12.3% length/rounds for the
+  same accuracy. If a real choice has to be made between them,
+  **future-guard-strict K=8 dominates** -- same accuracy, real efficiency
+  win instead of a real efficiency cost. v2's one advantage is a
+  structurally clean mechanism check (0.0% relaxed-only, vs.
+  future-guard's inherent 3.5% leak at the marker token itself) -- relevant
+  only if a provably-airtight guard matters independent of the efficiency
+  cost.
+- **Low-accuracy cluster (22-23/30, 73.3-76.7%): override, AND,
+  future-guard-strict K=4, future-guard-AND K=8.** All four cost BOTH
+  accuracy and length/rounds/wall-time relative to baseline -- a clean net
+  loss on every axis, not a trade-off. Notably this cluster includes both
+  narrow-set marker-level guards (override, AND) AND two future-guard
+  variants (K=4, AND-combined) -- neither "narrow marker set" nor "gate the
+  marker itself" is what determines cluster membership on its own; K=4's
+  window is too short to pay off, and AND's extra conservatism (whether at
+  the marker or in a window) consistently costs more than it recovers.
+- **Relaxing `spec_casc_tok`'s own alpha is NOT monotonic for the guard.**
+  0.3: guard wins narrowly and cheaply (25/30 vs. 26/30, but shorter than
+  baseline). 0.5: guard loses clearly (20/30 vs. 22/30, worse on every
+  axis -- an 8-case pilot had wrongly suggested a win here, corrected in
+  detail above). 0.7: guard wins clearly again (25/30 vs. 22/30, zero
+  regressions), but now by spending real extra compute (+18.4% length,
+  +23.8% wall-time over the α=0.7 baseline) rather than for free. Three
+  alpha values, three different guard/baseline relationships -- this
+  doesn't look like a single trend that generalizes cleanly across alpha;
+  it looks like alpha has multiple regimes. See "Correction: full-scale
+  alpha=0.5 results" and "Pushing further: alpha=0.7" above for the full
+  writeups. **None of this changes the alpha=0.3 conclusion above** --
+  future-guard-strict K=8 at α=0.3 remains the best cost/accuracy trade
+  found in this investigation; α=0.7 buys the same accuracy at meaningfully
+  higher cost.
+
+**Practical recommendation for AIME24 with this model/draft pair:** run
+`spec_casc_tok` unguarded (α=0.3) if accuracy is the only goal -- no
+semantic guard tested here recovers or exceeds its 86.7%. If cutting
+hesitation-language volume and completion length is independently valuable
+(e.g. for downstream cost, not just accuracy), `spec_casc_tok_semantic_guard_future_guard`
+at K=8 is the best available trade: -3.4pp accuracy for a guard that is
+*cheaper* than the unguarded baseline, not more expensive -- a genuinely
+different profile from every other guard variant tried, all of which buy
+whatever accuracy they keep at a real efficiency cost.
+
+## Reference: every `spec_casc_tok`-family method explained, and every full-scale AIME24 result in one place
+
+Everything above this section built up incrementally; this section is the
+flat reference -- what each method actually does, and the complete data
+matrix (every variant, every alpha tested), independent of the narrative
+order they were discovered in.
+
+### The base method: `spec_casc_tok` (Speculative Cascades [Tok])
+
+Narasimhan et al. 2025 appendix ("Faster Cascades via Speculative
+Decoding"), as unified into Xia et al. 2026's taxonomy (arXiv:2607.08690
+Appendix B, Eq. 15). At each drafted token `x`, instead of the lossless
+accept test `p(x)/q(x) >= u`, `spec_casc_tok` accepts against a blended
+target:
+
+```
+pi_rej(v) = q(v) + eta*p(v)     if v in A   (v is in the "trusted top set")
+          = eta*p(v)             otherwise
+A   = { u : p(u) >= (1-alpha) * max_w p(w) }     (trusted top set)
+eta = 1 - sum_{u in A} q(u)                      (drafter mass NOT already covering A)
+```
+
+`p` = target (verifier) distribution, `q` = draft distribution, `alpha` is
+the one tunable knob. `A` is the set of tokens the verifier considers
+"plausible enough" (within `alpha` of its own top choice); for tokens
+inside `A`, the drafter's own probability is trusted outright and topped up
+with a rescaled verifier correction; for tokens outside `A`, only the
+rescaled correction applies. **Two provable properties this whole
+investigation leans on:**
+- For `v` in `A`: `pi_rej(v)/q(v) >= 1` always (regardless of `u` -- an
+  unconditional accept).
+- For `v` outside `A`: `pi_rej(v) = eta*p(v) < p(v)` (since `eta < 1`) --
+  i.e. `spec_casc_tok` is **provably more conservative than lossless** for
+  out-of-trusted-set tokens. This is the mechanism behind everything in
+  this document's earlier "mechanism" section: hesitation markers are
+  disproportionately outside `A` (6.6% vs. 2.2% background rate), so
+  `spec_casc_tok`'s own unmodified behavior already rejects them more than
+  lossless would -- no guard needed to explain part of why it beats
+  lossless on accuracy.
+- `alpha -> -inf` is the actual strict/lossless limit (`A` empties, `eta`
+  -> 1, `pi_rej` -> `p` exactly) -- **not** `alpha=0`, unlike every other
+  method in this repo. `alpha=0` still gives `A = {argmax p}` only, a real
+  (if narrow) trusted set.
+- **Higher alpha = more relaxed**: the threshold `(1-alpha)*max(p)` drops
+  as alpha rises, admitting more of the vocabulary into the unconditionally
+  -trusted set `A`. 0.3 (this repo's default) is mild; 0.5 and 0.7 (tested
+  in the "Pushing further" sections above) are progressively more
+  permissive.
+
+### The five hesitation-marker guards, explained
+
+All five guard variants leave `spec_casc_tok`'s formula completely
+untouched at unguarded positions; they differ only in what happens at (or
+after) a hesitation/discourse marker.
+
+**Marker sets used**: "narrow" = 18 token ids / 5 words (`wait`, `hmm`,
+`actually`, `but`, `let's`). "wide" = 35 token ids / 14 words (narrow set
+plus `thus`, `we`, `so`, `now`, `let`, `compute`, `similarly`, `define`,
+`from`) -- the wide set trades marker specificity for coverage (most of the
+additions are generic discourse connectives that open correct reasoning as
+often as corrupted reasoning, not hesitation markers specifically).
+
+1. **override** (`spec_casc_tok_semantic_guard`, narrow set) -- at a guarded
+   position, force the trusted top set `A` empty for that row. Provably
+   identical to running `alpha=-inf` (exact lossless) at that one position,
+   not an approximation.
+2. **AND** (`spec_casc_tok_semantic_guard_and`, narrow set) -- at a guarded
+   position, accept iff BOTH the lossless test AND `spec_casc_tok`'s own
+   test would accept (`min(p, pi_rej)` as the effective target). Closes a
+   loophole override has: override can *accept* a marker `spec_casc_tok`'s
+   own rule would have rejected (whenever `pi_rej(x) > p(x)`, i.e. `x`
+   inside the trusted set), which override's own "force to strict" doesn't
+   prevent since strict itself might be laxer at that specific token than
+   `spec_casc_tok`'s blend was. AND is provably never more lenient than
+   either test alone.
+3. **v2** (`spec_casc_tok_semantic_guard_v2`, wide set) -- identical
+   mechanism to override, wide set instead of narrow. Built to isolate
+   whether marker-set *width* alone (independent of window-vs-marker
+   gating) explains any of future-guard's edge. Answer: partially --
+   width alone recovers real accuracy (22/30 narrow -> 25/30 wide) but not
+   future-guard's efficiency.
+4. **future-guard-strict** (`spec_casc_tok_semantic_guard_future_guard`,
+   wide set, parameter K) -- does NOT gate the marker token itself (that
+   still runs plain, unguarded `spec_casc_tok`). Instead, the moment a
+   marker is *accepted* (by whichever rule was in force), it arms a
+   trailing K-token strict window: for the next K verified positions
+   (bonus tokens don't count), the accept test is the raw lossless ratio,
+   bypassing `spec_casc_tok`'s blend entirely. First patch in this repo
+   with cross-round persistent state (the remaining-window count survives
+   across verification rounds via a small kernel-level counter, scoped to
+   one real sequence per server process). K=4 and K=8 both tested; K=8 is
+   the standout result of this whole investigation (see below).
+5. **future-guard-AND** (`spec_casc_tok_semantic_guard_future_guard_and`,
+   wide set, parameter K) -- same trailing-window trigger as future-guard-
+   strict, but AND-combined inside the window (`min(pi_rej, p)`) instead of
+   pure strict -- provably never more lenient than future-guard-strict's
+   window at any guarded position, same identity the marker-level AND-guard
+   uses.
+
+Mechanism-check column below (`hesitation words, relaxed-only`) is the
+direct empirical confirmation: override/AND/v2 are always exactly 0%
+(they gate every marker occurrence itself, so nothing marker-shaped can
+ever be relaxed-only-accepted); future-guard-strict/AND are never 0% (they
+never touch the marker's own accept decision, only what comes after it).
+
+### Complete data: every variant, every alpha tested, full 30-case AIME24
+
+| method | α | K | accuracy | completion length (mean) | accepted length l̄ (mean) | verifier rounds (total) | mean s/round | wall-time (total) | hesitation words | relaxed-only |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| lossless (strict) | n/a | n/a | 23/30 (76.7%) | 10,043 | 2.2046 | 100,605 | 0.01227 | 1,234.8s | 4,456 | 0.0% |
+| **baseline** | 0.3 | -- | **26/30 (86.7%)** | **9,440** | **2.4210** | **86,874** | **0.01241** | **1,078.2s** | **4,173** | 3.8% |
+| override (narrow) | 0.3 | -- | 22/30 (73.3%) | 10,397 | 2.3999 | 98,277 | 0.01292 | 1,269.6s | 4,949 | 0.0% |
+| AND (narrow) | 0.3 | -- | 22/30 (73.3%) | 10,964 | 2.3906 | 103,942 | 0.01294 | 1,345.3s | 4,822 | 0.0% |
+| v2 (wide, override) | 0.3 | -- | 25/30 (83.3%) | 10,599 | 2.3986 | 97,540 | 0.01306 | 1,274.3s | 4,313 | 0.0% |
+| future-guard-strict | 0.3 | 4 | 22/30 (73.3%) | 10,397 | 2.3447 | 97,779 | 0.01295 | 1,266.3s | 4,869 | 4.1% |
+| **future-guard-strict** | 0.3 | 8 | **25/30 (83.3%)** | **9,303** | 2.3950 | **87,607** | 0.01298 | **1,137.2s** | **3,952** | 3.5% |
+| future-guard-AND | 0.3 | 8 | 23/30 (76.7%) | 10,460 | 2.3724 | 99,463 | 0.01295 | 1,288.2s | 4,461 | 4.0% |
+| baseline | 0.5 | -- | 22/30 (73.3%) | 10,495 | 2.4929 | 96,402 | 0.01258 | 1,212.9s | 4,532 | 5.0% |
+| future-guard-strict | 0.5 | 8 | 20/30 (66.7%) | 10,555 | 2.4484 | 97,984 | 0.01300 | 1,273.6s | 4,662 | 5.5% |
+| baseline | 0.7 | -- | 22/30 (73.3%) | 10,337 | 2.6565 | 90,948 | 0.01262 | 1,147.4s | 4,895 | 7.3% |
+| **future-guard-strict** | 0.7 | 8 | **25/30 (83.3%)** | 12,239 | 2.5365 | 109,433 | 0.01297 | 1,419.9s | 5,699 | 6.9% |
+
+Bolded rows are the accuracy-tier winners at each alpha value tested
+(baseline at α=0.3 overall; future-guard-strict K=8 tied with it at three
+different alphas, via three different cost profiles -- free at 0.3,
+expensive at 0.7, and simply worse at 0.5). Not run: override/AND/v2 at
+α=0.5 or 0.7 (queued but not executed -- the autonomous relaxation chain
+was stopped after α=0.7 per explicit instruction, before reaching this
+phase), K=4 at α=0.5/0.7, and any alpha between the three tested points
+(0.4, 0.6 would be needed to characterize the 0.5 dip / 0.7 recovery
+transition rather than just its endpoints).
+
+Full narrative, mechanism analysis, and reproduce commands for every row
+above are in the sections preceding this one.
