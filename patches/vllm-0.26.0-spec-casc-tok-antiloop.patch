@@ -1,0 +1,372 @@
+--- a/vllm/v1/sample/rejection_sampler.py
++++ b/vllm/v1/sample/rejection_sampler.py
+@@ -7,9 +7,233 @@
+ from dataclasses import replace
+ from typing import TYPE_CHECKING
+ 
++import os
++import sys
++
+ import torch
+ import torch.nn as nn
+ 
++# LOSSY-VERIFICATION PILOT PATCH (not upstream vLLM).
++#
++# Speculative Cascades [Tok] (spec-casc-tok), Narasimhan et al. 2025 appendix
++# ("Faster Cascades via Speculative Decoding"), as unified into Xia et al.
++# 2026's taxonomy (arXiv:2607.08690 Appendix B, Eq. 15). Keeps the drafter's
++# own mass within a "trusted top set" of the verifier, and fills in the rest
++# (both outside that set, and whatever mass the drafter didn't already cover
++# inside it) with a rescaled verifier distribution:
++#
++#   pi_rej(v) = pi_res(v) = q(v) + eta*p(v)   if v in A
++#                          = eta*p(v)          otherwise
++#   A   = {u : p(u) >= (1-alpha) * max_w p(w)}     (trusted top set)
++#   eta = 1 - sum_{u in A} q(u)                    (mass NOT covered by q on A)
++#
++# This is a genuine full-vocab BLEND, not a wholesale switch between q and p
++# like this repo's spec-casc-opt/r-fuzzy patches -- pi_rej(x)/q(x) is not
++# generally 0 or 1, so (like this repo's cactus patch, and unlike
++# spec-casc-opt/r-fuzzy) this DOES need to touch recovery/residual sampling,
++# not just the accept/reject test.
++#
++# alpha=0 does NOT recover strict spec-dec here, unlike every other method in
++# this repo. At alpha=0, A = {argmax_w p(w)} (only the verifier's own top
++# token), and eta = 1 - q(argmax p) -- i.e. pi_rej already differs from p
++# unless q happens to put ALL its mass on the verifier's own top token. The
++# actual strict limit is alpha -> -inf: (1-alpha) -> +inf, so the threshold
++# (1-alpha)*max_w p(w) exceeds every p(u) (for any row with max_w p(w) > 0,
++# which is every row), A becomes empty, eta = 1 - 0 = 1, and pi_rej(v) =
++# 1*p(v) = p(v) for all v -- exactly strict. Xia et al.'s own Appendix B
++# flags this discontinuity and omits the method from their main-body results
++# partly because of it; this repo's other four patches all use alpha=0 (or
++# -inf, for the two that use -inf as their strict point) as their safe
++# missing-config default, so getting THIS one's default right (-inf, not 0)
++# is the one place that convention needs an explicit exception, not a copy.
++#
++# Implementation: A and eta are full-vocab reductions (a max and a masked
++# sum), computed once in plain PyTorch before kernel launch -- same
++# pre-reduction style as this repo's spec-casc-opt/r-fuzzy defer_mask -- and
++# passed into the accept kernel as two per-token scalar arrays (eta, and the
++# verifier's own top1 probability, from which A's membership for the drafted
++# token x alone is cheap to test in-kernel: p(x) >= (1-alpha)*top1). The
++# FULL pi_rej tensor (needed for residual sampling over the whole vocab, not
++# just x) is also built here in plain PyTorch and substituted for
++# target_probs in the call to sample_recovered_tokens, exactly the H_x
++# pattern this repo's cactus patch uses.
++#
++# alpha comes from a file, not the environment (vLLM spawns EngineCore with a
++# sanitised environment; env vars never reach it), uid-scoped AND repo-scoped
++# under /tmp so a server from the sibling lossy-spec-decode-repetition repo
++# cannot pick up this repo's (differently-prefixed) knob value if both ever
++# run on this box at once.
++_SPEC_CASC_TOK_ANTILOOP_ALPHA_FILE = f"/tmp/lossy-token-eff-spec-casc-tok-antiloop-alpha-{os.getuid()}"
++try:
++    with open(_SPEC_CASC_TOK_ANTILOOP_ALPHA_FILE) as _f:
++        _SPEC_CASC_TOK_ALPHA = float(_f.read().strip())
++    _SPEC_CASC_TOK_ALPHA_SOURCE = _SPEC_CASC_TOK_ANTILOOP_ALPHA_FILE
++except (OSError, ValueError):
++    # NOT 0.0 -- see the module comment above. -inf empties the trusted top
++    # set entirely, which is the actual strict point for this method.
++    _SPEC_CASC_TOK_ALPHA = float("-inf")
++    _SPEC_CASC_TOK_ALPHA_SOURCE = f"default, no readable {_SPEC_CASC_TOK_ANTILOOP_ALPHA_FILE}"
++print(
++    f"[SPEC-CASC-TOK-ANTILOOP PATCH] pid={os.getpid()} alpha={_SPEC_CASC_TOK_ALPHA} "
++    f"({_SPEC_CASC_TOK_ALPHA_SOURCE})",
++    file=sys.stderr,
++    flush=True,
++)
++
++# ANTI-LOOP (analysis/semantic_guard/, not upstream vLLM, not part of Xia et
++# al.'s taxonomy). Reactive repetition breaker, built after this
++# investigation established three things empirically: (1) degenerate
++# repetition loops in this model are TARGET-MODEL-driven, not a relaxation
++# artifact -- a counterfactual splice showed PURE STRICT decoding falls into
++# the identical loop from the identical context; (2) once a loop is
++# established, target's own top-1 confidence in the repeated token climbs to
++# >99% within a handful of repeats, so no accept-test threshold (strict or
++# relaxed) can prevent continuing it -- there is no "wrong accept" to be
++# stricter about; (3) predicting a loop's onset IN ADVANCE from distributional
++# shape (entropy ramps, confidence dips) fails rigorous validation -- both
++# tested detectors perform WORSE than a random baseline at the same firing
++# rate, when checked against a periodic-repetition ground truth across real
++# traces. Point (1)+(2) rule out every "force strict" guard design already in
++# this repo for this failure mode; point (3) rules out prediction. What's
++# left, and what this patch does: don't predict, don't gate on token
++# identity or accept-test strictness -- REACT the moment a real repeat is
++# confirmed, by removing the SPECIFIC repeating token from the target
++# distribution before spec-casc-tok's own math runs, forcing a genuine
++# resample from what's left via the SAME recovery machinery spec-casc-tok
++# already has. Not a stricter threshold; a distribution edit.
++#
++# Detection: periodic repeat, period k in [1, ANTILOOP_MAX_PERIOD], banning
++# the token that would complete the ANTILOOP_MIN_REPEATS'th consecutive
++# occurrence of that period -- same definition this investigation validated
++# as ground truth (rare: ~0.01% of tokens even at this bar, across real
++# AIME24 traces), not a new untested threshold invented for this patch.
++# Checked against a PERSISTENT, CROSS-ROUND history buffer of the last
++# ANTILOOP_HISTORY_MAXLEN real emitted token ids (same single-real-sequence-
++# per-process scoping as this repo's future-guard patches -- see
++# spec-casc-tok-semantic-guard-future-guard's own module comment for the
++# full justification), extended OPTIMISTICALLY with this round's own drafted
++# continuation (assume-all-accepted) for positions later in the SAME round --
++# safe because a round that actually rejects earlier than a flagged position
++# terminates there (the standard "stop at first rejection" behavior every
++# method in this repo already has), so a flagged-but-never-reached position
++# never matters, and the ban is checked again fresh next round regardless.
++#
++# Mechanism, once a (position, token) pair is flagged: zero target_probs at
++# that exact (row, token) entry and renormalize the row, BEFORE spec-casc-
++# tok's own eta/pi_rej computation runs. Nothing downstream needs to know
++# about the ban specially -- eta/pi_rej/the accept-test kernel/recovery are
++# ALL already pure functions of target_probs, so a banned token: (a)
++# automatically falls out of the trusted top set (its p is now 0, below any
++# real threshold), (b) gets pi_rej(banned)=eta*0=0, so the accept test
++# rejects it regardless of alpha or u, and (c) gets zero residual mass in
++# recovery too, since recovery samples from pi_rej-q clamped, which is also
++# 0 there. Zero kernel/Triton changes needed -- this is pure Python/PyTorch
++# preprocessing on top of the UNMODIFIED base spec-casc-tok kernel.
++# strict_would_accept/lossy_would_accept passed to the tracer use the
++# ORIGINAL (pre-ban) target_probs, same "reflect the base method's own
++# unguarded decision" convention this repo's other guard patches follow --
++# antiloop_mask is passed as a separate, purely-informational field instead.
++_ANTILOOP_MAX_PERIOD = 12
++_ANTILOOP_MIN_REPEATS = 3
++_ANTILOOP_HISTORY_MAXLEN = 64  # >= MAX_PERIOD * MIN_REPEATS with margin
++_ANTILOOP_HISTORY: dict[str, list[int]] = {"tokens": []}
++_ANTILOOP_WARMUP_BATCH_THRESHOLD = 8  # matches relaxation_trace.py's own _MAX_REAL_BATCH
++
++
++def _antiloop_completes_repeat(seq: list[int]) -> bool:
++    """True iff seq's own tail is the same period-k block (k in
++    [1, _ANTILOOP_MAX_PERIOD]) repeated _ANTILOOP_MIN_REPEATS times
++    consecutively -- i.e. appending seq[-1] just completed that Nth repeat.
++    Smallest k checked first and returned on first hit (a real period-1
++    repeat trivially also "matches" as period-2, period-3, etc. against a
++    longer tail; checking smallest-first reports the tightest true period)."""
++    n = len(seq)
++    for k in range(1, _ANTILOOP_MAX_PERIOD + 1):
++        span = _ANTILOOP_MIN_REPEATS * k
++        if n < span:
++            continue
++        tail = seq[n - span:]
++        block0 = tail[:k]
++        if all(tail[i * k:(i + 1) * k] == block0 for i in range(1, _ANTILOOP_MIN_REPEATS)):
++            return True
++    return False
++
++
++def _antiloop_apply_ban(
++    target_probs: torch.Tensor,
++    draft_token_ids: torch.Tensor,
++    num_draft_tokens: list[int],
++    cu_num_draft_tokens: torch.Tensor,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Returns (banned_target_probs, antiloop_mask). banned_target_probs is
++    a NEW tensor (never mutates the caller's target_probs in place -- the
++    original is what gets passed to the tracer, see the module comment) with
++    any flagged (position, drafted-token) entry zeroed and that row
++    renormalized. antiloop_mask is [num_tokens] bool, True at flagged
++    positions, purely informational (same convention as this repo's other
++    guards' token_marker_guard_mask)."""
++    history = _ANTILOOP_HISTORY["tokens"]
++    draft_ids_cpu = draft_token_ids.tolist()
++    cu_cpu = cu_num_draft_tokens.tolist()
++    num_tokens = draft_token_ids.numel()
++    antiloop_mask = torch.zeros(num_tokens, dtype=torch.bool, device=target_probs.device)
++    banned_rows: list[int] = []
++    banned_cols: list[int] = []
++    for b, n in enumerate(num_draft_tokens):
++        end = cu_cpu[b]
++        start = end - n
++        # Only slot 0 carries real persistent history -- see the module
++        # comment for the single-real-sequence-per-process scoping this
++        # relies on. Other slots (warmup/CUDA-graph-capture only) never get
++        # a ban applied, matching this repo's future-guard patches' own
++        # slot-0-only convention.
++        if b != 0:
++            continue
++        seq = list(history)
++        for j in range(n):
++            tok = draft_ids_cpu[start + j]
++            seq.append(tok)
++            if _antiloop_completes_repeat(seq):
++                antiloop_mask[start + j] = True
++                banned_rows.append(start + j)
++                banned_cols.append(tok)
++    if not banned_rows:
++        return target_probs, antiloop_mask
++    banned = target_probs.clone()
++    rows_t = torch.tensor(banned_rows, device=target_probs.device, dtype=torch.long)
++    cols_t = torch.tensor(banned_cols, device=target_probs.device, dtype=torch.long)
++    banned[rows_t, cols_t] = 0.0
++    row_sums = banned[rows_t].sum(dim=-1, keepdim=True).clamp_min(1e-30)
++    banned[rows_t] = banned[rows_t] / row_sums
++    return banned, antiloop_mask
++
++
++def _antiloop_update_history(
++    output_token_ids: torch.Tensor,
++    num_draft_tokens: list[int],
++    batch_size: int,
++) -> None:
++    """Cross-round persistence: append whatever ACTUALLY got emitted this
++    round (from the finalized output_token_ids, including any bonus token --
++    ground truth, not the round's own optimistic draft assumption used for
++    same-round detection above) to the history buffer, trimmed to the last
++    _ANTILOOP_HISTORY_MAXLEN tokens. A batch this large can only be one of
++    vLLM's own warmup/CUDA-graph-capture passes (never real generation here,
++    same threshold this repo's future-guard patches use), so history is
++    cleared instead of extended, keeping a warmup pass from leaking stale
++    tokens into the start of real generation."""
++    if batch_size > _ANTILOOP_WARMUP_BATCH_THRESHOLD:
++        _ANTILOOP_HISTORY["tokens"] = []
++        return
++    row = output_token_ids[0].tolist()
++    emitted = [t for t in row if t != PLACEHOLDER_TOKEN_ID]
++    history = _ANTILOOP_HISTORY["tokens"]
++    history.extend(emitted)
++    if len(history) > _ANTILOOP_HISTORY_MAXLEN:
++        del history[: len(history) - _ANTILOOP_HISTORY_MAXLEN]
++
++
++from vllm.v1.sample.relaxation_trace import TRACER as _TRACER
+ from vllm.logger import init_logger
+ from vllm.triton_utils import tl, triton
+ from vllm.v1.outputs import LogprobsLists, LogprobsTensors, SamplerOutput
+@@ -474,6 +698,41 @@
+     target_probs = target_logits.softmax(dim=-1, dtype=torch.float32)
+     assert target_probs.is_contiguous()
+ 
++    # ANTI-LOOP: ban (zero + renormalize) any drafted (position, token) pair
++    # that would complete a genuine periodic repeat -- see the module-level
++    # comment for the full mechanism and why this is safe to apply BEFORE
++    # spec-casc-tok's own eta/pi_rej math (everything downstream is already
++    # a pure function of target_probs). target_probs_for_trace keeps the
++    # ORIGINAL, pre-ban distribution for the tracer's own strict/lossy
++    # counterfactuals -- same "reflect the base method's own unguarded
++    # decision" convention this repo's other guard patches use.
++    target_probs_for_trace = target_probs
++    antiloop_mask: torch.Tensor | None = None
++    if draft_probs is not None and not synthetic_mode:
++        target_probs, antiloop_mask = _antiloop_apply_ban(
++            target_probs, draft_token_ids, num_draft_tokens, cu_num_draft_tokens
++        )
++
++    # spec-casc-tok: build the full proposal-independent relaxed target
++    # pi_rej (see the module-level comment for the formula and why this is
++    # needed both here, for recovery, and again -- as two per-token scalar
++    # arrays -- at the kernel launch below). Computed once here, before
++    # recovery sampling, in plain PyTorch. Gated on draft_probs is not None
++    # for the same reason as every other patch's relaxation branch: with no
++    # q, there is nothing to put in the trusted top set.
++    recovery_target_probs = target_probs
++    casc_tok_eta = casc_tok_top1 = None
++    if draft_probs is not None:
++        casc_tok_top1 = target_probs.max(dim=-1, keepdim=True).values  # [num_tokens, 1]
++        in_top_set = target_probs >= (1.0 - _SPEC_CASC_TOK_ALPHA) * casc_tok_top1
++        casc_tok_eta = 1.0 - (draft_probs * in_top_set).sum(dim=-1)  # [num_tokens]
++        pi_rej = casc_tok_eta.unsqueeze(-1) * target_probs + torch.where(
++            in_top_set, draft_probs, torch.zeros_like(draft_probs)
++        )
++        recovery_target_probs = pi_rej.contiguous()
++        casc_tok_top1 = casc_tok_top1.squeeze(-1).contiguous()
++        casc_tok_eta = casc_tok_eta.contiguous()
++
+     # Sample recovered tokens for each position.
+     # [num_tokens]
+     recovered_token_ids = sample_recovered_tokens(
+@@ -482,7 +741,7 @@
+         cu_num_draft_tokens,
+         draft_token_ids,
+         draft_probs,
+-        target_probs,
++        recovery_target_probs,
+         sampling_metadata,
+         device,
+         use_fp64_gumbel,
+@@ -503,9 +762,32 @@
+         max_spec_len,
+         vocab_size,
+         synthetic_conditional_rates,
++        casc_tok_eta,
++        casc_tok_top1,
++        _SPEC_CASC_TOK_ALPHA,
+         NO_DRAFT_PROBS=draft_probs is None,
+         SYNTHETIC_MODE=synthetic_mode,
+     )
++    # Phase-1 observation hook. No-op unless a trace destination is configured;
++    # never influences acceptance, only records what the kernel just decided.
++    if _TRACER.enabled:
++        _TRACER.record(
++            draft_token_ids=draft_token_ids,
++            draft_probs=draft_probs,
++            target_probs=target_probs_for_trace,
++            uniform_probs=uniform_probs,
++            recovered_token_ids=recovered_token_ids,
++            bonus_token_ids=bonus_token_ids,
++            output_token_ids=output_token_ids,
++            cu_num_draft_tokens=cu_num_draft_tokens,
++            num_draft_tokens=num_draft_tokens,
++            scalar_multiplier=_SPEC_CASC_TOK_ALPHA,
++            casc_tok_alpha=_SPEC_CASC_TOK_ALPHA,
++            token_marker_guard_mask=antiloop_mask,  # purely informational: True where the ban fired
++            relaxation_method="spec_casc_tok_antiloop",
++        )
++    if draft_probs is not None and not synthetic_mode:
++        _antiloop_update_history(output_token_ids, num_draft_tokens, batch_size)
+     return output_token_ids
+ 
+ 
+@@ -786,6 +1068,9 @@
+     max_spec_len,
+     vocab_size,
+     synthetic_conditional_rates_ptr,  # [num_speculative_tokens] or None
++    casc_tok_eta_ptr,  # [num_tokens] or None iff NO_DRAFT_PROBS; spec-casc-tok
++    casc_tok_top1_ptr,  # [num_tokens] or None iff NO_DRAFT_PROBS; spec-casc-tok
++    casc_tok_alpha,  # scalar; -inf for the strict rule (see module comment)
+     NO_DRAFT_PROBS: tl.constexpr,
+     SYNTHETIC_MODE: tl.constexpr,
+ ):
+@@ -815,20 +1100,35 @@
+                 rate = tl.load(synthetic_conditional_rates_ptr + pos)
+                 accepted = uniform_prob < rate
+             else:
++                target_prob = tl.load(
++                    target_probs_ptr + (start_idx + pos) * vocab_size + draft_token_id
++                )
+                 if NO_DRAFT_PROBS:
+                     draft_prob = 1
++                    # No q to build a trusted top set from: unchanged strict.
++                    accepted = draft_prob > 0 and target_prob / draft_prob >= uniform_prob
+                 else:
+                     draft_prob = tl.load(
+                         draft_probs_ptr
+                         + (start_idx + pos) * vocab_size
+                         + draft_token_id
+                     )
+-                target_prob = tl.load(
+-                    target_probs_ptr + (start_idx + pos) * vocab_size + draft_token_id
+-                )
+-                # NOTE(woosuk): While the draft probability should never be 0,
+-                # we check it to avoid NaNs. If it happens to be 0, we reject.
+-                accepted = draft_prob > 0 and target_prob / draft_prob >= uniform_prob
++                    # spec-casc-tok: pi_rej(x) = eta*p(x) + q(x) if x is in
++                    # the trusted top set A = {u: p(u) >= (1-alpha)*top1},
++                    # else eta*p(x). eta and top1 are per-token full-vocab
++                    # reductions computed upstream in plain PyTorch (see the
++                    # module-level comment); only membership of the drafted
++                    # token x itself needs computing here.
++                    eta = tl.load(casc_tok_eta_ptr + start_idx + pos)
++                    top1 = tl.load(casc_tok_top1_ptr + start_idx + pos)
++                    x_in_top_set = target_prob >= (1.0 - casc_tok_alpha) * top1
++                    pi_rej_x = eta * target_prob
++                    if x_in_top_set:
++                        pi_rej_x += draft_prob
++                    # NOTE(woosuk): While the draft probability should never
++                    # be 0, we check it to avoid NaNs. If it happens to be 0,
++                    # we reject.
++                    accepted = draft_prob > 0 and pi_rej_x / draft_prob >= uniform_prob
+             if accepted:
+                 token_id = draft_token_id
+             else:

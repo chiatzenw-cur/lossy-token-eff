@@ -194,7 +194,7 @@
  from vllm.logger import init_logger
  from vllm.triton_utils import tl, triton
  from vllm.v1.outputs import LogprobsLists, LogprobsTensors, SamplerOutput
-@@ -474,6 +658,52 @@
+@@ -474,6 +658,63 @@
      target_probs = target_logits.softmax(dim=-1, dtype=torch.float32)
      assert target_probs.is_contiguous()
  
@@ -216,6 +216,7 @@
 +    semantic_guard_mask: torch.Tensor | None = None
 +    future_remaining_in: torch.Tensor | None = None
 +    future_remaining_out: torch.Tensor | None = None
++    future_in_window_debug: torch.Tensor | None = None
 +    if draft_probs is not None:
 +        casc_tok_top1 = target_probs.max(dim=-1, keepdim=True).values  # [num_tokens, 1]
 +        in_top_set = target_probs >= (1.0 - _SPEC_CASC_TOK_ALPHA) * casc_tok_top1
@@ -243,11 +244,21 @@
 +        future_remaining_in = torch.zeros(batch_size, dtype=torch.int32, device=device)
 +        future_remaining_in[0] = _FUTURE_GUARD_STATE["remaining"]
 +        future_remaining_out = torch.zeros(batch_size, dtype=torch.int32, device=device)
++        # DEBUG INSTRUMENTATION (temporary): per-position ground truth for
++        # whether the window was actually active (in_window) at that
++        # position, written by the kernel below and threaded through to the
++        # tracer via the existing (otherwise-unused-by-this-patch)
++        # window_guard_mask parameter -- added to directly observe the
++        # window's real behavior instead of reconstructing it by hand from
++        # strict_would_accept/lossy_would_accept/actually_accepted, which
++        # can't distinguish "window inactive" from "window active but
++        # strict and lossy happened to agree anyway".
++        future_in_window_debug = torch.zeros(num_tokens, dtype=torch.bool, device=device)
 +
      # Sample recovered tokens for each position.
      # [num_tokens]
      recovered_token_ids = sample_recovered_tokens(
-@@ -482,7 +712,7 @@
+@@ -482,7 +723,7 @@
          cu_num_draft_tokens,
          draft_token_ids,
          draft_probs,
@@ -256,7 +267,7 @@
          sampling_metadata,
          device,
          use_fp64_gumbel,
-@@ -503,9 +733,36 @@
+@@ -503,9 +744,38 @@
          max_spec_len,
          vocab_size,
          synthetic_conditional_rates,
@@ -267,6 +278,7 @@
 +        future_remaining_in,    # [batch_size] int32 or None
 +        future_remaining_out,   # [batch_size] int32 or None, written by the kernel
 +        _SPEC_CASC_TOK_GUARD_FUTURE_K,
++        future_in_window_debug,   # [num_tokens] bool or None; DEBUG INSTRUMENTATION
          NO_DRAFT_PROBS=draft_probs is None,
          SYNTHETIC_MODE=synthetic_mode,
      )
@@ -288,12 +300,13 @@
 +            scalar_multiplier=_SPEC_CASC_TOK_ALPHA,
 +            casc_tok_alpha=_SPEC_CASC_TOK_ALPHA,
 +            token_marker_guard_mask=semantic_guard_mask,
++            window_guard_mask=future_in_window_debug,  # DEBUG INSTRUMENTATION: ground-truth in_window per position
 +            relaxation_method="spec_casc_tok_semantic_guard_future_guard",
 +        )
      return output_token_ids
  
  
-@@ -786,6 +1043,13 @@
+@@ -786,6 +1056,14 @@
      max_spec_len,
      vocab_size,
      synthetic_conditional_rates_ptr,  # [num_speculative_tokens] or None
@@ -304,10 +317,11 @@
 +    future_remaining_in_ptr,  # [batch_size] int32, or None iff NO_DRAFT_PROBS; carried in from the previous round
 +    future_remaining_out_ptr,  # [batch_size] int32, or None iff NO_DRAFT_PROBS; carried out to the next round
 +    future_guard_k,  # scalar int; window length
++    future_in_window_debug_ptr,  # [num_tokens] bool, or None iff NO_DRAFT_PROBS; DEBUG INSTRUMENTATION only, ground-truth in_window per position
      NO_DRAFT_PROBS: tl.constexpr,
      SYNTHETIC_MODE: tl.constexpr,
  ):
-@@ -803,6 +1067,18 @@
+@@ -803,6 +1081,18 @@
      end_idx = tl.load(cu_num_draft_tokens_ptr + req_idx)
      num_draft_tokens = end_idx - start_idx
  
@@ -326,7 +340,7 @@
      rejected = False
      for pos in range(num_draft_tokens):
          if not rejected:
-@@ -815,29 +1091,70 @@
+@@ -815,29 +1105,75 @@
                  rate = tl.load(synthetic_conditional_rates_ptr + pos)
                  accepted = uniform_prob < rate
              else:
@@ -350,6 +364,11 @@
 -                # we check it to avoid NaNs. If it happens to be 0, we reject.
 -                accepted = draft_prob > 0 and target_prob / draft_prob >= uniform_prob
 +                    in_window = strict_remaining > 0
++                    if not NO_DRAFT_PROBS:
++                        # DEBUG INSTRUMENTATION: record the real in_window
++                        # value used for THIS position's decision, ground
++                        # truth for whatever guard/tracer analysis needs it.
++                        tl.store(future_in_window_debug_ptr + start_idx + pos, in_window)
 +                    if in_window:
 +                        # FutureGuard window active: genuinely strict (raw
 +                        # p(x)/q(x) >= u), bypassing spec-casc-tok's own

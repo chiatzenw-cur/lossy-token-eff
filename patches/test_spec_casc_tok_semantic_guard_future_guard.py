@@ -175,6 +175,7 @@ def _run_round(m, target_probs, draft_probs, draft_token_ids, uniform_probs, alp
 
     out = torch.full((1, max_spec_len + 1), -1, dtype=torch.int32, device=device)
     remaining_out = torch.zeros(1, dtype=torch.int32, device=device)
+    in_window_debug = torch.zeros(n, dtype=torch.bool, device=device)
     m.rejection_random_sample_kernel[(1,)](
         out,
         torch.tensor([n], dtype=torch.int32, device=device),
@@ -195,10 +196,11 @@ def _run_round(m, target_probs, draft_probs, draft_token_ids, uniform_probs, alp
         remaining_in.contiguous(),
         remaining_out,
         k,
+        in_window_debug,
         NO_DRAFT_PROBS=False,
         SYNTHETIC_MODE=False,
     )
-    return out[0], remaining_out[0].item()
+    return out[0], remaining_out[0].item(), in_window_debug
 
 
 def test_within_round_arming_and_carryover() -> None:
@@ -270,7 +272,7 @@ def test_within_round_arming_and_carryover() -> None:
     recovered_token_ids = torch.tensor([555, 556], dtype=torch.int32, device=device)
     remaining_in = torch.zeros(1, dtype=torch.int32, device=device)  # no carryover entering round 1
 
-    out, remaining_after = _run_round(
+    out, remaining_after, in_window_debug = _run_round(
         m, target_probs, draft_probs, draft_token_ids, uniform_probs, alpha,
         guard_mask, remaining_in, K, max_spec_len, recovered_token_ids,
     )
@@ -287,6 +289,14 @@ def test_within_round_arming_and_carryover() -> None:
     # (rejected, so the loop stops there) -- remaining should be K-1=2.
     assert remaining_after == K - 1, f"expected remaining={K-1} after 1 verified position post-arming, got {remaining_after}"
     print(f"  ok  window remaining carried out correctly: {remaining_after} (K={K}, 1 position consumed)")
+    # DEBUG INSTRUMENTATION ground truth: pos0 (the marker itself) evaluates
+    # BEFORE arming, so in_window must be False there; pos1 evaluates AFTER
+    # pos0 armed the window, so in_window must be True there.
+    assert in_window_debug.tolist() == [False, True], (
+        f"in_window debug trace wrong: expected [False, True] (marker itself unguarded, "
+        f"pos1 under the newly-armed window), got {in_window_debug.tolist()}"
+    )
+    print(f"  ok  in_window debug trace matches: pos0=False (marker itself), pos1=True (newly armed)")
 
     # Round 2: feed the carryover back in, confirm it continues applying
     # strict without a fresh marker, and expires exactly on schedule.
@@ -296,7 +306,7 @@ def test_within_round_arming_and_carryover() -> None:
     uniform_probs2 = torch.tensor([u_distinguishing, u_distinguishing], device=device)
     guard_mask2 = torch.tensor([False, False], device=device)
     remaining_in2 = torch.tensor([remaining_after], dtype=torch.int32, device=device)
-    out2, remaining_after2 = _run_round(
+    out2, remaining_after2, in_window_debug2 = _run_round(
         m, target_probs2, draft_probs2, draft_token_ids2, uniform_probs2, alpha,
         guard_mask2, remaining_in2, K, max_spec_len, recovered_token_ids,
     )
@@ -306,6 +316,10 @@ def test_within_round_arming_and_carryover() -> None:
         f"got accepted token {out2[0].item()}"
     )
     print(f"  ok  window carried over into round 2 correctly (remaining={remaining_after} -> still active)")
+    assert in_window_debug2[0].item() is True, (
+        f"in_window debug trace wrong for round-2 carryover: expected True, got {in_window_debug2.tolist()}"
+    )
+    print(f"  ok  in_window debug trace confirms carryover: round-2 pos0=True")
 
 
 def test_recovery_unaffected_by_window() -> None:

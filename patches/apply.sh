@@ -24,9 +24,9 @@ HASHES="$here/HASHES.txt"
 
 METHOD="${1:-}"
 case "$METHOD" in
-  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and) ;;
+  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and) ;;
   *)
-    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and>" >&2
+    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and>" >&2
     exit 2
     ;;
 esac
@@ -106,6 +106,56 @@ elif [[ "$v2_label" != "upstream" ]]; then
   exit 1
 fi
 
+# spec-casc-tok-free-judgment is the one method that ALSO needs
+# gpu_model_runner.py patched (the half that overwrites the real
+# sequence's last drafted columns with the fixed criterion pattern -- see
+# vllm-0.26.0-free-judgment-model-runner.patch's own module comment for
+# why this can't be done from rejection_sampler.py alone). Same
+# pristine-or-already-correct safety check as every other file here, just
+# inlined for this one method rather than a fully separate installer
+# script (unlike hidden-state-capture, this file is NOT meant to compose
+# with arbitrary other methods -- it only makes sense together with this
+# method's own rejection_sampler.py half).
+GMR_REL="v1/worker/gpu_model_runner.py"
+GMR="$pkg/$GMR_REL"
+if [[ "$METHOD" == "spec-casc-tok-free-judgment" ]]; then
+  gmr_hash="$(hash_of "$GMR")"
+  gmr_label="$(label_for_hash x "$gmr_hash")"
+  if [[ "$gmr_label" == "free-judgment-model-runner" ]]; then
+    echo "free-judgment-model-runner already applied to $GMR (sha256 matches)"
+  elif [[ "$gmr_label" == "upstream" ]]; then
+    echo "applying free-judgment-model-runner to pristine $GMR_REL"
+    gmr_work="$(mktemp -d)"
+    trap 'rm -rf "$gmr_work"' EXIT
+    mkdir -p "$(dirname "$gmr_work/vllm/$GMR_REL")"
+    cp "$GMR" "$gmr_work/vllm/$GMR_REL"
+    patch -p1 -d "$gmr_work" < "$here/vllm-0.26.0-free-judgment-model-runner.patch"
+    new_gmr_hash="$(hash_of "$gmr_work/vllm/$GMR_REL")"
+    new_gmr_label="$(label_for_hash x "$new_gmr_hash")"
+    if [[ "$new_gmr_label" != "free-judgment-model-runner" ]]; then
+      echo "patched result does not match HASHES.txt's recorded free-judgment-model-runner hash (got $new_gmr_hash) -- refusing to install" >&2
+      exit 1
+    fi
+    cp --remove-destination "$gmr_work/vllm/$GMR_REL" "$GMR"
+    echo "installed free-judgment-model-runner"
+  else
+    echo "$GMR matches no known state (hash $gmr_hash) -- reinstall vLLM 0.26.0 fresh, or reverse whatever is there:" >&2
+    echo "  patch -p1 -R -d '$sp' < '$here/vllm-0.26.0-free-judgment-model-runner.patch'  (if it's this patch)" >&2
+    echo "  or: patch -p1 -R -d '$sp' < '$here/vllm-0.26.0-hidden-state-capture.patch'  (if that's what's there instead)" >&2
+    exit 1
+  fi
+else
+  # Every OTHER method leaves gpu_model_runner.py untouched -- but don't
+  # hard-fail if hidden-state-capture happens to be installed alongside
+  # (that one IS meant to compose with any method, including this repo's
+  # own methods); only warn if it's something else entirely (e.g. stale
+  # free-judgment-model-runner state from a previous session).
+  gmr_label_other="$(label_for_hash x "$(hash_of "$GMR")")"
+  if [[ "$gmr_label_other" != "hidden-state-capture" && "$gmr_label_other" != "upstream" ]]; then
+    echo "note: gpu_model_runner.py is patched as '${gmr_label_other:-unknown}', not upstream/hidden-state-capture -- if that's stale free-judgment-model-runner state, it's harmless here (disabled by its own knob file being unset for any OTHER method), but consider reversing it: patch -p1 -R -d '$sp' < '$here/vllm-0.26.0-free-judgment-model-runner.patch'" >&2
+  fi
+fi
+
 # The trace module (relaxation_trace.py) is a NEW file, not a modification of
 # an existing one, so it's installed with a plain cp (nothing to hardlink-
 # corrupt: the destination doesn't exist in a pristine install).
@@ -129,6 +179,12 @@ select alpha by writing it to:
   spec-casc-opt:   /tmp/lossy-token-eff-spec-casc-alpha-\$(id -u)      (any real; -inf = strict)
   r-fuzzy:         /tmp/lossy-token-eff-r-fuzzy-alpha-\$(id -u)        (any real; -inf = strict)
   spec-casc-tok:   /tmp/lossy-token-eff-spec-casc-tok-alpha-\$(id -u)  (any real; -inf = strict, NOT 0.0)
+  spec-casc-tok-antiloop: /tmp/lossy-token-eff-spec-casc-tok-antiloop-alpha-\$(id -u) (any real; -inf = strict, NOT 0.0)
+    (spec-casc-tok's own alpha, PLUS a reactive repetition breaker -- zeroes
+    a token's probability the moment it would complete a 3rd consecutive
+    periodic repeat (period<=12), before spec-casc-tok's own math runs; no
+    separate knob, always on. See the patch's module comment and
+    analysis/semantic_guard/README.md)
   r-fuzzy-semantic-guard: /tmp/lossy-token-eff-r-fuzzy-semantic-guard-alpha-\$(id -u) (any real; -inf = strict)
     (r-fuzzy's own alpha, PLUS an always-on hesitation-marker override -- see
     the patch's module comment and analysis/semantic_guard/README.md)
@@ -166,6 +222,24 @@ select alpha by writing it to:
     but AND-combined inside the window instead of pure strict -- accept iff
     BOTH lossless AND tok's own relaxed test would accept; see the patch's
     module comment and analysis/semantic_guard/README.md)
+  spec-casc-tok-force-commit: /tmp/lossy-token-eff-spec-casc-tok-force-commit-alpha-\$(id -u) (any real; -inf = strict, NOT 0.0)
+                             /tmp/lossy-token-eff-spec-casc-tok-force-commit-threshold-\$(id -u) (positive int; default 28000 if missing)
+    (spec-casc-tok's own alpha, PLUS a reactive budget-exhaustion breaker for
+    the "never commits to a final-channel answer" failure shape -- once
+    cumulative emitted tokens cross the threshold without a natural
+    final-channel-open, force-completes that exact 6-token boundary one
+    token per round via one-hot target_probs; permanently a no-op for the
+    rest of the sequence once final has opened, natural or forced. See the
+    patch's module comment and analysis/semantic_guard/README.md)
+  spec-casc-tok-self-check: /tmp/lossy-token-eff-spec-casc-tok-self-check-alpha-\$(id -u) (any real; -inf = strict, NOT 0.0)
+                           /tmp/lossy-token-eff-spec-casc-tok-self-check-interval-\$(id -u) (positive int; default 3000 if missing)
+                           /tmp/lossy-token-eff-spec-casc-tok-self-check-final-threshold-\$(id -u) (positive int; default 28000 if missing)
+    (spec-casc-tok's own alpha, PLUS a periodic self-assessment -- every
+    interval tokens, force-injects a fixed "am I going in circles?"
+    question, reads back the model's own unconstrained yes/no, and on
+    "yes" force-injects a pivot phrase (or force-commit's final-channel
+    push if the budget is nearly exhausted). See the patch's module
+    comment and analysis/semantic_guard/README.md)
 remote/run_server_vllm.sh writes all ten for every mode (baseline/strict/lossy)
 so a stale value from a previous run cannot silently leak into a control arm.
 EOF

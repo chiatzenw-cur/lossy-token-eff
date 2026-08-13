@@ -1,0 +1,510 @@
+--- a/vllm/v1/sample/rejection_sampler.py
++++ b/vllm/v1/sample/rejection_sampler.py
+@@ -7,9 +7,372 @@
+ from dataclasses import replace
+ from typing import TYPE_CHECKING
+ 
++import os
++import sys
++
+ import torch
+ import torch.nn as nn
+ 
++# LOSSY-VERIFICATION PILOT PATCH (not upstream vLLM).
++#
++# Speculative Cascades [Tok] (spec-casc-tok), Narasimhan et al. 2025 appendix
++# ("Faster Cascades via Speculative Decoding"), as unified into Xia et al.
++# 2026's taxonomy (arXiv:2607.08690 Appendix B, Eq. 15). Keeps the drafter's
++# own mass within a "trusted top set" of the verifier, and fills in the rest
++# (both outside that set, and whatever mass the drafter didn't already cover
++# inside it) with a rescaled verifier distribution:
++#
++#   pi_rej(v) = pi_res(v) = q(v) + eta*p(v)   if v in A
++#                          = eta*p(v)          otherwise
++#   A   = {u : p(u) >= (1-alpha) * max_w p(w)}     (trusted top set)
++#   eta = 1 - sum_{u in A} q(u)                    (mass NOT covered by q on A)
++#
++# This is a genuine full-vocab BLEND, not a wholesale switch between q and p
++# like this repo's spec-casc-opt/r-fuzzy patches -- pi_rej(x)/q(x) is not
++# generally 0 or 1, so (like this repo's cactus patch, and unlike
++# spec-casc-opt/r-fuzzy) this DOES need to touch recovery/residual sampling,
++# not just the accept/reject test.
++#
++# alpha=0 does NOT recover strict spec-dec here, unlike every other method in
++# this repo. At alpha=0, A = {argmax_w p(w)} (only the verifier's own top
++# token), and eta = 1 - q(argmax p) -- i.e. pi_rej already differs from p
++# unless q happens to put ALL its mass on the verifier's own top token. The
++# actual strict limit is alpha -> -inf: (1-alpha) -> +inf, so the threshold
++# (1-alpha)*max_w p(w) exceeds every p(u) (for any row with max_w p(w) > 0,
++# which is every row), A becomes empty, eta = 1 - 0 = 1, and pi_rej(v) =
++# 1*p(v) = p(v) for all v -- exactly strict. Xia et al.'s own Appendix B
++# flags this discontinuity and omits the method from their main-body results
++# partly because of it; this repo's other four patches all use alpha=0 (or
++# -inf, for the two that use -inf as their strict point) as their safe
++# missing-config default, so getting THIS one's default right (-inf, not 0)
++# is the one place that convention needs an explicit exception, not a copy.
++#
++# Implementation: A and eta are full-vocab reductions (a max and a masked
++# sum), computed once in plain PyTorch before kernel launch -- same
++# pre-reduction style as this repo's spec-casc-opt/r-fuzzy defer_mask -- and
++# passed into the accept kernel as two per-token scalar arrays (eta, and the
++# verifier's own top1 probability, from which A's membership for the drafted
++# token x alone is cheap to test in-kernel: p(x) >= (1-alpha)*top1). The
++# FULL pi_rej tensor (needed for residual sampling over the whole vocab, not
++# just x) is also built here in plain PyTorch and substituted for
++# target_probs in the call to sample_recovered_tokens, exactly the H_x
++# pattern this repo's cactus patch uses.
++#
++# alpha comes from a file, not the environment (vLLM spawns EngineCore with a
++# sanitised environment; env vars never reach it), uid-scoped AND repo-scoped
++# under /tmp so a server from the sibling lossy-spec-decode-repetition repo
++# cannot pick up this repo's (differently-prefixed) knob value if both ever
++# run on this box at once. Own file, not plain spec-casc-tok's -- aliasing it
++# was a real bug caught once already building spec-casc-tok-antiloop and
++# repeated (then caught again) building this very patch's first draft: a
++# plain spec-casc-tok server on the same box would otherwise silently share/
++# clobber this derived method's alpha knob.
++_SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA_FILE = f"/tmp/lossy-token-eff-spec-casc-tok-free-judgment-alpha-{os.getuid()}"
++try:
++    with open(_SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA_FILE) as _f:
++        _SPEC_CASC_TOK_ALPHA = float(_f.read().strip())
++    _SPEC_CASC_TOK_ALPHA_SOURCE = _SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA_FILE
++except (OSError, ValueError):
++    # NOT 0.0 -- see the module comment above. -inf empties the trusted top
++    # set entirely, which is the actual strict point for this method.
++    _SPEC_CASC_TOK_ALPHA = float("-inf")
++    _SPEC_CASC_TOK_ALPHA_SOURCE = f"default, no readable {_SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA_FILE}"
++print(
++    f"[SPEC-CASC-TOK-FREE-JUDGMENT PATCH] pid={os.getpid()} alpha={_SPEC_CASC_TOK_ALPHA} "
++    f"({_SPEC_CASC_TOK_ALPHA_SOURCE})",
++    file=sys.stderr,
++    flush=True,
++)
++
++# FREE-JUDGMENT (analysis/semantic_guard/, not upstream vLLM, not part of
++# Xia et al.'s taxonomy). This is the rejection_sampler.py HALF of the
++# mechanism -- see vllm/v1/worker/gpu_model_runner.py's own module-level
++# comment for the other half (overwriting the real sequence's last
++# _FREE_JUDGMENT_CRITERION_LEN drafted columns with a fixed
++# criterion-question pattern) and the full motivation. Built after
++# spec-casc-tok-force-commit was shown to salvage tokens but not a correct
++# answer, and after the user proposed exploiting EAGLE's ALREADY-PARALLEL
++# verification pass: since the target model computes logits for the WHOLE
++# speculative continuation in one forward pass regardless of later
++# accept/reject outcomes, appending a fixed judgment query after the real
++# drafted tokens lets the target's SAME pass also judge "is this looping?"
++# -- at the marginal FLOPs cost of a longer per-round sequence, not an
++# extra round-trip, and at ZERO real generation-budget cost since the
++# criterion tokens are always force-rejected here (never committed).
++#
++# v1 scope, disclosed plainly: OBSERVATION ONLY. This patch reads the
++# judgment (p_yes vs p_no at the position right after the criterion
++# phrase) and writes it to a trace file every round the criterion is
++# structurally present; it does NOT yet act on the judgment (no pivot, no
++# truncation). Two real, load-bearing reasons: (1) this investigation's
++# own discipline -- prove a signal is good before building on it, the
++# same reason the window-entropy and canonical-template detectors were
++# rigorously validated (and found wanting) before anything was built on
++# them; (2) a structural validity caveat: the criterion's own context is
++# only genuinely the TRUE committed context if every real drafted token
++# before it (positions 0.._FREE_JUDGMENT_REAL_DRAFT_LEN-1) actually gets
++# accepted THIS round -- an earlier rejection there means the judgment
++# read here was conditioned on a hypothetical continuation that never
++# became real output. Determining which rounds satisfy that is a POST-HOC
++# check against this trace joined with the same run's own proposals.jsonl
++# (how many of the real drafted positions were actually committed that
++# round), not something this function can know yet at the point it reads
++# target_probs (the kernel hasn't resolved accept/reject for this round
++# yet). Validating the (filtered-to-valid-rounds) judgment against a
++# ground-truth "was this actually unproductive" definition, and only then
++# building an intervention on top, is the natural next step -- not done
++# here.
++#
++# Mechanism: ban (zero + renormalize, same as spec-casc-tok-antiloop's own
++# mechanism -- NOT "zero the whole row", which was tried and found to be
++# a real bug: an all-zero row makes spec-casc-tok's own trusted-top-set
++# condition target_prob(v) >= (1-alpha)*top1 vacuously TRUE everywhere
++# (0 >= (1-alpha)*0), which makes pi_rej(x) collapse to draft_prob(x) for
++# every x, guaranteeing ACCEPTANCE instead of the intended rejection --
++# the opposite of what this patch needs) the SPECIFIC drafted token at the
++# first criterion position. This guarantees rejection there (this repo's
++# universal "stop at first rejection" behavior), so the round terminates
++# at the criterion boundary and NOTHING from the criterion phrase onward
++# -- including the judgment position itself -- is ever committed to the
++# real output, regardless of the judgment's own content.
++_FREE_JUDGMENT_REAL_DRAFT_LEN_FILE = f"/tmp/lossy-token-eff-free-judgment-real-draft-len-{os.getuid()}"
++try:
++    with open(_FREE_JUDGMENT_REAL_DRAFT_LEN_FILE) as _f:
++        _FREE_JUDGMENT_REAL_DRAFT_LEN = int(float(_f.read().strip()))
++except (OSError, ValueError):
++    _FREE_JUDGMENT_REAL_DRAFT_LEN = 0  # 0 = disabled (no-op), the safe default
++print(
++    f"[SPEC-CASC-TOK-FREE-JUDGMENT PATCH] pid={os.getpid()} "
++    f"real_draft_len={_FREE_JUDGMENT_REAL_DRAFT_LEN}",
++    file=sys.stderr,
++    flush=True,
++)
++
++# Same fixed pattern as gpu_model_runner.py's own free-judgment half --
++# duplicated literally (patches are self-contained, no cross-patch
++# imports), kept in sync by construction since both sides tokenize the
++# exact same fixed text via openai_harmony's HARMONY_GPT_OSS encoding:
++#   "\n\nAre the current tokens wasteful or real progress? The answer is"
++# Four superseded phrases, all caught only by inspecting the actual top-K
++# tokens produced there (p_yes/p_no alone stayed uninformatively tiny,
++# ~1e-4, in every case -- the tell that something was off, but not
++# diagnostic on its own): (1) "...I think the answer is" -- gpt-oss read
++# "the answer" as continuing to describe the MATH PROBLEM's answer, not
++# responding to this question, completing with a verb; (2) the same binary
++# framing as THIS phrase, wrapped in a leading "(" -- gpt-oss treated the
++# unclosed parenthesis as needing grammatical closure, completing with
++# punctuation; (3) the same phrase without the paren, ending on a literal
++# "yes/no:" label -- still read as a rhetorical aside to punctuate and
++# move past; (4) spec-casc-tok-self-check's own QUESTION_PATTERN verbatim
++# (real proof elsewhere that gpt-oss CAN answer this exact text cleanly)
++# -- still punctuation-completed here, because that proof came from a
++# context where the model was genuinely, locally primed to self-reflect
++# (injected right after an actual repetitive loop); spliced at arbitrary
++# points in ordinary derivation, the same text has no local pull toward an
++# answer; (5) the same binary question with an explicit "The answer is"
++# ending, no yes/no vocabulary named anywhere -- reproduced the
++# confident-vs-hedge pattern independently (real corroboration, now the
++# scored signal -- see below) but still never favored a bare yes/no.
++#   "\n\nAre the current tokens wasteful or real progress? Answer in one
++#    word: yes/no, the answer is:"
++# THIS phrase adds an explicit closed-vocabulary instruction ("Answer in
++# one word: yes/no") directly before the value-pulling "the answer is:"
++# ending -- naming the two allowed words as a constraint, not just
++# implying them via the question, is a stronger constraint than any
++# earlier attempt tried.
++_FREE_JUDGMENT_CRITERION_PATTERN = [
++    279, 13938, 290, 2208, 20290, 13173, 1500, 503, 1374, 7408, 30, 30985,
++    306, 1001, 2195, 25, 14531, 60414, 11, 290, 6052, 382, 25,
++]
++_FREE_JUDGMENT_CRITERION_LEN = len(_FREE_JUDGMENT_CRITERION_PATTERN)
++_FREE_JUDGMENT_YES_TOKEN_IDS = (14531, 11377)  # " yes", " Yes"
++_FREE_JUDGMENT_NO_TOKEN_IDS = (860, 3004)  # " no", " No"
++# The ACTUAL scored signal (judged_messy below) -- not yes/no. Five
++# criterion-phrase attempts (see this file's own patch history / HASHES.txt)
++# all converged on the same finding: the position right after any phrasing
++# ending in "...answer is" never favors a bare "yes"/"no" (p_yes/p_no stay
++# ~1e-4 regardless of wording) -- it grammatically wants a predicate, and
++# WHICH predicate turns out to be a real, validated signal: declarative/
++# certain words ("is"/"was"/"equals") dominate early in a run, hedged/
++# uncertain words ("might"/"may"/"could"/"possibly"/"perhaps"/"likely"/
++# "probably"/"seems"/"appears") dominate once rambling sets in -- checked
++# with a proper thirds-of-the-run breakdown (42%->17% confident-dominant,
++# 17%->87% hedge-dominant) and reproduced independently under a second,
++# differently-worded question, not just one lucky phrase. p_yes/p_no are
++# kept in the trace for completeness (and because they cost nothing extra
++# to compute) but judged_messy is now hedge > confident, not yes > no.
++_FREE_JUDGMENT_CONFIDENT_TOKEN_IDS = (382, 673, 29702)  # " is", " was", " equals"
++_FREE_JUDGMENT_HEDGE_TOKEN_IDS = (
++    3572, 1340, 2023, 14836, 12951, 6960, 7038, 7890, 14518,
++)  # " might", " may", " could", " possibly", " perhaps", " likely", " probably", " seems", " appears"
++
++# REJECT-AND-RESAMPLE: earlier design iterated a "yes" TREND (fast/slow EMA
++# crossover, then force a scripted pivot/final-open phrase). Proven, via a
++# real 6-case rollout AND extensive offline replay against those same
++# traces (raw p_yes magnitude, p_yes>p_no as a boolean, windowed SMA at
++# several window sizes, p_hedge-p_confident per-round), that NO transform
++# of this per-round reading separates "needs help" from "doesn't": the one
++# case that genuinely needed intervention (case_004) had the SMALLEST or
++# near-smallest signal of any case tested, at every reading, every window,
++# every score -- see analysis/semantic_guard/README.md. Reshaping the same
++# reading again was not going to fix that, so this design doesn't try to.
++#
++# What changes instead is the COST of a false positive. The old design,
++# once triggered, forced a fixed, unrelated 24-token redirect phrase into
++# the real committed output -- catastrophic when wrong (3 of 6 cases in
++# that rollout had a correct answer degraded to wrong/no_answer by exactly
++# this). This design computes a per-round score (p_yes - p_no, no EMA, no
++# trend, no state persisted across rounds) and, when it crosses a
++# threshold, rejects a SINGLE real token -- the last real drafted
++# position, right before the criterion phrase -- via the same
++# ban-a-specific-token mechanism already used for the criterion token
++# itself (zero + renormalize, not "zero the whole row" -- see the module
++# comment above for why that distinction matters). Rejection sampling then
++# does exactly what it always does on a rejection: draw a fresh token from
++# the (corrected) target distribution at that position -- a real, coherent
++# alternative the target model itself assigns probability to, not a
++# scripted message. A false positive here costs one token's worth of
++# rephrasing, not a derailing paragraph. No forced pattern, no multi-round
++# state machine, no risk of double-injecting into the model's own final
++# answer (the bug this file used to carry two fixes for) -- there is no
++# pattern to inject, so that whole class of bug is gone by construction.
++_FREE_JUDGMENT_REJECT_THRESHOLD_FILE = f"/tmp/lossy-token-eff-free-judgment-reject-threshold-{os.getuid()}"
++try:
++    with open(_FREE_JUDGMENT_REJECT_THRESHOLD_FILE) as _f:
++        _FREE_JUDGMENT_REJECT_THRESHOLD = float(_f.read().strip())
++except (OSError, ValueError):
++    _FREE_JUDGMENT_REJECT_THRESHOLD = 0.08  # p_yes - p_no; picked from real-trace resample-rate calibration, not a proof of separation (there isn't one -- see above)
++
++
++# Trace destination is a file PATH (not a boolean), read from its own knob
++# file -- same "no-op unless configured" convention as
++# patches/hidden_state_trace.py's own _DEST_FILE. Re-read once at import
++# time (not per round): this observation-only mechanism doesn't need
++# live reconfiguration.
++_FREE_JUDGMENT_TRACE_PATH_FILE = f"/tmp/lossy-token-eff-free-judgment-trace-path-{os.getuid()}"
++try:
++    with open(_FREE_JUDGMENT_TRACE_PATH_FILE) as _f:
++        _FREE_JUDGMENT_TRACE_DEST = _f.read().strip() or None
++except OSError:
++    _FREE_JUDGMENT_TRACE_DEST = None
++
++
++def _free_judgment_write_trace(record: dict[str, object]) -> None:
++    if not _FREE_JUDGMENT_TRACE_DEST:
++        return
++    import json
++
++    with open(_FREE_JUDGMENT_TRACE_DEST, "a", encoding="utf-8") as f:
++        f.write(json.dumps(record) + "\n")
++
++
++# Persistent, cross-round running count of real committed tokens for this
++# sequence -- same single-real-sequence-per-process scoping and warmup-
++# reset convention as this repo's other cross-round-state patches. Not
++# meant to reproduce relaxation_trace.py's own exact output_position
++# numbering (which this file doesn't have easy access to) -- just enough
++# of an anchor to join this trace against a run's own proposals.jsonl
++# approximately, for the offline validity/correlation check described in
++# the module-level comment.
++_FREE_JUDGMENT_STATE: dict[str, object] = {"committed_before": 0}
++_FREE_JUDGMENT_WARMUP_BATCH_THRESHOLD = 8
++
++
++def _free_judgment_apply(
++    target_probs: torch.Tensor,
++    draft_token_ids: torch.Tensor,
++    num_draft_tokens: list[int],
++    cu_num_draft_tokens: torch.Tensor,
++) -> torch.Tensor:
++    """Returns possibly-modified target_probs (a NEW tensor when banning
++    fires, the ORIGINAL tensor unchanged otherwise -- same convention as
++    this repo's antiloop/force-commit/self-check patches). Always bans the
++    criterion phrase's own first token, same as before (guarantees the
++    criterion is never committed to real output regardless of the
++    judgment). When this round's score (p_yes - p_no) crosses
++    _FREE_JUDGMENT_REJECT_THRESHOLD, ALSO bans the last real drafted
++    token -- forcing rejection sampling's own residual resample at that
++    one position instead of committing what the drafter proposed there.
++    Stateless: every round's reject decision depends only on that round's
++    own reading, nothing persisted across rounds (see the module comment
++    above for why -- no transform of this reading tried so far separates
++    "needs it" from "doesn't", so there is nothing a trend would add)."""
++    if _FREE_JUDGMENT_REAL_DRAFT_LEN <= 0 or not num_draft_tokens or num_draft_tokens[0] == 0:
++        return target_probs
++    n0 = num_draft_tokens[0]
++    total_needed = _FREE_JUDGMENT_REAL_DRAFT_LEN + _FREE_JUDGMENT_CRITERION_LEN
++    if n0 < total_needed:
++        return target_probs
++    end0 = int(cu_num_draft_tokens[0].item())
++    start0 = end0 - n0
++    judgment_row = start0 + total_needed - 1  # position right after the full criterion phrase
++    criterion_start_row = start0 + _FREE_JUDGMENT_REAL_DRAFT_LEN  # first criterion position
++    real_last_row = criterion_start_row - 1  # last REAL drafted position this round
++
++    p_yes = sum(target_probs[judgment_row, t].item() for t in _FREE_JUDGMENT_YES_TOKEN_IDS)
++    p_no = sum(target_probs[judgment_row, t].item() for t in _FREE_JUDGMENT_NO_TOKEN_IDS)
++    p_confident = sum(target_probs[judgment_row, t].item() for t in _FREE_JUDGMENT_CONFIDENT_TOKEN_IDS)
++    p_hedge = sum(target_probs[judgment_row, t].item() for t in _FREE_JUDGMENT_HEDGE_TOKEN_IDS)
++    score = p_yes - p_no
++    reject = score > _FREE_JUDGMENT_REJECT_THRESHOLD
++
++    # Diagnostic only (not used for the ban decision): the judgment row's
++    # own top-K, to see what the model actually wants to say there. Token
++    # ids only here (no decoding in the hot path); decode offline against
++    # this run's own tokenizer.
++    topk_probs, topk_ids = torch.topk(target_probs[judgment_row], k=min(15, target_probs.shape[-1]))
++    _free_judgment_write_trace(
++        {
++            "committed_before_this_round": _FREE_JUDGMENT_STATE["committed_before"],
++            "p_yes": p_yes,
++            "p_no": p_no,
++            "p_confident": p_confident,
++            "p_hedge": p_hedge,
++            "score": score,
++            "threshold": _FREE_JUDGMENT_REJECT_THRESHOLD,
++            "rejected": reject,
++            "top_ids": topk_ids.tolist(),
++            "top_probs": [round(p, 6) for p in topk_probs.tolist()],
++        }
++    )
++
++    banned = target_probs.clone()
++    criterion_tok = int(draft_token_ids[criterion_start_row].item())
++    banned[criterion_start_row, criterion_tok] = 0.0
++    row_sum = banned[criterion_start_row].sum().clamp_min(1e-30)
++    banned[criterion_start_row] = banned[criterion_start_row] / row_sum
++
++    if reject:
++        real_tok = int(draft_token_ids[real_last_row].item())
++        banned[real_last_row, real_tok] = 0.0
++        row_sum2 = banned[real_last_row].sum().clamp_min(1e-30)
++        banned[real_last_row] = banned[real_last_row] / row_sum2
++
++    return banned
++
++
++def _free_judgment_update(
++    output_token_ids: torch.Tensor,
++    batch_size: int,
++) -> None:
++    """Cross-round persistence for the running committed-token count only
++    (ground truth from output_token_ids, same convention as this repo's
++    other cross-round-state patches), used only to annotate the trace.
++    Nothing else to persist -- this design has no mode/state machine to
++    transition, since every round's reject decision is a stateless
++    function of that round's own score."""
++    state = _FREE_JUDGMENT_STATE
++    if batch_size > _FREE_JUDGMENT_WARMUP_BATCH_THRESHOLD:
++        state["committed_before"] = 0
++        return
++    row = output_token_ids[0].tolist()
++    emitted = [t for t in row if t != PLACEHOLDER_TOKEN_ID]
++    if not emitted:
++        return
++    state["committed_before"] = int(state["committed_before"]) + len(emitted)
++
++
++from vllm.v1.sample.relaxation_trace import TRACER as _TRACER
+ from vllm.logger import init_logger
+ from vllm.triton_utils import tl, triton
+ from vllm.v1.outputs import LogprobsLists, LogprobsTensors, SamplerOutput
+@@ -474,6 +837,41 @@
+     target_probs = target_logits.softmax(dim=-1, dtype=torch.float32)
+     assert target_probs.is_contiguous()
+ 
++    # FREE-JUDGMENT: read the target's own judgment at the criterion
++    # position (if gpu_model_runner.py's own half of this mechanism
++    # structurally placed one this round) and ban the criterion span's
++    # first token so it's guaranteed rejected -- see the module-level
++    # comment for the full mechanism and why banning (not one-hot forcing,
++    # not zeroing the whole row) is the correct operation here.
++    # target_probs_for_trace keeps the ORIGINAL, pre-ban distribution for
++    # the tracer's own strict/lossy counterfactuals -- same convention as
++    # this repo's other guard patches.
++    target_probs_for_trace = target_probs
++    if draft_probs is not None and not synthetic_mode:
++        target_probs = _free_judgment_apply(
++            target_probs, draft_token_ids, num_draft_tokens, cu_num_draft_tokens
++        )
++
++    # spec-casc-tok: build the full proposal-independent relaxed target
++    # pi_rej (see the module-level comment for the formula and why this is
++    # needed both here, for recovery, and again -- as two per-token scalar
++    # arrays -- at the kernel launch below). Computed once here, before
++    # recovery sampling, in plain PyTorch. Gated on draft_probs is not None
++    # for the same reason as every other patch's relaxation branch: with no
++    # q, there is nothing to put in the trusted top set.
++    recovery_target_probs = target_probs
++    casc_tok_eta = casc_tok_top1 = None
++    if draft_probs is not None:
++        casc_tok_top1 = target_probs.max(dim=-1, keepdim=True).values  # [num_tokens, 1]
++        in_top_set = target_probs >= (1.0 - _SPEC_CASC_TOK_ALPHA) * casc_tok_top1
++        casc_tok_eta = 1.0 - (draft_probs * in_top_set).sum(dim=-1)  # [num_tokens]
++        pi_rej = casc_tok_eta.unsqueeze(-1) * target_probs + torch.where(
++            in_top_set, draft_probs, torch.zeros_like(draft_probs)
++        )
++        recovery_target_probs = pi_rej.contiguous()
++        casc_tok_top1 = casc_tok_top1.squeeze(-1).contiguous()
++        casc_tok_eta = casc_tok_eta.contiguous()
++
+     # Sample recovered tokens for each position.
+     # [num_tokens]
+     recovered_token_ids = sample_recovered_tokens(
+@@ -482,7 +880,7 @@
+         cu_num_draft_tokens,
+         draft_token_ids,
+         draft_probs,
+-        target_probs,
++        recovery_target_probs,
+         sampling_metadata,
+         device,
+         use_fp64_gumbel,
+@@ -503,9 +901,31 @@
+         max_spec_len,
+         vocab_size,
+         synthetic_conditional_rates,
++        casc_tok_eta,
++        casc_tok_top1,
++        _SPEC_CASC_TOK_ALPHA,
+         NO_DRAFT_PROBS=draft_probs is None,
+         SYNTHETIC_MODE=synthetic_mode,
+     )
++    # Phase-1 observation hook. No-op unless a trace destination is configured;
++    # never influences acceptance, only records what the kernel just decided.
++    if _TRACER.enabled:
++        _TRACER.record(
++            draft_token_ids=draft_token_ids,
++            draft_probs=draft_probs,
++            target_probs=target_probs_for_trace,
++            uniform_probs=uniform_probs,
++            recovered_token_ids=recovered_token_ids,
++            bonus_token_ids=bonus_token_ids,
++            output_token_ids=output_token_ids,
++            cu_num_draft_tokens=cu_num_draft_tokens,
++            num_draft_tokens=num_draft_tokens,
++            scalar_multiplier=_SPEC_CASC_TOK_ALPHA,
++            casc_tok_alpha=_SPEC_CASC_TOK_ALPHA,
++            relaxation_method="spec_casc_tok_free_judgment",
++        )
++    if draft_probs is not None and not synthetic_mode:
++        _free_judgment_update(output_token_ids, batch_size)
+     return output_token_ids
+ 
+ 
+@@ -786,6 +1206,9 @@
+     max_spec_len,
+     vocab_size,
+     synthetic_conditional_rates_ptr,  # [num_speculative_tokens] or None
++    casc_tok_eta_ptr,  # [num_tokens] or None iff NO_DRAFT_PROBS; spec-casc-tok
++    casc_tok_top1_ptr,  # [num_tokens] or None iff NO_DRAFT_PROBS; spec-casc-tok
++    casc_tok_alpha,  # scalar; -inf for the strict rule (see module comment)
+     NO_DRAFT_PROBS: tl.constexpr,
+     SYNTHETIC_MODE: tl.constexpr,
+ ):
+@@ -815,20 +1238,35 @@
+                 rate = tl.load(synthetic_conditional_rates_ptr + pos)
+                 accepted = uniform_prob < rate
+             else:
++                target_prob = tl.load(
++                    target_probs_ptr + (start_idx + pos) * vocab_size + draft_token_id
++                )
+                 if NO_DRAFT_PROBS:
+                     draft_prob = 1
++                    # No q to build a trusted top set from: unchanged strict.
++                    accepted = draft_prob > 0 and target_prob / draft_prob >= uniform_prob
+                 else:
+                     draft_prob = tl.load(
+                         draft_probs_ptr
+                         + (start_idx + pos) * vocab_size
+                         + draft_token_id
+                     )
+-                target_prob = tl.load(
+-                    target_probs_ptr + (start_idx + pos) * vocab_size + draft_token_id
+-                )
+-                # NOTE(woosuk): While the draft probability should never be 0,
+-                # we check it to avoid NaNs. If it happens to be 0, we reject.
+-                accepted = draft_prob > 0 and target_prob / draft_prob >= uniform_prob
++                    # spec-casc-tok: pi_rej(x) = eta*p(x) + q(x) if x is in
++                    # the trusted top set A = {u: p(u) >= (1-alpha)*top1},
++                    # else eta*p(x). eta and top1 are per-token full-vocab
++                    # reductions computed upstream in plain PyTorch (see the
++                    # module-level comment); only membership of the drafted
++                    # token x itself needs computing here.
++                    eta = tl.load(casc_tok_eta_ptr + start_idx + pos)
++                    top1 = tl.load(casc_tok_top1_ptr + start_idx + pos)
++                    x_in_top_set = target_prob >= (1.0 - casc_tok_alpha) * top1
++                    pi_rej_x = eta * target_prob
++                    if x_in_top_set:
++                        pi_rej_x += draft_prob
++                    # NOTE(woosuk): While the draft probability should never
++                    # be 0, we check it to avoid NaNs. If it happens to be 0,
++                    # we reject.
++                    accepted = draft_prob > 0 and pi_rej_x / draft_prob >= uniform_prob
+             if accepted:
+                 token_id = draft_token_id
+             else:

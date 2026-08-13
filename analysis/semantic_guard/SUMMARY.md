@@ -214,6 +214,22 @@ Downstream effect (30-token window after the event): hesitation rate 2.65% after
 4. **proposals.jsonl drops the true first token** on short completions-endpoint probes — caught via cross-check against `response.json`.
 5. **Alpha-file aliasing** (`spec_casc_tok_semantic_guard_and`): first draft fell back to plain `spec_casc_tok`'s alpha file instead of its own — caught and fixed before any run.
 
+## 7b. Do AIME24's two best candidates generalize to HumanEval? 20-case pilot
+
+Precedent for taking this seriously: plain override guard already flips sign between benchmarks (AIME24 -13.4pp/+10.1% length, HumanEval **+1.3pp/-7.4% length**).
+
+| metric | baseline | future-guard-strict K=8 | v2 |
+|---|---:|---:|---:|
+| accuracy | 20/20 | 20/20 | 20/20 |
+| length | 428.1 | 531.4 (+24.1%) | 471.9 (+10.2%) |
+| l̄ | 2.651 | 2.566 (-3.2%) | 2.618 (-1.2%) |
+| rounds | 123.2 | 158.7 (+28.8%) | 139.1 (+12.9%) |
+| wall-time (20 cases) | 37.1s | 47.4s (+27.8%) | 42.5s (+14.6%) |
+| hesitation words | 68 | 99 (+45.6%) | 84 (+23.5%) |
+| relaxed-only | 5 (7.4%) | 4 (4.0%) | 0 (0.0%) |
+
+**Accuracy uninformative — ceiling effect** (all three arms solve all 20; HumanEval baseline already 95.7%, needs the full 164 to show any gap). **Length/rounds signal IS visible and negative for both** — the opposite of both AIME24 (future-guard-strict K=8 was cheaper there) and of override's own HumanEval win (-7.4% length). Rules out "AIME24's efficiency win transfers directly"; doesn't resolve accuracy. Full 164-case sweep (~4.5h/arm) not launched — flagged as next step, checking in first.
+
 ## 8. Reference: methods explained + complete data matrix
 
 **`spec_casc_tok`** (base method): `pi_rej(v) = q(v)+eta*p(v)` for `v` in trusted set `A = {u: p(u) >= (1-alpha)*max(p)}`, else `eta*p(v)`; `eta = 1 - sum_{A} q(v)`. Higher alpha = more relaxed (bigger `A`). Strict limit is `alpha=-inf`, NOT 0. Provably: in-`A` tokens always accept; out-of-`A` tokens are *more conservative than lossless* (`pi_rej < p`) — hesitation markers are disproportionately out-of-`A` (6.6% vs 2.2% background), which is why plain `spec_casc_tok` already beats lossless without any guard.

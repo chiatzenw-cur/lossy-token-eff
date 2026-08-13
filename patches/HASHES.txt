@@ -12,6 +12,339 @@ cbf7fe515194bbd37a62f9496f2ed5e21d08f64aba65f10891e034b42095ab72  spec-casc-opt
 4ba42d114079a34582c42de850dc7de3e98e9c0cda4cfc7a0e8e805ce6c10f0a  mentored-dec
 15dfe3a98fe4ee0ebbf9cc9a295d7352c9f188ec52b6781cbdf714d876810a2d  r-fuzzy
 4277f8225397a716a4be421f73d64cb84c9e4267bcc8c62acce0b89f9f20b649  spec-casc-tok
+eeaaf46b172a029871af0f4c1d68ca6b59d76cb8a003edff6cd4ed6be92738ab  spec-casc-tok-antiloop
+049e966d2100de5598450896c89c8e7e31140ac45d08617a097ac65a0be77360  spec-casc-tok-force-commit
+# fixed 2026-08-13: _force_commit_apply had the exact same "forces only
+# start0" bug caught live on spec-casc-tok-self-check (which shares this
+# code shape) -- if start0's forced token happened to be genuinely
+# ACCEPTED, the round continued to later positions with fully unforced
+# target_probs, letting natural content diverge from the pattern mid-force
+# and the next round restart it from 0. This means the originally-published
+# case_004 result for this patch ("21 final/analysis channel thrashes, the
+# model apologizes and gives up") is CONFOUNDED by this bug and should not
+# be read as a clean finding about the model's own behavior -- it needs
+# re-running against the fixed patch before drawing any conclusion. Fixed
+# by forcing every still-unforced pattern position available in the round,
+# not just the first. Superseded hash (do not use, results below it built
+# on this hash are suspect): ac73cdaedb672d23d73c9867448108ae80e2d430e28f0968c37d9b1ebc75fb03
+25c47696e194be91c180754a8377ec315062f690980a04141c109f948669d177  spec-casc-tok-self-check
+9b599132c945e30b180a3f85419be4d2f0350767383943a33302dea0c59ccac4  spec-casc-tok-free-judgment
+# CALIBRATION FINDING, 2026-08-13 (no code change, defaults changed
+# instead -- see remote/run_server_vllm.sh's own comment on
+# SPEC_CASC_TOK_FREE_JUDGMENT_PIVOT_MARGIN): a real 6-case test (alpha=0.3,
+# same cases as force-commit's own pilot, graded against known-correct
+# baselines from earlier this session) found the fast/slow p_yes EMA gap
+# tops out at ~0.03-0.051 across EVERY case's ENTIRE trace (up to 1065
+# readings), including the one case (case_004) that genuinely needed
+# intervention -- no threshold value separates "needs a pivot" from
+# "doesn't" on this signal. MARGIN=0.03 triggered on 5/6 cases and HURT 3
+# of them (case_003: correct->wrong; case_014: correct->no_answer;
+# case_026: correct->wrong), with only case_004 (already a hopeless
+# no_answer failure under every arm tested all session) benefiting
+# unambiguously (no_answer, L=32768 -> wrong-but-95%-cheaper, L=1506).
+# Net: 3 hurt, 2 neutral wins on cases that never needed help, 1 wash.
+# This is despite the underlying confident-vs-hedge / p_yes signal itself
+# being real (validated via a proper thirds-of-the-run breakdown showing a
+# genuine, opposite-direction trend between a rambling and a clean case)
+# -- the SAME signal that separates cases well in aggregate, whole-run
+# analysis does not separate them via an instantaneous fast/slow EMA
+# crossover at any live threshold, the same wall every other cheap local
+# signal in this investigation (window-entropy, confidence-dip,
+# hesitation-density) already hit. Default margin changed to 1.0
+# (unreachable, observation-only) until a fundamentally different trigger
+# design is validated. See analysis/semantic_guard/README.md.
+# fixed 2026-08-13: the previous fix's own history_tail check reused
+# _free_judgment_pivot_pattern_progress -- correct for tracking a pattern
+# WE ourselves are forcing (always paced to land exactly at the tail's
+# end, one token per round) but WRONG for natural detection: the model
+# can emit the final-channel-open boundary AND several more real content
+# tokens all within the SAME round if they're all accepted together, so
+# the boundary is no longer the last thing in history_tail by the time
+# this runs, and a suffix-only check misses it. Confirmed on a real
+# rerun: identical L=577 output, identical second pivot injected inside
+# the model's own final answer -- the fix had NOT changed behavior at
+# all. Added _free_judgment_pattern_occurs_anywhere (full scan, same
+# approach find_macro_loop_restarts.py already uses for this exact
+# boundary pattern) and switched natural detection to it. Previous hash
+# (do not use): 47b12ff9f0b49c591aa7b2b0cace408d62767bc793016dc6b73dc01ef92614fe
+# fixed 2026-08-13: real bug caught on a live run, not by review. Before
+# this, "final_opened" was only ever set by our OWN final_forcing
+# completing (mirroring force-commit's identically-named flag) -- nothing
+# stopped the observation/pivot machinery once the model opened `final`
+# entirely on its own. Live consequence, observed on a real case_004 run:
+# the pivot fired at token ~485, the model abandoned its approach and
+# opened `final` on its own within a few hundred more tokens (something
+# that natively never happens on this case within the full 32768-token
+# budget) -- then a SECOND pivot trigger fired while INSIDE that final
+# message, injecting the same redirect phrase mid-answer and corrupting
+# what would otherwise have been a genuine, fast resolution. Added
+# history_tail: a rolling real-emitted-token buffer, updated every round
+# regardless of mode, that detects the fixed final-channel-open boundary
+# (same pattern find_macro_loop_restarts.py/force-commit already use) and
+# sets the SAME sticky final_opened flag a forced push does -- "final has
+# been reached, forced or natural, stop touching target_probs forever" is
+# one fact regardless of how it happened. Previous hash (do not use):
+# 72d36a4e185ad36d36db575db1293783873ff09800d04cc55245836c388e454a
+# updated 2026-08-13: v2 -- ACTS on the judgment now, not observation-only.
+# The sixth criterion phrase (see the entry above) finally produced real
+# yes/no mass (p_yes/p_no in the multi-percent range, not ~1e-4) and a
+# real, validated within-run trend (case_004 rambling: 66%->71%->84%
+# yes>no across thirds; case_008 clean/short: 83%->83%->50%, opposite
+# direction as it converges to its answer) -- a genuine signal despite a
+# real baseline "yes" bias (~70-83% even on the clean case), which is why
+# the trigger is a fast/slow EMA crossover (adaptive to each run's own
+# baseline) rather than an absolute threshold. On trigger: forces a real,
+# committed pivot phrase (spec-casc-tok-self-check's own PIVOT_PATTERN,
+# reused verbatim) or spec-casc-tok-force-commit's own final-channel push
+# if the budget is nearly exhausted -- the one place this patch now costs
+# real committed tokens, but only once triggered. New own knob files:
+# free-judgment-pivot-margin, free-judgment-pivot-final-threshold. See the
+# patch's own module comment for the full mechanism and the state-mutation
+# discipline (apply() only ARMS a pending trigger, update() is the only
+# place mode actually transitions, same as self-check's own convention).
+# Previous hash (observation-only v1, do not use):
+# ac50a9ac47f6141e2f5c4902bc0a0d3f5949b325a85d8243d76ca76ea2334e8e
+# updated 2026-08-13: sixth criterion-phrase attempt. Adds an explicit
+# closed-vocabulary instruction directly before the value-pulling ending:
+# "\n\nAre the current tokens wasteful or real progress? Answer in one
+# word: yes/no, the answer is:" -- naming the two allowed words as a
+# constraint, not just implying them via the question, is a stronger
+# constraint than any earlier attempt. judged_messy scoring (hedge vs
+# confident, added in the previous update) is unchanged; p_yes/p_no are
+# still logged alongside it to check whether THIS phrase finally moves
+# real mass onto literal yes/no. 14 tokens -> 23. Previous hash (do not
+# use): 67be37c2b33a59d9722936b96c42c9f5b1c53a9b933189cdbfc7c64fcb9aa9e6
+# updated 2026-08-13: switched the SCORED signal from yes-vs-no to
+# confident-vs-hedge. Five criterion-phrase attempts (see the earlier
+# entries in this section) all converged on the same finding: the
+# position right after any "...answer is"-shaped phrase never favors a
+# bare yes/no (p_yes/p_no stayed ~1e-4 in every attempt) -- it
+# grammatically wants a predicate, and WHICH predicate is the real signal:
+# declarative words ("is"/"was"/"equals") dominate early in a run, hedged
+# words ("might"/"may"/"could"/"possibly"/"perhaps"/"likely"/"probably"/
+# "seems"/"appears") dominate once rambling sets in. Validated with a
+# proper thirds-of-the-run breakdown on case_004 (42%->17% confident-
+# dominant, 17%->87% hedge-dominant) and reproduced independently under a
+# second, differently-worded question -- not one lucky phrase. judged_messy
+# is now hedge>confident, not yes>no; p_yes/p_no kept in the trace for
+# completeness. Previous hash (do not use):
+# df1de6cc5a6f815b52f329a81d05c71a71bf5cd5f40319ba13fcb7d65a890a5b
+# updated 2026-08-13: fourth phrasing failure -- even self-check's own
+# QUESTION_PATTERN, real proof it CAN work, punctuation-completed when
+# spliced at arbitrary (not locally-primed) points. New phrase combines
+# an unambiguous binary QUESTION framing ("Are the current tokens
+# wasteful or real progress?") with an explicit "The answer is" ending --
+# earlier attempts tried one or the other, never both together. 26 tokens
+# -> 14. Previous hashes (do not use):
+# ff2e488d58d6bd400c29d2194372f261e8b5469c97d2290ae90e45369a133b11
+# 4775ad754b2dc7023971194605950a038f02d2af29202077b4e3dc9d021035a4
+# 693c15a454e6018d454249fa11359e97d8d2202328431f379561573bee28f3ec
+# 8b6cd43f0008d805bd2b5984b0398d35ad5c186c78d10191a4815fd0584da0f1
+# acef8584e232d790017b198d06a5342a4b41967256bd7fb3bc308f542b926072
+# 0821fdbe7d8009e8b0b84458b56eb6b7dda38c104035bf2a35406a5c05fede8d
+# updated 2026-08-13: third phrasing failure (yes/no read as a rhetorical
+# aside to punctuate, ".", "?", ".\n\n" dominated -- a structural limit of
+# a single-position read with zero free generation, not fixable by more
+# wording tweaks in that shape). Switched to spec-casc-tok-self-check's
+# own QUESTION_PATTERN verbatim: "\n\nWait, let me pause and check: am I
+# going in circles here, making no real progress? Answer yes or no:" --
+# not a new guess, that patch's real live run already demonstrated this
+# exact text elicits a clean immediate "Yes" as the very next token (the
+# confusion self-check hit afterward concerned further free generation,
+# irrelevant here since this patch discards everything after the single
+# read regardless). 14 tokens -> 26. Previous hashes (do not use):
+# 4775ad754b2dc7023971194605950a038f02d2af29202077b4e3dc9d021035a4
+# 693c15a454e6018d454249fa11359e97d8d2202328431f379561573bee28f3ec
+# 8b6cd43f0008d805bd2b5984b0398d35ad5c186c78d10191a4815fd0584da0f1
+# acef8584e232d790017b198d06a5342a4b41967256bd7fb3bc308f542b926072
+# 0821fdbe7d8009e8b0b84458b56eb6b7dda38c104035bf2a35406a5c05fede8d
+# updated 2026-08-13: the "yes/no:" phrase was wrapped in an unclosed "("
+# (aside-like framing, an addition on top of the user's given wording, not
+# part of it) -- gpt-oss treated the unmatched paren as needing closing
+# punctuation, completing with ")."/")"/"?)" instead of an answer, caught
+# again via the top-K diagnostic. Dropped the parenthesis: "\n\nAre the
+# current tokens wasteful or real progress: yes/no:" (no unmatched
+# punctuation). 15 tokens -> 14. Previous hashes (do not use):
+# 693c15a454e6018d454249fa11359e97d8d2202328431f379561573bee28f3ec
+# 8b6cd43f0008d805bd2b5984b0398d35ad5c186c78d10191a4815fd0584da0f1
+# acef8584e232d790017b198d06a5342a4b41967256bd7fb3bc308f542b926072
+# 0821fdbe7d8009e8b0b84458b56eb6b7dda38c104035bf2a35406a5c05fede8d
+# updated 2026-08-13: replaced the criterion phrase. "...I think the
+# answer is" was found genuinely ambiguous by inspecting the top-K tokens
+# actually produced there (added as a diagnostic in the previous update) --
+# gpt-oss read "the answer" as continuing to describe the MATH PROBLEM's
+# answer (computed the whole conversation), not responding to this
+# question, so it completed with a verb (" is"/" might"/" may", NOT
+# "yes"/"no") -- both p_yes and p_no stayed consistently tiny (~1e-4), the
+# tell that something was off, though not diagnosable without the top-K
+# data. New phrase: "\n\n(are the current tokens wasteful or real
+# progress: yes/no:" -- states the binary choice explicitly, ends on a
+# literal "yes/no:" label. 21 tokens -> 15. Previous hashes (do not use):
+# 8b6cd43f0008d805bd2b5984b0398d35ad5c186c78d10191a4815fd0584da0f1
+# acef8584e232d790017b198d06a5342a4b41967256bd7fb3bc308f542b926072
+# 0821fdbe7d8009e8b0b84458b56eb6b7dda38c104035bf2a35406a5c05fede8d
+# updated 2026-08-13: added a diagnostic-only top-15 (token id, prob)
+# capture at the judgment row -- p_yes/p_no were both consistently tiny
+# (~1e-4) on the first real validation run, too small to tell whether
+# "yes"/"no" are anywhere near what the model actually favors there;
+# needed real data instead of guessing at wording. Pure addition, no
+# change to the ban mechanism or judged_messy computation. Previous hash:
+# acef8584e232d790017b198d06a5342a4b41967256bd7fb3bc308f542b926072
+# fixed 2026-08-13: first draft aliased plain spec-casc-tok's own alpha
+# file (_SPEC_CASC_TOK_ALPHA_FILE, unrenamed, copied straight from the
+# spec-casc-tok base this patch is built on) -- the exact "own file, never
+# alias" bug caught once already building spec-casc-tok-antiloop, repeated
+# here and caught again by this patch's own knob-plumbing test failing
+# immediately on first install. Renamed to
+# _SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA_FILE. Superseded hash (do not use):
+# 0821fdbe7d8009e8b0b84458b56eb6b7dda38c104035bf2a35406a5c05fede8d
+# added 2026-08-13, "free judgment via extended verification span" -- the
+# rejection_sampler.py half. Two-file patch (see the gpu_model_runner.py
+# entry below): exploits that EAGLE verification is already ONE parallel
+# forward pass over the whole drafted block, so appending a fixed
+# criterion-question sequence after the real drafted tokens lets the
+# target's SAME pass also compute a judgment ("is this looping?"), at
+# marginal FLOPs cost, not an extra round-trip, and at ZERO real
+# generation-budget cost since the criterion tokens are always
+# force-rejected. v1 scope is OBSERVATION ONLY (writes p_yes/p_no to a
+# trace file, does not yet act on it) -- see the patch's own module
+# comment for the full design, the validity caveat (only trustworthy on
+# rounds where the real draft was fully accepted), and why the
+# alternative design (pad target_probs after a smaller propose() call,
+# keeping num_speculative_tokens at its usual value) does NOT work
+# (draft_token_ids_cpu is a fixed-width buffer sized at the config's own
+# num_spec_tokens; copy_() from a wider tensor into that fixed slice
+# raises a shape-mismatch error). See analysis/semantic_guard/README.md.
+# fixed 2026-08-13: _self_check_apply originally forced only the round's
+# FIRST drafted position (start0). If that position's forced token happened
+# to be genuinely ACCEPTED (draft's own proposal coincided with it -- not
+# rare, especially right after the model has just been forced to say the
+# pattern's own opening words and tends to keep talking in that voice), the
+# round did not terminate the way a force-rejection always does, so it
+# continued to this round's LATER positions with fully unforced,
+# unmodified target_probs -- letting natural generation diverge from the
+# pattern mid-force. Caught on a real live run: the pivot phrase's own
+# opening ("Yes -- I am going in circles.") repeated 5 times, each
+# diverging at the exact same token and restarting from 0, a genuine
+# self-inflicted degenerate loop caused by the forcing mechanism itself,
+# not the model. Fixed by forcing every still-unforced pattern position
+# available in the round (min(round's own draft length, pattern tokens
+# remaining)), not just the first -- makes an accept/reject coin flip at
+# any one position unable to let natural content leak into a forced
+# phrase. Superseded hash (do not use): 45ccf12ba02cd743318c19e445b3ecc8f0997898db1caf3718f67db8ac5ca2e2
+# added 2026-08-13, periodic self-assessment + reactive pivot -- built after
+# spec-casc-tok-force-commit was empirically shown to salvage tokens but not
+# a correct answer (converts a silent cap-hit into an explicit "I'm sorry,
+# unable to provide the answer" after 21 final/analysis channel thrashes,
+# n=1 real case) and FIVE independently-designed structural/statistical
+# signals this session (window-entropy ramp, confidence dip, hesitation
+# density, hidden-state recurrence, and a digit-normalized canonical-
+# template periodicity check built specifically for the repeated-bisection
+# shape this repo's own rambling case has) all fail to reliably separate
+# productive from unproductive generation -- the last one fires 100+ times
+# starting at 16% through on a case that succeeds, never fires at all on
+# the case it targets. The one real signal found all session is the
+# model's OWN self-report (spontaneous "this is messy"-type phrases
+# correlate with 2.7x length, 6.5x cap-rate). Rather than a sixth cheap
+# proxy, this patch outsources the judgment: every _SELF_CHECK_INTERVAL
+# real tokens, force-inject a fixed self-assessment question (one-hot
+# target_probs, same mechanism as antiloop/force-commit, no kernel
+# changes), let the next few tokens generate completely unconstrained, and
+# read back the model's own yes/no. "No" costs ~30 tokens and resumes
+# unchanged. "Yes" force-injects a pivot phrase if budget remains, or
+# force-commit's own final-channel-open push if nearly exhausted. See
+# analysis/semantic_guard/README.md.
+# added 2026-08-13, reactive budget-exhaustion breaker on top of plain
+# spec-casc-tok -- targets a THIRD failure shape, distinct from BOTH
+# spec-casc-tok-antiloop's literal token-repetition target and the
+# hidden-state-recurrence work's macro-loop-restart target: "never commits"
+# -- the model stays in the harmony `analysis` channel, re-deriving/
+# re-verifying in genuinely different words each cycle (n-gram duplicate
+# coverage at 30/60-token windows checked directly and found ~0 on these
+# cases, ruling out a generalized antiloop), and simply exhausts the
+# generation budget without ever opening `final`. Confirmed on 4/31 real
+# AIME24 cases across two arms (~13%), the worst possible outcome
+# (max tokens spent, zero extractable answer). Built after four
+# independently-designed local per-token EARLY-WARNING signals (window-
+# entropy ramp, sustained confidence dip, hesitation-word density, and
+# continuous hidden-state recurrence) all failed or were too weak to act
+# on -- the hidden-state one in a structurally identical way to the others
+# (spikes AT a loop-back boundary, not during the unproductive content
+# leading up to it). Mechanism therefore reacts to a fact known with
+# certainty instead of predicting: cumulative real emitted token count vs a
+# threshold, and whether the fixed 6-token final-channel-open boundary has
+# occurred yet (same literal special-token-id pattern
+# find_macro_loop_restarts.py already validated). Once crossed, one-hots
+# target_probs onto the boundary's next token at the first drafted position
+# each round -- zero kernel/Triton changes, same "everything downstream is
+# already a pure function of target_probs" pattern as antiloop. See
+# analysis/semantic_guard/README.md.
+# added 2026-08-13, reactive repetition breaker on top of plain spec-casc-tok
+# -- NOT a hesitation-marker guard (no token-id list, no entropy-window
+# trigger). Built after this investigation established: (1) real degenerate
+# loops in this model are TARGET-MODEL-driven, not a relaxation artifact
+# (a counterfactual splice showed pure STRICT decoding falls into the
+# identical loop from the identical context); (2) once looping, target's
+# own top-1 confidence in the repeated token climbs past 99% within a
+# handful of repeats, so no accept-test threshold can prevent continuing
+# it; (3) predicting loop onsets in advance from distributional shape
+# (entropy ramps, confidence dips) fails rigorous validation -- both tested
+# detectors perform WORSE than a random baseline at matched firing rate.
+# Mechanism instead: the moment a genuine periodic repeat (period<=12,
+# 3rd consecutive occurrence -- the same threshold validated as ground
+# truth, not invented for this patch) is confirmed against a persistent
+# cross-round token-history buffer, zero that SPECIFIC token's probability
+# in target_probs and renormalize, before spec-casc-tok's own eta/pi_rej
+# math runs. Zero kernel/Triton changes -- pure Python/PyTorch
+# preprocessing; everything downstream (eta, pi_rej, the accept kernel,
+# recovery) is already a function of target_probs, so the ban propagates
+# automatically. See analysis/semantic_guard/README.md.
+#
+# REDESIGN 2026-08-13: replaced the EMA-trend pivot mechanism entirely
+# (see the CALIBRATION FINDING above -- MARGIN=1.0/unreachable, disabled).
+# Offline replay of the SAME 6-case rollout traces (not a new live run)
+# tested whether any other transform of the per-round reading separates
+# the cases: p_yes>p_no as a boolean fed through the same fast/slow EMA
+# (worse than raw magnitude -- case_004, the one case that needed help,
+# still has the smallest gap of all 6, and the two clean cases alone span
+# 0.02-0.49, wider than the whole false-positive cluster), a windowed
+# simple-moving-average of raw p_yes at window sizes 10/20/40/80 (case_004
+# has the smallest gap at every window size), and p_hedge-p_confident
+# per-round (degenerate -- ~100% positive at threshold 0.0, collapses to
+# ~0% by 0.02, no usable per-round cutoff; the hedge/confident signal is
+# real only as a whole-run aggregate mean, never validated per-round).
+# Conclusion: no reshaping of this reading, at any granularity, separates
+# "needs it" from "doesn't" -- chasing another variant was not going to
+# fix that.
+#
+# What changed instead is the COST of a false positive, not the
+# discrimination. The old mechanism, once triggered, forced a fixed
+# unrelated 24-token redirect phrase into the real committed output --
+# catastrophic when wrong (3 of 6 cases in the rollout had a correct
+# answer degraded to wrong/no_answer by exactly this). The new mechanism
+# computes a per-round score (p_yes - p_no, no EMA, no trend, nothing
+# persisted across rounds) and, when it crosses
+# SPEC_CASC_TOK_FREE_JUDGMENT_REJECT_THRESHOLD (default 0.08, picked from
+# real-trace resample-rate calibration, not a proof of separation), bans
+# ONLY the single last real drafted token this round (same
+# ban-a-specific-token-and-renormalize mechanism already used for the
+# criterion token, NOT a forced pattern) -- rejection sampling's own
+# residual-resample then draws a fresh, genuinely target-favored
+# alternative at that one position. A false positive now costs one
+# resampled token, not a derailing paragraph. This also deletes an entire
+# class of bug the old mechanism needed two separate fixes for (the
+# double-pivot-injection / natural-final-open-detection bugs documented
+# below): there is no multi-round forced pattern to track anymore, so
+# there is nothing to accidentally re-trigger inside the model's own
+# final answer. All EMA/mode-state-machine code, PIVOT_PATTERN,
+# FINAL_OPEN_PATTERN, and their two knob files (PIVOT_MARGIN,
+# PIVOT_FINAL_THRESHOLD) are removed; replaced by the single
+# REJECT_THRESHOLD knob. Not yet validated on a live rollout -- unit and
+# real-kernel adversarial tests pass (patches/test_spec_casc_tok_free_judgment.py),
+# a real rollout against these same 6 cases is the natural next step
+# before trusting this as a fix rather than a safer bet. Previous hash
+# (do not use): ed0e7673a73f509a77a57997d692653a430b011f63c14aa27377eab1a3bbd238
+#
 # added 2026-08-09, verified by the same pristine-round-trip diff as the rest
 # of this manifest (see analysis/semantic_guard/README.md for the experiment)
 # r-fuzzy-semantic-guard's original hash (36a7429f...) is SUPERSEDED as of
@@ -63,7 +396,18 @@ bc1b5c9c374bbf0941ec2fcf122750d679eea9bfc4249ef82d92a7e3120b4240  spec-casc-tok-
 # persistent state (a future-guard-window counter carried via a small
 # per-batch-slot tensor) -- see the patch's module comment for the
 # single-real-sequence-per-process scoping this relies on.
-95bc686e25bd3d644754d245dcd96428a28f5cc64f6b13d3dc390815d23a12b2  spec-casc-tok-semantic-guard-future-guard
+6cce6cf88b994f402304d62be1c0d188bcedf75fd4cf4a45c1ef26280b45e3db  spec-casc-tok-semantic-guard-future-guard
+# updated 2026-08-12: added DEBUG INSTRUMENTATION -- a new [num_tokens]
+# bool output (future_in_window_debug) the kernel now writes at every
+# position, reporting the REAL in_window value used for that position's
+# decision, threaded through to the trace via the previously-unused
+# window_guard_mask tracer parameter. Pure addition, no change to any
+# accept/reject decision or acceptance rule -- added after trace-based
+# analysis of a real run (case_004, alpha=0.7) found the window appearing
+# to enforce strict only ~50-65% of the time it should per a hand
+# simulation of the (unchanged) arming/decrement logic; this instrumentation
+# gets ground truth instead of inferring it. See analysis/semantic_guard/
+# README.md for the investigation and findings once resolved.
 491c760e5220abeed38ecc65c2190b44ceee1954ba7e3d270495458f7b24f6c1  spec-casc-tok-semantic-guard-future-guard-and
 # added 2026-08-12, fourth semantic-guard sibling: crosses
 # spec-casc-tok-semantic-guard-future-guard's trigger shape (gate the K
@@ -101,3 +445,53 @@ bfaec14e220cf669ddfd2b3ef6d2c556dc8fae60ef71e65a2e7ae068fb386a2a  upstream
 # the mutually-exclusive method dispatcher on purpose.
 81b7627fbe81f7aaa2f77b4bf085faa353c69d03662ebfe369536a9773bb70d0  upstream
 b86e0f3643a715b7f15c7a3fa0e314baa40aa00dc3af5ceeaf26cd5ad146804b  hidden-state-capture
+# added 2026-08-13: spec-casc-tok-free-judgment's OTHER half (see the
+# rejection_sampler.py section above). Unlike hidden-state-capture, this
+# one is NOT meant to compose with arbitrary methods -- it only makes
+# sense together with spec-casc-tok-free-judgment's own rejection_sampler.py
+# patch, so it's installed by patches/apply.sh itself (inlined as a special
+# case, same pattern as mentored-dec's own V2-file handling), not a
+# separate apply_*.sh script. Overwrites the real sequence's last
+# CRITERION_LEN drafted columns with a fixed criterion-question pattern
+# right after the drafter proposes its normal block, so the target's
+# already-parallel verification forward pass this round also computes
+# real logits at the criterion positions.
+4a745616203e2613b04fca27cfae8095957cd217e94899255127527686092c08  free-judgment-model-runner
+# updated 2026-08-13: same phrasing switch as spec-casc-tok-free-judgment's
+# own entry above. Previous hash (do not use):
+# 8f71aff87ffc74bf60705f9ccb2b92b401bf9de3bf2316f5097384636ca375f2
+# updated 2026-08-13: same phrasing switch as spec-casc-tok-free-judgment's
+# own entry above. Previous hashes (do not use):
+# 5e1c9da4a4ba803e2e490d4ee63622a18354dd3d47063277994621c3f4af5b35
+# 4713e47dbb9ee99c2d7889785b573f653015960d139ce336bee55c539cbef793
+# c5e76203dd610d4397180ba63f777524b77ee16d7e23c497cc57a144cb0a6c81
+# 49281f234d0c259215db479a21b81681a078df314158e8bfccbda2e18685f3cd
+# 1329dc4973fa6c0510834a2bc46c17bfe824116bc32b562a0d6a22ebcbc87a78
+# updated 2026-08-13: same phrasing switch as spec-casc-tok-free-judgment's
+# own entry above. Previous hashes (do not use):
+# 4713e47dbb9ee99c2d7889785b573f653015960d139ce336bee55c539cbef793
+# c5e76203dd610d4397180ba63f777524b77ee16d7e23c497cc57a144cb0a6c81
+# 49281f234d0c259215db479a21b81681a078df314158e8bfccbda2e18685f3cd
+# 1329dc4973fa6c0510834a2bc46c17bfe824116bc32b562a0d6a22ebcbc87a78
+# updated 2026-08-13: same unclosed-paren fix as spec-casc-tok-free-
+# judgment's own entry above. Previous hashes (do not use):
+# c5e76203dd610d4397180ba63f777524b77ee16d7e23c497cc57a144cb0a6c81
+# 49281f234d0c259215db479a21b81681a078df314158e8bfccbda2e18685f3cd
+# 1329dc4973fa6c0510834a2bc46c17bfe824116bc32b562a0d6a22ebcbc87a78
+# updated 2026-08-13: same criterion-phrase replacement as
+# spec-casc-tok-free-judgment's own entry above (both halves must always
+# carry the exact same pattern -- verified by direct comparison at import
+# time, not just by construction). Previous hashes (do not use):
+# 49281f234d0c259215db479a21b81681a078df314158e8bfccbda2e18685f3cd
+# 1329dc4973fa6c0510834a2bc46c17bfe824116bc32b562a0d6a22ebcbc87a78
+# fixed 2026-08-13: first draft used os.getuid() without importing os --
+# gpu_model_runner.py (unlike every rejection_sampler.py patch, which all
+# explicitly `import os`) does not import os at module level in pristine
+# vLLM, so this was a NameError at import time, invisible to py_compile
+# (which only parses, never executes, so a module-level NameError from a
+# missing import doesn't surface until a real import/run) -- caught by an
+# actual server startup crash, not by any of this patch's own build-time
+# checks. Fixed by adding `import os`; a real `python3 -c "import ..."`
+# check (not just py_compile) was added to this patch's own verification
+# workflow going forward. Superseded hash (do not use):
+# 1329dc4973fa6c0510834a2bc46c17bfe824116bc32b562a0d6a22ebcbc87a78

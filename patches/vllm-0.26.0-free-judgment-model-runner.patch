@@ -1,0 +1,144 @@
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -4,6 +4,7 @@
+ import functools
+ import gc
+ import itertools
++import os
+ import threading
+ import time
+ from collections import defaultdict
+@@ -247,6 +248,119 @@
+     from vllm.v1.spec_decode.ngram_proposer import NgramProposer
+     from vllm.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
+ 
++# LOSSY-VERIFICATION PILOT PATCH (not upstream vLLM). "Free judgment via
++# extended verification span" -- overwrites the LAST _FREE_JUDGMENT_
++# CRITERION_LEN columns of the real sequence's own drafted token block
++# (and the matching draft_probs rows) with a fixed criterion-question
++# token sequence, right after the drafter proposes its normal
++# num_speculative_tokens-wide block. The target model's SAME parallel
++# verification forward pass this round therefore also computes real
++# logits at the criterion positions -- no extra round-trip, only the
++# marginal FLOPs of a longer per-round sequence. Read back on the
++# rejection_sampler.py side (spec-casc-tok-free-judgment patch) as a
++# judgment signal, always force-rejected there so these tokens never cost
++# real generation budget.
++#
++# Requires num_speculative_tokens to be configured as REAL_DRAFT_LEN +
++# CRITERION_LEN (not just REAL_DRAFT_LEN), so every downstream fixed-size
++# structure (draft_token_ids_cpu's CPU mirror buffer, the CUDA graph
++# uniform-decode specialization keyed on 1+num_spec_tokens) sizes itself
++# correctly from the start. This was a real, load-bearing finding, not an
++# assumption: an earlier design tried to keep num_speculative_tokens at
++# its original (smaller) value and pad the RETURNED draft_token_ids
++# tensor afterward instead -- reading the actual model-runner source
++# (gpu_model_runner.py's own take_draft_token_ids/_copy_draft_token_ids_to_
++# cpu) found draft_token_ids_cpu is a FIXED-WIDTH buffer allocated once at
++# self.num_spec_tokens (the config value), and copy_() from a WIDER
++# tensor into a narrower fixed slice raises a shape-mismatch error --
++# padding after the fact does not work, the config itself must reflect
++# the true per-round width.
++#
++# Real cost/validity caveats (disclosed, not glossed over): (1) at larger
++# batch sizes the extra criterion positions are real added FLOPs, not
++# free -- this repo's own setup is batch=1 (single generation job per
++# remote/run_server_vllm.sh), where target decode is bandwidth- not
++# compute-bound, so the marginal cost is small, but the "free" framing is
++# batch-size-dependent, not universal. (2) the criterion tokens' KV is
++# discarded and recomputed every round they're forced (always-rejected by
++# design), a recurring cost, not amortized. (3) the criterion positions'
++# target-model context is only genuinely the TRUE committed context if
++# every REAL drafted token before them (positions 0..REAL_DRAFT_LEN-1)
++# actually gets accepted this round -- an earlier rejection there means
++# the criterion's own reading is conditioned on a hypothetical that never
++# became real output, and must be discarded, not acted on. That validity
++# check lives on the rejection_sampler.py side (checked against the
++# round's own real emitted history, same convention as this repo's other
++# cross-round-state patches), not here.
++_FREE_JUDGMENT_REAL_DRAFT_LEN_FILE = f"/tmp/lossy-token-eff-free-judgment-real-draft-len-{os.getuid()}"
++try:
++    with open(_FREE_JUDGMENT_REAL_DRAFT_LEN_FILE) as _f:
++        _FREE_JUDGMENT_REAL_DRAFT_LEN = int(float(_f.read().strip()))
++except (OSError, ValueError):
++    _FREE_JUDGMENT_REAL_DRAFT_LEN = 0  # 0 = disabled (no-op), the safe default
++
++# Criterion token ids, tokenized once via openai_harmony's HARMONY_GPT_OSS
++# encoding and pinned as a literal constant (same "looked up once, stable
++# across runs" convention as find_macro_loop_restarts.py's special-token
++# ids, and this repo's antiloop/force-commit/self-check patches' own fixed
++# phrases). Ends right at a literal "yes/no:" label, so the criterion's own
++# final-position logits can be read directly without needing any genuine
++# free generation at all (unlike self-check, this patch never lets the
++# model actually finish the sentence -- the whole point is a single
++# forward pass, not a multi-round exchange, and the criterion tokens are
++# always discarded regardless of what they'd naturally continue to, so
++# self-check's own "avoid imperative phrasing" lesson doesn't transfer
++# here the same way -- nothing downstream ever has to act coherently on
++# top of this phrase, unlike self-check's pivot/continue flow).
++#   "\n\nAre the current tokens wasteful or real progress? Answer in one
++#    word: yes/no, the answer is:"
++# Five superseded phrases -- see rejection_sampler.py's own copy of this
++# comment for the full story (all caught via the top-K tokens actually
++# produced there, not by inspecting p_yes/p_no alone). This one adds an
++# explicit closed-vocabulary instruction ("Answer in one word: yes/no")
++# directly before the value-pulling "the answer is:" ending.
++_FREE_JUDGMENT_CRITERION_PATTERN = [
++    279, 13938, 290, 2208, 20290, 13173, 1500, 503, 1374, 7408, 30, 30985,
++    306, 1001, 2195, 25, 14531, 60414, 11, 290, 6052, 382, 25,
++]
++_FREE_JUDGMENT_CRITERION_LEN = len(_FREE_JUDGMENT_CRITERION_PATTERN)
++
++
++def _free_judgment_overwrite(draft_token_ids, draft_probs) -> None:
++    """In-place: overwrite the last _FREE_JUDGMENT_CRITERION_LEN columns of
++    row 0 (the real sequence -- single-real-sequence-per-process scoping,
++    same convention as this repo's antiloop/force-commit/self-check
++    patches; other rows are warmup/CUDA-graph-capture only and never
++    produce real output regardless of what this overwrites there) with the
++    fixed criterion pattern, and the matching draft_probs rows with a
++    one-hot delta on each criterion token. draft_probs values there are
++    never used for anything except staying a valid, non-NaN distribution
++    -- these positions are always force-rejected on the
++    rejection_sampler.py side regardless of what draft_probs says."""
++    if _FREE_JUDGMENT_REAL_DRAFT_LEN <= 0:
++        return
++    if not torch.is_tensor(draft_token_ids) or draft_token_ids.shape[0] == 0:
++        return
++    total_width = draft_token_ids.shape[1]
++    if total_width < _FREE_JUDGMENT_CRITERION_LEN:
++        # Round is narrower than the criterion itself (e.g. the scheduler
++        # clamped num_new_tokens near the context limit) -- forcing a
++        # truncated, mid-phrase criterion would produce a garbage reading,
++        # so skip it entirely rather than force a broken fragment.
++        return
++    start = total_width - _FREE_JUDGMENT_CRITERION_LEN
++    pattern = torch.tensor(
++        _FREE_JUDGMENT_CRITERION_PATTERN, dtype=draft_token_ids.dtype, device=draft_token_ids.device
++    )
++    draft_token_ids[0, start:] = pattern
++    if torch.is_tensor(draft_probs) and draft_probs.shape[0] > 0 and draft_probs.shape[1] >= total_width:
++        vocab = draft_probs.shape[-1]
++        draft_probs[0, start:, :] = 0.0
++        for i, tok in enumerate(_FREE_JUDGMENT_CRITERION_PATTERN):
++            if 0 <= tok < vocab:
++                draft_probs[0, start + i, tok] = 1.0
++
++
+ logger = init_logger(__name__)
+ 
+ AttnMetadataDict: TypeAlias = dict[str, AttentionMetadata]
+@@ -5228,6 +5342,13 @@
+                     self._draft_probs = draft_probs
+                     self._draft_prob_req_ids = self.input_batch.req_ids.copy()
+ 
++            # FREE-JUDGMENT: overwrite the real sequence's own last
++            # criterion-length drafted columns (and matching draft_probs
++            # rows) with the fixed criterion-question pattern -- see the
++            # module-level comment. No-op unless enabled (knob file
++            # readable and > 0).
++            _free_judgment_overwrite(draft_token_ids, self._draft_probs)
++
+         return draft_token_ids
+ 
+     def update_config(self, overrides: dict[str, Any]) -> None:

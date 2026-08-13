@@ -1,0 +1,536 @@
+--- a/vllm/v1/sample/rejection_sampler.py
++++ b/vllm/v1/sample/rejection_sampler.py
+@@ -7,9 +7,393 @@
+ from dataclasses import replace
+ from typing import TYPE_CHECKING
+ 
++import os
++import sys
++
+ import torch
+ import torch.nn as nn
+ 
++# LOSSY-VERIFICATION PILOT PATCH (not upstream vLLM).
++#
++# Speculative Cascades [Tok] (spec-casc-tok), Narasimhan et al. 2025 appendix
++# ("Faster Cascades via Speculative Decoding"), as unified into Xia et al.
++# 2026's taxonomy (arXiv:2607.08690 Appendix B, Eq. 15). Keeps the drafter's
++# own mass within a "trusted top set" of the verifier, and fills in the rest
++# (both outside that set, and whatever mass the drafter didn't already cover
++# inside it) with a rescaled verifier distribution:
++#
++#   pi_rej(v) = pi_res(v) = q(v) + eta*p(v)   if v in A
++#                          = eta*p(v)          otherwise
++#   A   = {u : p(u) >= (1-alpha) * max_w p(w)}     (trusted top set)
++#   eta = 1 - sum_{u in A} q(u)                    (mass NOT covered by q on A)
++#
++# This is a genuine full-vocab BLEND, not a wholesale switch between q and p
++# like this repo's spec-casc-opt/r-fuzzy patches -- pi_rej(x)/q(x) is not
++# generally 0 or 1, so (like this repo's cactus patch, and unlike
++# spec-casc-opt/r-fuzzy) this DOES need to touch recovery/residual sampling,
++# not just the accept/reject test.
++#
++# alpha=0 does NOT recover strict spec-dec here, unlike every other method in
++# this repo. At alpha=0, A = {argmax_w p(w)} (only the verifier's own top
++# token), and eta = 1 - q(argmax p) -- i.e. pi_rej already differs from p
++# unless q happens to put ALL its mass on the verifier's own top token. The
++# actual strict limit is alpha -> -inf: (1-alpha) -> +inf, so the threshold
++# (1-alpha)*max_w p(w) exceeds every p(u) (for any row with max_w p(w) > 0,
++# which is every row), A becomes empty, eta = 1 - 0 = 1, and pi_rej(v) =
++# 1*p(v) = p(v) for all v -- exactly strict. Xia et al.'s own Appendix B
++# flags this discontinuity and omits the method from their main-body results
++# partly because of it; this repo's other four patches all use alpha=0 (or
++# -inf, for the two that use -inf as their strict point) as their safe
++# missing-config default, so getting THIS one's default right (-inf, not 0)
++# is the one place that convention needs an explicit exception, not a copy.
++#
++# Implementation: A and eta are full-vocab reductions (a max and a masked
++# sum), computed once in plain PyTorch before kernel launch -- same
++# pre-reduction style as this repo's spec-casc-opt/r-fuzzy defer_mask -- and
++# passed into the accept kernel as two per-token scalar arrays (eta, and the
++# verifier's own top1 probability, from which A's membership for the drafted
++# token x alone is cheap to test in-kernel: p(x) >= (1-alpha)*top1). The
++# FULL pi_rej tensor (needed for residual sampling over the whole vocab, not
++# just x) is also built here in plain PyTorch and substituted for
++# target_probs in the call to sample_recovered_tokens, exactly the H_x
++# pattern this repo's cactus patch uses.
++#
++# alpha comes from a file, not the environment (vLLM spawns EngineCore with a
++# sanitised environment; env vars never reach it), uid-scoped AND repo-scoped
++# under /tmp so a server from the sibling lossy-spec-decode-repetition repo
++# cannot pick up this repo's (differently-prefixed) knob value if both ever
++# run on this box at once.
++_SPEC_CASC_TOK_ALPHA_FILE = f"/tmp/lossy-token-eff-spec-casc-tok-alpha-{os.getuid()}"
++try:
++    with open(_SPEC_CASC_TOK_ALPHA_FILE) as _f:
++        _SPEC_CASC_TOK_ALPHA = float(_f.read().strip())
++    _SPEC_CASC_TOK_ALPHA_SOURCE = _SPEC_CASC_TOK_ALPHA_FILE
++except (OSError, ValueError):
++    # NOT 0.0 -- see the module comment above. -inf empties the trusted top
++    # set entirely, which is the actual strict point for this method.
++    _SPEC_CASC_TOK_ALPHA = float("-inf")
++    _SPEC_CASC_TOK_ALPHA_SOURCE = f"default, no readable {_SPEC_CASC_TOK_ALPHA_FILE}"
++print(
++    f"[SPEC-CASC-TOK PATCH] pid={os.getpid()} alpha={_SPEC_CASC_TOK_ALPHA} "
++    f"({_SPEC_CASC_TOK_ALPHA_SOURCE})",
++    file=sys.stderr,
++    flush=True,
++)
++
++# SELF-CHECK-PIVOT (analysis/semantic_guard/, not upstream vLLM, not part of
++# Xia et al.'s taxonomy). Periodic, budget-aware self-assessment + reactive
++# pivot, built after this investigation established: (1) spec-casc-tok-
++# force-commit (the "never commits" fix) recovers tokens but not a correct
++# answer -- it truncates the waste rather than avoiding it; (2) FIVE
++# independently-designed structural/statistical signals (window-entropy
++# ramp, sustained confidence dip, hesitation-word density, continuous
++# hidden-state recurrence, and a digit-normalized "canonical template"
++# periodicity check built specifically to catch the repeated-bisection-with-
++# different-literals shape this investigation's own rambling case actually
++# has) ALL fail to reliably separate productive from unproductive
++# generation -- the canonical-template check in particular fires heavily
++# and early (16% through, 100+ times) on a case that succeeds, while never
++# firing at all on the case it was built to catch, once tuned to avoid
++# false-positiving on ordinary piecewise-case enumeration; (3) the one
++# signal that DID show a strong, real correlation all session is the
++# model's OWN self-report -- runs containing a spontaneous "this is
++# messy"/"I'm stuck"-type phrase run ~2.7x longer and hit the token cap
++# ~6.5x more often than runs without one, checked across the full AIME24
++# corpus (see analysis/semantic_guard/README.md).
++#
++# Rather than a sixth cheap structural proxy, this patch outsources the
++# judgment call to the model itself. Every _SELF_CHECK_INTERVAL real
++# emitted tokens (persistent, cross-round token count), FORCE-inject a
++# short, fixed self-assessment question into the sequence's own stream --
++# one-hot target_probs, same mechanism as spec-casc-tok-force-commit and
++# spec-casc-tok-antiloop, so no kernel changes -- then let the next few
++# tokens generate COMPLETELY UNCONSTRAINED (no forcing at all) and read
++# back whether the model's own genuine answer starts with "yes" or "no".
++# An ambiguous or slow answer defaults to "no" (never treated as license to
++# intervene) after _SELF_CHECK_ANSWER_MAX_TOKENS. "No" costs only the
++# question+answer tax (~30 tokens) and resumes normal generation
++# unchanged. "Yes" force-injects a second fixed phrase -- a pivot
++# ("abandon this approach, restart cleaner") if there's still budget left,
++# or force-commit's own final-channel-open push if the budget is nearly
++# exhausted (reusing that patch's own default threshold and pattern, not
++# inventing a new one; the same fixed 6-token
++# `<|end|><|start|>assistant<|channel|>final<|message|>` boundary).
++#
++# Progress through whichever fixed phrase is currently being forced is
++# always read back from the sequence's OWN real emitted history (longest
++# tail-suffix matching a pattern prefix), never assumed -- same
++# self-correcting convention as force-commit. State mutation is confined
++# entirely to the post-round update function, gated on real
++# output_token_ids; the apply function is a pure read of persistent state,
++# never itself transitions a mode -- avoids a class of bugs where a mode
++# change taken on the strength of what we ASKED the kernel to force could
++# diverge from what the kernel actually emitted (accept/recovery still
++# involve real randomness even under a one-hot target).
++_SPEC_CASC_TOK_SELF_CHECK_ALPHA_FILE = f"/tmp/lossy-token-eff-spec-casc-tok-self-check-alpha-{os.getuid()}"
++try:
++    with open(_SPEC_CASC_TOK_SELF_CHECK_ALPHA_FILE) as _f:
++        _SPEC_CASC_TOK_ALPHA = float(_f.read().strip())
++    _SPEC_CASC_TOK_ALPHA_SOURCE = _SPEC_CASC_TOK_SELF_CHECK_ALPHA_FILE
++except (OSError, ValueError):
++    _SPEC_CASC_TOK_ALPHA = float("-inf")
++    _SPEC_CASC_TOK_ALPHA_SOURCE = f"default, no readable {_SPEC_CASC_TOK_SELF_CHECK_ALPHA_FILE}"
++print(
++    f"[SPEC-CASC-TOK-SELF-CHECK PATCH] pid={os.getpid()} alpha={_SPEC_CASC_TOK_ALPHA} "
++    f"({_SPEC_CASC_TOK_ALPHA_SOURCE})",
++    file=sys.stderr,
++    flush=True,
++)
++
++_SELF_CHECK_INTERVAL_FILE = f"/tmp/lossy-token-eff-spec-casc-tok-self-check-interval-{os.getuid()}"
++try:
++    with open(_SELF_CHECK_INTERVAL_FILE) as _f:
++        _SELF_CHECK_INTERVAL = int(float(_f.read().strip()))
++except (OSError, ValueError):
++    _SELF_CHECK_INTERVAL = 3000
++print(f"[SPEC-CASC-TOK-SELF-CHECK PATCH] pid={os.getpid()} interval={_SELF_CHECK_INTERVAL}", file=sys.stderr, flush=True)
++
++# Matches spec-casc-tok-force-commit's own default threshold -- deliberately
++# not re-derived independently; "nearly exhausted" should mean the same
++# thing to both patches.
++_SELF_CHECK_FINAL_THRESHOLD_FILE = f"/tmp/lossy-token-eff-spec-casc-tok-self-check-final-threshold-{os.getuid()}"
++try:
++    with open(_SELF_CHECK_FINAL_THRESHOLD_FILE) as _f:
++        _SELF_CHECK_FINAL_THRESHOLD = int(float(_f.read().strip()))
++except (OSError, ValueError):
++    _SELF_CHECK_FINAL_THRESHOLD = 28000
++print(
++    f"[SPEC-CASC-TOK-SELF-CHECK PATCH] pid={os.getpid()} final_threshold={_SELF_CHECK_FINAL_THRESHOLD}",
++    file=sys.stderr,
++    flush=True,
++)
++
++# Fixed token-id sequences, tokenized once via openai_harmony's
++# HARMONY_GPT_OSS (o200k_harmony) encoding and pinned as literal constants
++# (same "looked up once, stable across runs" convention as
++# find_macro_loop_restarts.py's special-token ids), round-trip verified
++# (enc.decode(ids) == the source text) at the time these were generated:
++#   question: "\n\nWait, let me pause and check: am I going in circles
++#              here, making no real progress? Answer yes or no:"
++#   pivot:    "\n\nYes -- I am going in circles. Let me abandon this
++#              approach and restart with a cleaner, more direct method.\n\n"
++_SELF_CHECK_QUESTION_PATTERN = [
++    279, 17114, 11, 1632, 668, 30748, 326, 2371, 25, 939, 357, 2966, 306,
++    45131, 2105, 11, 4137, 860, 1374, 7408, 30, 30985, 14531, 503, 860, 25,
++]
++_SELF_CHECK_PIVOT_PATTERN = [
++    279, 13022, 2230, 357, 939, 2966, 306, 45131, 13, 9024, 668, 23067, 495,
++    7139, 326, 33437, 483, 261, 43956, 11, 945, 2823, 2595, 364,
++]
++# Same fixed boundary as spec-casc-tok-force-commit: <|end|>=200007
++# <|start|>=200006 "assistant"=173781 <|channel|>=200005 "final"=17196
++# <|message|>=200008.
++_SELF_CHECK_FINAL_OPEN_PATTERN = [200007, 200006, 173781, 200005, 17196, 200008]
++
++_SELF_CHECK_MODE_PATTERNS = {
++    "asking": _SELF_CHECK_QUESTION_PATTERN,
++    "pivoting": _SELF_CHECK_PIVOT_PATTERN,
++    "final_forcing": _SELF_CHECK_FINAL_OPEN_PATTERN,
++}
++_SELF_CHECK_ANSWER_MAX_TOKENS = 6
++_SELF_CHECK_TAIL_MAXLEN = 64
++_SELF_CHECK_WARMUP_BATCH_THRESHOLD = 8  # matches this repo's other cross-round-state patches
++
++_SELF_CHECK_STATE: dict[str, object] = {
++    "token_count": 0,
++    "next_check_at": _SELF_CHECK_INTERVAL,
++    "mode": "idle",  # idle | asking | reading | pivoting | final_forcing
++    "tail": [],
++    "answer_buffer": [],
++    "final_opened": False,
++}
++
++_SELF_CHECK_ENCODING = None
++
++
++def _self_check_get_encoding():
++    global _SELF_CHECK_ENCODING
++    if _SELF_CHECK_ENCODING is None:
++        from openai_harmony import HarmonyEncodingName, load_harmony_encoding
++
++        _SELF_CHECK_ENCODING = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
++    return _SELF_CHECK_ENCODING
++
++
++def _self_check_decode(ids: list[int]) -> str:
++    """Best-effort decode of a short token id list to text -- tolerant of a
++    trailing incomplete multi-byte sequence (returns whatever prefix
++    decodes cleanly, dropping an unresolved tail, rather than raising).
++    Only used for a coarse "does this start with yes/no" check, so a
++    slightly short decode on the rare split-character case is harmless."""
++    enc = _self_check_get_encoding()
++    for cut in range(len(ids), 0, -1):
++        try:
++            return enc.decode_utf8(ids[:cut])
++        except Exception:
++            continue
++    return ""
++
++
++def _self_check_read_answer(ids: list[int]) -> bool | None:
++    """True/False once the buffered tokens' decoded text clearly starts
++    (after stripping whitespace/quoting) with "yes" or "no"; None while
++    still ambiguous -- caller keeps accumulating until
++    _SELF_CHECK_ANSWER_MAX_TOKENS, then treats None as "no" (the SAFE
++    default: an ambiguous or non-cooperating answer must never be read as
++    license to intervene)."""
++    text = _self_check_decode(ids).strip().lower().lstrip("*_\"'() \t\n")
++    if text.startswith("yes"):
++        return True
++    if text.startswith("no"):
++        return False
++    return None
++
++
++def _self_check_pattern_progress(tail: list[int], pattern: list[int]) -> int:
++    """Longest suffix of `tail` that equals a prefix of `pattern` -- same
++    logic as spec-casc-tok-force-commit's own pattern-progress check,
++    generalized to whichever fixed phrase is currently being forced."""
++    n = len(pattern)
++    for k in range(min(n, len(tail)), 0, -1):
++        if tail[-k:] == pattern[:k]:
++            return k
++    return 0
++
++
++def _self_check_apply(
++    target_probs: torch.Tensor,
++    num_draft_tokens: list[int],
++    cu_num_draft_tokens: torch.Tensor,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Pure read of persistent state -- never mutates _SELF_CHECK_STATE
++    (see the module-level comment for why). Returns (possibly-forced
++    target_probs, force_mask); force_mask is purely informational, same
++    convention as this repo's other guards.
++
++    Forces EVERY still-unforced pattern position available in this round,
++    not just the first (start0) -- a real bug caught by observing a live
++    run: if start0's forced token happens to be genuinely ACCEPTED (the
++    draft's own natural proposal coincides with it, plausible for common
++    short words, and especially likely right after the model has just been
++    forced to say the pattern's own opening words -- it tends to keep
++    talking in that voice), the round does NOT terminate the way a
++    force-REJECTION always does; it continues to this round's later
++    positions, which -- if only start0 were forced -- would fall through to
++    UNFORCED, fully natural target_probs, letting the model's own
++    continuation diverge from the intended pattern mid-force. The next
++    round's tail-based progress readback then (correctly) detects the
++    broken match and restarts the pattern from token 0, producing a real,
++    observed degenerate cycle (the pivot phrase's own opening words
++    repeating over and over, each time diverging at the same point and
++    restarting) -- the exact failure shape this patch exists to fix,
++    except self-inflicted by the forcing mechanism itself. Forcing the
++    round's full available span (min(this round's draft length, pattern
++    tokens remaining)) closes this: every position that could possibly be
++    reached while still mid-pattern is deterministically pinned, so an
++    accept-vs-reject-then-recover coin flip at any one position can never
++    let natural content leak into the middle of a forced phrase."""
++    state = _SELF_CHECK_STATE
++    num_tokens = target_probs.shape[0]
++    force_mask = torch.zeros(num_tokens, dtype=torch.bool, device=target_probs.device)
++    if state["final_opened"]:
++        return target_probs, force_mask
++    mode = state["mode"]
++    pattern = _SELF_CHECK_MODE_PATTERNS.get(mode)
++    if pattern is None:  # "idle" or "reading" -- nothing to force this round
++        return target_probs, force_mask
++    if not num_draft_tokens or num_draft_tokens[0] == 0:
++        return target_probs, force_mask
++    end0 = int(cu_num_draft_tokens[0].item())
++    n0 = num_draft_tokens[0]
++    start0 = end0 - n0
++    progress = _self_check_pattern_progress(state["tail"], pattern)  # type: ignore[arg-type]
++    remaining = len(pattern) - progress
++    if remaining <= 0:
++        return target_probs, force_mask
++    n_to_force = min(n0, remaining)
++    forced = target_probs.clone()
++    for i in range(n_to_force):
++        pos = start0 + i
++        forced_token = pattern[progress + i]
++        forced[pos] = 0.0
++        forced[pos, forced_token] = 1.0
++        force_mask[pos] = True
++    return forced, force_mask
++
++
++def _self_check_update(
++    output_token_ids: torch.Tensor,
++    num_draft_tokens: list[int],
++    batch_size: int,
++) -> None:
++    """Cross-round persistence AND the ONLY place _SELF_CHECK_STATE['mode']
++    ever changes -- every transition is gated on the ACTUAL emitted tokens
++    (ground truth), never an assumption about what _self_check_apply asked
++    the kernel to force. Same warmup-batch reset convention as this repo's
++    other cross-round-state patches."""
++    state = _SELF_CHECK_STATE
++    if batch_size > _SELF_CHECK_WARMUP_BATCH_THRESHOLD:
++        state["token_count"] = 0
++        state["next_check_at"] = _SELF_CHECK_INTERVAL
++        state["mode"] = "idle"
++        state["tail"] = []
++        state["answer_buffer"] = []
++        state["final_opened"] = False
++        return
++    row = output_token_ids[0].tolist()
++    emitted = [t for t in row if t != PLACEHOLDER_TOKEN_ID]
++    if not emitted:
++        return
++    state["token_count"] = int(state["token_count"]) + len(emitted)
++    if state["final_opened"]:
++        return
++
++    mode = state["mode"]
++    pattern = _SELF_CHECK_MODE_PATTERNS.get(mode)
++    if pattern is not None:
++        tail = list(state["tail"]) + emitted  # type: ignore[arg-type]
++        if len(tail) > _SELF_CHECK_TAIL_MAXLEN:
++            del tail[: len(tail) - _SELF_CHECK_TAIL_MAXLEN]
++        state["tail"] = tail
++        if _self_check_pattern_progress(tail, pattern) >= len(pattern):
++            if mode == "asking":
++                state["mode"] = "reading"
++                state["answer_buffer"] = []
++                state["tail"] = []
++            elif mode == "pivoting":
++                state["mode"] = "idle"
++                state["next_check_at"] = state["token_count"] + _SELF_CHECK_INTERVAL  # type: ignore[operator]
++                state["tail"] = []
++            elif mode == "final_forcing":
++                state["final_opened"] = True
++                state["tail"] = []
++        return
++
++    if mode == "reading":
++        buf = list(state["answer_buffer"]) + emitted  # type: ignore[arg-type]
++        decision = _self_check_read_answer(buf)
++        if decision is None and len(buf) < _SELF_CHECK_ANSWER_MAX_TOKENS:
++            state["answer_buffer"] = buf
++            return
++        messy = bool(decision)
++        state["answer_buffer"] = []
++        if messy and state["token_count"] < _SELF_CHECK_FINAL_THRESHOLD:  # type: ignore[operator]
++            state["mode"] = "pivoting"
++        elif messy:
++            state["mode"] = "final_forcing"
++        else:
++            state["mode"] = "idle"
++            state["next_check_at"] = state["token_count"] + _SELF_CHECK_INTERVAL  # type: ignore[operator]
++        return
++
++    # mode == "idle": has this sequence now burned enough tokens since the
++    # last check (or since the start) to schedule the next one?
++    if state["token_count"] >= state["next_check_at"]:  # type: ignore[operator]
++        state["mode"] = "asking"
++        state["tail"] = []
++
++
++from vllm.v1.sample.relaxation_trace import TRACER as _TRACER
+ from vllm.logger import init_logger
+ from vllm.triton_utils import tl, triton
+ from vllm.v1.outputs import LogprobsLists, LogprobsTensors, SamplerOutput
+@@ -474,6 +858,45 @@
+     target_probs = target_logits.softmax(dim=-1, dtype=torch.float32)
+     assert target_probs.is_contiguous()
+ 
++    # SELF-CHECK-PIVOT: one-hot target_probs onto the next token of
++    # whichever fixed phrase is currently being forced (question, pivot, or
++    # force-commit's own final-channel-open pattern), or leave target_probs
++    # untouched while "idle" or "reading" (the answer must be genuinely
++    # unconstrained). See the module-level comment for the full mechanism;
++    # same "distribution edit before spec-casc-tok's own math, everything
++    # downstream is already a pure function of target_probs" pattern as
++    # this repo's antiloop and force-commit patches. target_probs_for_trace
++    # keeps the ORIGINAL, pre-force distribution for the tracer's own
++    # strict/lossy counterfactuals -- same convention as this repo's other
++    # guard patches; self_check_mask is passed as a separate, purely
++    # informational field instead.
++    target_probs_for_trace = target_probs
++    self_check_mask: torch.Tensor | None = None
++    if draft_probs is not None and not synthetic_mode:
++        target_probs, self_check_mask = _self_check_apply(
++            target_probs, num_draft_tokens, cu_num_draft_tokens
++        )
++
++    # spec-casc-tok: build the full proposal-independent relaxed target
++    # pi_rej (see the module-level comment for the formula and why this is
++    # needed both here, for recovery, and again -- as two per-token scalar
++    # arrays -- at the kernel launch below). Computed once here, before
++    # recovery sampling, in plain PyTorch. Gated on draft_probs is not None
++    # for the same reason as every other patch's relaxation branch: with no
++    # q, there is nothing to put in the trusted top set.
++    recovery_target_probs = target_probs
++    casc_tok_eta = casc_tok_top1 = None
++    if draft_probs is not None:
++        casc_tok_top1 = target_probs.max(dim=-1, keepdim=True).values  # [num_tokens, 1]
++        in_top_set = target_probs >= (1.0 - _SPEC_CASC_TOK_ALPHA) * casc_tok_top1
++        casc_tok_eta = 1.0 - (draft_probs * in_top_set).sum(dim=-1)  # [num_tokens]
++        pi_rej = casc_tok_eta.unsqueeze(-1) * target_probs + torch.where(
++            in_top_set, draft_probs, torch.zeros_like(draft_probs)
++        )
++        recovery_target_probs = pi_rej.contiguous()
++        casc_tok_top1 = casc_tok_top1.squeeze(-1).contiguous()
++        casc_tok_eta = casc_tok_eta.contiguous()
++
+     # Sample recovered tokens for each position.
+     # [num_tokens]
+     recovered_token_ids = sample_recovered_tokens(
+@@ -482,7 +905,7 @@
+         cu_num_draft_tokens,
+         draft_token_ids,
+         draft_probs,
+-        target_probs,
++        recovery_target_probs,
+         sampling_metadata,
+         device,
+         use_fp64_gumbel,
+@@ -503,9 +926,32 @@
+         max_spec_len,
+         vocab_size,
+         synthetic_conditional_rates,
++        casc_tok_eta,
++        casc_tok_top1,
++        _SPEC_CASC_TOK_ALPHA,
+         NO_DRAFT_PROBS=draft_probs is None,
+         SYNTHETIC_MODE=synthetic_mode,
+     )
++    # Phase-1 observation hook. No-op unless a trace destination is configured;
++    # never influences acceptance, only records what the kernel just decided.
++    if _TRACER.enabled:
++        _TRACER.record(
++            draft_token_ids=draft_token_ids,
++            draft_probs=draft_probs,
++            target_probs=target_probs_for_trace,
++            uniform_probs=uniform_probs,
++            recovered_token_ids=recovered_token_ids,
++            bonus_token_ids=bonus_token_ids,
++            output_token_ids=output_token_ids,
++            cu_num_draft_tokens=cu_num_draft_tokens,
++            num_draft_tokens=num_draft_tokens,
++            scalar_multiplier=_SPEC_CASC_TOK_ALPHA,
++            casc_tok_alpha=_SPEC_CASC_TOK_ALPHA,
++            token_marker_guard_mask=self_check_mask,  # purely informational: True where a forced phrase fired
++            relaxation_method="spec_casc_tok_self_check",
++        )
++    if draft_probs is not None and not synthetic_mode:
++        _self_check_update(output_token_ids, num_draft_tokens, batch_size)
+     return output_token_ids
+ 
+ 
+@@ -786,6 +1232,9 @@
+     max_spec_len,
+     vocab_size,
+     synthetic_conditional_rates_ptr,  # [num_speculative_tokens] or None
++    casc_tok_eta_ptr,  # [num_tokens] or None iff NO_DRAFT_PROBS; spec-casc-tok
++    casc_tok_top1_ptr,  # [num_tokens] or None iff NO_DRAFT_PROBS; spec-casc-tok
++    casc_tok_alpha,  # scalar; -inf for the strict rule (see module comment)
+     NO_DRAFT_PROBS: tl.constexpr,
+     SYNTHETIC_MODE: tl.constexpr,
+ ):
+@@ -815,20 +1264,35 @@
+                 rate = tl.load(synthetic_conditional_rates_ptr + pos)
+                 accepted = uniform_prob < rate
+             else:
++                target_prob = tl.load(
++                    target_probs_ptr + (start_idx + pos) * vocab_size + draft_token_id
++                )
+                 if NO_DRAFT_PROBS:
+                     draft_prob = 1
++                    # No q to build a trusted top set from: unchanged strict.
++                    accepted = draft_prob > 0 and target_prob / draft_prob >= uniform_prob
+                 else:
+                     draft_prob = tl.load(
+                         draft_probs_ptr
+                         + (start_idx + pos) * vocab_size
+                         + draft_token_id
+                     )
+-                target_prob = tl.load(
+-                    target_probs_ptr + (start_idx + pos) * vocab_size + draft_token_id
+-                )
+-                # NOTE(woosuk): While the draft probability should never be 0,
+-                # we check it to avoid NaNs. If it happens to be 0, we reject.
+-                accepted = draft_prob > 0 and target_prob / draft_prob >= uniform_prob
++                    # spec-casc-tok: pi_rej(x) = eta*p(x) + q(x) if x is in
++                    # the trusted top set A = {u: p(u) >= (1-alpha)*top1},
++                    # else eta*p(x). eta and top1 are per-token full-vocab
++                    # reductions computed upstream in plain PyTorch (see the
++                    # module-level comment); only membership of the drafted
++                    # token x itself needs computing here.
++                    eta = tl.load(casc_tok_eta_ptr + start_idx + pos)
++                    top1 = tl.load(casc_tok_top1_ptr + start_idx + pos)
++                    x_in_top_set = target_prob >= (1.0 - casc_tok_alpha) * top1
++                    pi_rej_x = eta * target_prob
++                    if x_in_top_set:
++                        pi_rej_x += draft_prob
++                    # NOTE(woosuk): While the draft probability should never
++                    # be 0, we check it to avoid NaNs. If it happens to be 0,
++                    # we reject.
++                    accepted = draft_prob > 0 and pi_rej_x / draft_prob >= uniform_prob
+             if accepted:
+                 token_id = draft_token_id
+             else:

@@ -1852,6 +1852,69 @@ at K=8 is the best available trade: -3.4pp accuracy for a guard that is
 different profile from every other guard variant tried, all of which buy
 whatever accuracy they keep at a real efficiency cost.
 
+## Does AIME24's picture generalize to HumanEval? -- 20-case pilot for the two best AIME24 candidates
+
+AIME24's two accuracy-tier winners (`future-guard-strict K=8`, `v2`) have
+never been run on HumanEval. Precedent for taking this seriously rather
+than assuming it transfers: plain `spec_casc_tok_semantic_guard` (override)
+already flips sign between benchmarks -- AIME24 -13.4pp accuracy/+10.1%
+length, HumanEval **+1.3pp accuracy/-7.4% length** (see "Full-scale
+HumanEval results" earlier in this document). Nothing guarantees AIME24's
+verdict carries over.
+
+20-case pilot (first 20 HumanEval cases, fresh baseline in the same batch,
+existing full-164-case `strict`/`spec_casc_tok0p3`/override data available
+separately for later full-scale comparison):
+
+| metric | baseline | future-guard-strict K=8 | v2 (wide, override) |
+|---|---:|---:|---:|
+| accuracy | 20/20 | 20/20 | 20/20 |
+| mean completion length | 428.1 | 531.4 (+24.1%) | 471.9 (+10.2%) |
+| mean accepted length (l̄) | 2.651 | 2.566 (-3.2%) | 2.618 (-1.2%) |
+| mean verifier rounds | 123.2 | 158.7 (+28.8%) | 139.1 (+12.9%) |
+| total wall-time (20 cases) | 37.1s | 47.4s (+27.8%) | 42.5s (+14.6%) |
+| hesitation words | 68 | 99 (+45.6%) | 84 (+23.5%) |
+| hesitation words, relaxed-only | 5 (7.4%) | 4 (4.0%) | 0 (0.0%) |
+
+**Accuracy is uninformative at this scale -- ceiling effect.** All three
+arms solve all 20 cases; HumanEval's baseline failure rate is already low
+enough (spec_casc_tok: 157/164, 95.7%) that a 20-case sample has a real
+chance of showing zero failures for every arm regardless of any underlying
+difference between them. This pilot cannot answer the accuracy question at
+all -- only the full 164-case run can, the same way the existing override-
+guard full-scale run needed all 164 cases to surface its +1.3pp.
+
+**The length/rounds signal, unlike accuracy, IS visible at this scale --
+and it's negative for both candidates, a different story from AIME24 and
+from override's own HumanEval result.** `future-guard-strict K=8` was
+AIME24's most efficient guard (cheaper than baseline on every axis); here
+it costs +24.1% length, +28.8% rounds, +27.8% wall-time, +45.6% hesitation
+words -- worse than baseline, not better. `v2` costs less (+10.2% length)
+but still costs, not saves. Both go the OPPOSITE direction from plain
+override's own HumanEval result (-7.4% length) -- so this isn't "guards
+generally help HumanEval," it's specific to which guard.
+
+**Reading**: this pilot rules out one hopeful hypothesis ("future-guard-
+strict K=8's AIME24 efficiency win transfers directly") but does NOT
+resolve whether either candidate helps or hurts HumanEval accuracy -- that
+genuinely requires the full 164-case sweep, which is a real time
+commitment (164 fresh-server startups per arm, ~4.5h/arm at this pilot's
+observed per-case rate, ~9h for both candidates run sequentially). Not
+launched automatically; flagged as the clear next step if pursuing this
+further.
+
+Reproduce:
+
+```
+python3 scripts/fresh_server_replay.py \
+    --arms spec_casc_tok spec_casc_tok_semantic_guard_future_guard spec_casc_tok_semantic_guard_v2 \
+    --spec-casc-tok-alpha 0.3 --spec-casc-tok-semantic-guard-future-guard-alpha 0.3 \
+    --spec-casc-tok-semantic-guard-future-guard-k 8 --spec-casc-tok-semantic-guard-v2-alpha 0.3 \
+    --cases $(ls prompts/humaneval | grep '^case_' | sort | head -20) \
+    --prompt-root prompts/humaneval --runs-root runs/humaneval_candidates_pilot \
+    --log-root logs/humaneval_candidates_pilot --max-new-tokens 9000
+```
+
 ## Reference: every `spec_casc_tok`-family method explained, and every full-scale AIME24 result in one place
 
 Everything above this section built up incrementally; this section is the
