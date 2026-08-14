@@ -1,0 +1,195 @@
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -4,6 +4,7 @@
+ import functools
+ import gc
+ import itertools
++import os
+ import threading
+ import time
+ from collections import defaultdict
+@@ -247,6 +248,170 @@
+     from vllm.v1.spec_decode.ngram_proposer import NgramProposer
+     from vllm.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
+ 
++# LOSSY-VERIFICATION PILOT PATCH (not upstream vLLM). "Judge + nudge":
++# spec-casc-tok-free-judgment's own "extended verification span" trick
++# (EAGLE verification is already ONE parallel forward pass over the whole
++# drafted block, so appending fixed tokens after the real draft lets the
++# target's SAME pass compute more real logits at marginal FLOPs cost),
++# combined with two separately-validated findings from this investigation
++# instead of free-judgment's own reject-and-resample actuator (proven, via
++# a real 6-case rollout AND a positionally-verified causal trace on
++# case_010, to do more harm than good -- resampling from an UNMODIFIED
++# target distribution barely moves a stuck reasoning state):
++#   1. The best-performing free-judgment criterion phrase of six tested
++#      against 48 real ground-truth-labeled points (ANALYSIS/semantic_
++#      guard/README.md): a TRUE/FALSE declarative judgment with an
++#      explicit completion-forcing scaffold, specifically strongest on
++#      confirmed semantic reasoning loops (not just literal repetition).
++#   2. spec-casc-tok-rv's own ephemeral logit-blend actuator (see that
++#      patch's own module comment) -- ephemeral, never committed to
++#      persistent context, closing the exact gap reject-and-resample had.
++#
++# ORIGINALLY designed as a 3-stage screen->verify->nudge pipeline, gating
++# the wide (judge/nudge) rounds behind a cheap always-on hidden-state-
++# recurrence screen so the width tax would only be paid when something
++# looked suspicious. That screen stage was DROPPED after a real,
++# empirical test: making free-judgment's own criterion-append conditional
++# (fire 1/20 rounds, num_speculative_tokens left at the same fixed 29)
++# measured 0.02807 s/round -- statistically identical to the ALWAYS-wide
++# baseline (0.02799 s/round), not the genuinely-narrow one (0.01250
++# s/round). num_speculative_tokens is a static, server-startup-fixed
++# config; the SCHEDULER (not this patch) decides how many tokens get
++# verified each round, and always schedules the full configured width
++# regardless of what content this patch puts there. There is no live
++# per-round lever to make some rounds cheap and others expensive within
++# this repo's patch scope. See analysis/semantic_guard/
++# DESIGN_screen_verify_nudge.md for the full design history including
++# this amendment.
++#
++# Net effect: this mechanism pays the wide-verification tax EVERY round,
++# unconditionally, same order of cost as free-judgment's own criterion
++# (measured ~+150%/round for a comparable width) -- an accepted cost, not
++# an oversight.
++#
++# Round layout (row 0 -- single-real-sequence-per-process scoping, same
++# convention as this repo's other cross-round-state patches):
++#   JUDGE mode (default): [0:REAL_DRAFT_LEN) real draft, then the fixed
++#     TRUE/FALSE judge criterion pattern.
++#   NUDGE mode (only while rejection_sampler.py's own nudge_remaining
++#     counter is > 0): [0:REAL_DRAFT_LEN) real draft, then the fixed
++#     reflection prompt, then a literal COPY of the real draft tokens
++#     (spec-casc-tok-rv's own layout, reused verbatim).
++# NUM_SPEC is configured as max(REAL_DRAFT_LEN + JUDGE_LEN,
++# 2*REAL_DRAFT_LEN + RV_PROMPT_LEN) so both patterns always fit; whichever
++# pattern is shorter just leaves its own trailing columns as whatever
++# EAGLE itself drafted there -- harmless, since both patterns always
++# force-reject at their own first token, so nothing past that boundary is
++# ever reached by the round's own accept/reject walk regardless of what's
++# in the unused tail.
++_JN_REAL_DRAFT_LEN_FILE = f"/tmp/lossy-token-eff-judge-nudge-real-draft-len-{os.getuid()}"
++try:
++    with open(_JN_REAL_DRAFT_LEN_FILE) as _f:
++        _JN_REAL_DRAFT_LEN = int(float(_f.read().strip()))
++except (OSError, ValueError):
++    _JN_REAL_DRAFT_LEN = 0  # 0 = disabled (no-op), the safe default
++
++# Judge criterion, tokenized once via openai_harmony's HARMONY_GPT_OSS
++# encoding, pinned as a literal constant (same convention as every other
++# fixed-phrase patch in this repo). The best of six phrasings tested
++# against 48 real ground-truth-labeled points (see
++# analysis/semantic_guard/README.md): a declarative TRUE/FALSE judgment
++# with an explicit completion-forcing scaffold ("the answer is:" -- same
++# lesson as free-judgment's own six-phrase iteration: without an explicit
++# completion constraint, the model just keeps explaining instead of
++# answering). Text (the "FLASE" typo is deliberate -- literally what was
++# tested and validated; untested whether correcting it changes anything):
++#   "\n\nThe last few tokens are unproductively repetitive. Answer TRUE
++#    or FLASE: the answer is:"
++_JN_JUDGE_PATTERN = [
++    279, 976, 2174, 3120, 20290, 553, 537, 5260, 5861, 93185, 13, 30985,
++    19894, 503, 17134, 8925, 25, 290, 6052, 382, 25,
++]
++_JN_JUDGE_LEN = len(_JN_JUDGE_PATTERN)
++
++# Reflection prompt, identical to spec-casc-tok-rv's own pattern (see that
++# patch's own module comment for the text and rationale). Duplicated
++# literally here, not imported -- "patches are self-contained" convention.
++_JN_RV_PROMPT_PATTERN = [
++    279, 35648, 290, 2208, 7139, 2935, 45236, 7933, 503, 189759, 13, 9393,
++    1001, 19230, 620, 106545, 2613, 364,
++]
++_JN_RV_PROMPT_LEN = len(_JN_RV_PROMPT_PATTERN)
++
++# Shared with the rejection_sampler.py half: the count of NUDGE rounds
++# still remaining, written there (the only place that knows the judge's
++# own score, and therefore the only place mode transitions can happen),
++# read here to decide which pattern to force this round. 0 = judge mode
++# (the default); >0 = nudge mode, counting down.
++_JN_NUDGE_REMAINING_FILE = f"/tmp/lossy-token-eff-judge-nudge-remaining-{os.getuid()}"
++
++
++def _jn_read_nudge_remaining() -> int:
++    try:
++        with open(_JN_NUDGE_REMAINING_FILE) as f:
++            return int(float(f.read().strip()))
++    except (OSError, ValueError):
++        return 0
++
++
++def _jn_overwrite(draft_token_ids, draft_probs) -> None:
++    """In-place: overwrite row 0's own columns starting at
++    [REAL_DRAFT_LEN:) with either the judge criterion (default) or the
++    RV reflection-prompt + duplicate-draft pattern (nudge mode, while
++    rejection_sampler.py's own nudge_remaining counter is > 0) -- see the
++    module-level comment for the round layout and why an unused trailing
++    tail (when the chosen pattern is shorter than the configured max
++    width) is harmless. draft_probs at the overwritten positions is set
++    one-hot purely to stay a valid, non-NaN distribution -- these
++    positions are always force-rejected on the rejection_sampler.py side
++    regardless of what draft_probs says, same convention as every other
++    patch in this repo that overwrites drafted content."""
++    if _JN_REAL_DRAFT_LEN <= 0:
++        return
++    if not torch.is_tensor(draft_token_ids) or draft_token_ids.shape[0] == 0:
++        return
++    total_width = draft_token_ids.shape[1]
++    nudge_remaining = _jn_read_nudge_remaining()
++
++    if nudge_remaining > 0:
++        needed = 2 * _JN_REAL_DRAFT_LEN + _JN_RV_PROMPT_LEN
++        if total_width < needed:
++            return
++        prompt_start = _JN_REAL_DRAFT_LEN
++        dup_start = _JN_REAL_DRAFT_LEN + _JN_RV_PROMPT_LEN
++        pattern_t = torch.tensor(
++            _JN_RV_PROMPT_PATTERN, dtype=draft_token_ids.dtype, device=draft_token_ids.device
++        )
++        draft_token_ids[0, prompt_start:dup_start] = pattern_t
++        draft_token_ids[0, dup_start:dup_start + _JN_REAL_DRAFT_LEN] = draft_token_ids[0, 0:_JN_REAL_DRAFT_LEN]
++        if torch.is_tensor(draft_probs) and draft_probs.shape[0] > 0 and draft_probs.shape[1] >= total_width:
++            vocab = draft_probs.shape[-1]
++            draft_probs[0, prompt_start:dup_start, :] = 0.0
++            for i, tok in enumerate(_JN_RV_PROMPT_PATTERN):
++                if 0 <= tok < vocab:
++                    draft_probs[0, prompt_start + i, tok] = 1.0
++            draft_probs[0, dup_start:dup_start + _JN_REAL_DRAFT_LEN, :] = 0.0
++            for i in range(_JN_REAL_DRAFT_LEN):
++                tok = int(draft_token_ids[0, dup_start + i].item())
++                if 0 <= tok < vocab:
++                    draft_probs[0, dup_start + i, tok] = 1.0
++    else:
++        needed = _JN_REAL_DRAFT_LEN + _JN_JUDGE_LEN
++        if total_width < needed:
++            return
++        start = _JN_REAL_DRAFT_LEN
++        pattern_t = torch.tensor(
++            _JN_JUDGE_PATTERN, dtype=draft_token_ids.dtype, device=draft_token_ids.device
++        )
++        draft_token_ids[0, start:start + _JN_JUDGE_LEN] = pattern_t
++        if torch.is_tensor(draft_probs) and draft_probs.shape[0] > 0 and draft_probs.shape[1] >= total_width:
++            vocab = draft_probs.shape[-1]
++            draft_probs[0, start:start + _JN_JUDGE_LEN, :] = 0.0
++            for i, tok in enumerate(_JN_JUDGE_PATTERN):
++                if 0 <= tok < vocab:
++                    draft_probs[0, start + i, tok] = 1.0
++
++
+ logger = init_logger(__name__)
+ 
+ AttnMetadataDict: TypeAlias = dict[str, AttentionMetadata]
+@@ -5228,6 +5393,13 @@
+                     self._draft_probs = draft_probs
+                     self._draft_prob_req_ids = self.input_batch.req_ids.copy()
+ 
++            # JUDGE+NUDGE: overwrite the real sequence's own trailing
++            # columns with the judge criterion (default) or the RV
++            # nudge pattern (while nudge_remaining > 0) -- see the
++            # module-level comment. No-op unless enabled (knob file
++            # readable and > 0).
++            _jn_overwrite(draft_token_ids, self._draft_probs)
++
+         return draft_token_ids
+ 
+     def update_config(self, overrides: dict[str, Any]) -> None:

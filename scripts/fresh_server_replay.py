@@ -115,6 +115,53 @@ def parse_args() -> argparse.Namespace:
         # alternative there) instead of trying to discriminate perfectly, and can safely default ON.
         help="spec_casc_tok_free_judgment only: per-round score=p_yes-p_no threshold that triggers a reject-and-resample of the last real drafted token.",
     )
+    parser.add_argument(
+        "--spec-casc-tok-judge-nudge-threshold",
+        type=float,
+        default=0.03,  # NOT rigorously calibrated -- see patches/HASHES.txt's own spec-casc-tok-judge-nudge entry
+        help="spec_casc_tok_judge_nudge only: per-round score=p_true-p_false threshold that arms a nudge window.",
+    )
+    parser.add_argument(
+        "--spec-casc-tok-judge-nudge-rv-alpha",
+        type=float,
+        default=0.3,  # Reflective Verification's own default (arXiv:2505.18629)
+        help="spec_casc_tok_judge_nudge only: blend coefficient for the NUDGE mode's z_mix=(1-alpha)*z0+alpha*z_reflect.",
+    )
+    parser.add_argument(
+        "--spec-casc-tok-judge-nudge-window",
+        type=int,
+        default=4,
+        help="spec_casc_tok_judge_nudge only: fixed number of rounds to nudge for once triggered.",
+    )
+    parser.add_argument(
+        "--spec-casc-tok-judge-nudge-trace-path",
+        default="",
+        help="spec_casc_tok_judge_nudge only: file to append observation JSONL rows to. Empty = disabled (no-op).",
+    )
+    parser.add_argument(
+        "--spec-casc-tok-hsr-guard-window",
+        type=int,
+        default=600,
+        help="spec_casc_tok_hsr_guard only: committed-token window for both the recurrence budget and the percentile self-calibration.",
+    )
+    parser.add_argument(
+        "--spec-casc-tok-hsr-guard-budget",
+        type=int,
+        default=25,  # not 3 -- see patches/HASHES.txt's own hsr-guard-model-runner "fixed" entry
+        help="spec_casc_tok_hsr_guard only: recurrence-crossings required within the window to trip the guard.",
+    )
+    parser.add_argument(
+        "--spec-casc-tok-hsr-guard-percentile",
+        type=float,
+        default=99.9,
+        help="spec_casc_tok_hsr_guard only: self-calibrated per-generation percentile threshold for a recurrence crossing.",
+    )
+    parser.add_argument(
+        "--spec-casc-tok-hsr-guard-actuator-k",
+        type=int,
+        default=8,
+        help="spec_casc_tok_hsr_guard only: strict-verification window length once the budget trips.",
+    )
     parser.add_argument("--prompt-root", type=pathlib.Path, default=pathlib.Path("prompts/humaneval"))
     parser.add_argument("--runs-root", type=pathlib.Path, default=pathlib.Path("runs/humaneval_fresh"))
     parser.add_argument("--log-root", type=pathlib.Path, default=pathlib.Path("logs/humaneval_fresh"))
@@ -178,6 +225,11 @@ def tag_for(args: argparse.Namespace, arm: str) -> str:
             base += f"t{args.spec_casc_tok_force_commit_threshold}"
         if arm == "spec_casc_tok_self_check":
             base += f"i{args.spec_casc_tok_self_check_interval}"
+        if arm == "spec_casc_tok_hsr_guard":
+            # K into the tag too, not just alpha -- run directories from
+            # different actuator-K sweeps must not collide (same reason as
+            # the future-guard variants' own K-in-tag convention above).
+            base += f"k{args.spec_casc_tok_hsr_guard_actuator_k}"
     return base + args.tag_suffix
 
 
@@ -342,6 +394,16 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
         if arm == "spec_casc_tok_free_judgment":
             env["SPEC_CASC_TOK_FREE_JUDGMENT_TRACE_PATH"] = args.spec_casc_tok_free_judgment_trace_path
             env["SPEC_CASC_TOK_FREE_JUDGMENT_REJECT_THRESHOLD"] = str(args.spec_casc_tok_free_judgment_reject_threshold)
+        if arm == "spec_casc_tok_judge_nudge":
+            env["SPEC_CASC_TOK_JUDGE_NUDGE_THRESHOLD"] = str(args.spec_casc_tok_judge_nudge_threshold)
+            env["SPEC_CASC_TOK_JUDGE_NUDGE_RV_ALPHA"] = str(args.spec_casc_tok_judge_nudge_rv_alpha)
+            env["SPEC_CASC_TOK_JUDGE_NUDGE_WINDOW"] = str(args.spec_casc_tok_judge_nudge_window)
+            env["SPEC_CASC_TOK_JUDGE_NUDGE_TRACE_PATH"] = args.spec_casc_tok_judge_nudge_trace_path
+        if arm == "spec_casc_tok_hsr_guard":
+            env["HSR_GUARD_WINDOW"] = str(args.spec_casc_tok_hsr_guard_window)
+            env["HSR_GUARD_BUDGET"] = str(args.spec_casc_tok_hsr_guard_budget)
+            env["HSR_GUARD_PERCENTILE"] = str(args.spec_casc_tok_hsr_guard_percentile)
+            env["HSR_GUARD_ACTUATOR_K"] = str(args.spec_casc_tok_hsr_guard_actuator_k)
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
     handle = log_path.open("w", encoding="utf-8")

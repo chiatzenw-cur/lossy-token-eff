@@ -1,0 +1,306 @@
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -4,6 +4,8 @@
+ import functools
+ import gc
+ import itertools
++import os
++import sys
+ import threading
+ import time
+ from collections import defaultdict
+@@ -247,6 +249,257 @@
+     from vllm.v1.spec_decode.ngram_proposer import NgramProposer
+     from vllm.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
+ 
++# LOSSY-VERIFICATION PILOT PATCH (not upstream vLLM). "hsr-guard": a
++# hidden-state-recurrence-triggered strict-verification window.
++#
++# Trigger: a live, in-process replica of analysis/semantic_guard/
++# join_hidden_states.py's own S_32 trajectory-recurrence signal (fixed
++# 128-dim random projection, seed 20260810 -- IDENTICAL seed to
++# patches/hidden_state_trace.py, so this live computation lands in the same
++# projected space as this investigation's offline analysis -- L2-normalized,
++# trailing-32-mean cosine similarity against the best match at least 32
++# committed tokens back), computed incrementally from `target_hidden_states`
++# -- the SAME tensor patches/hidden_state_trace.py already reads, at zero
++# extra forward-pass cost (it's EAGLE3's own drafting input, already
++# computed every round regardless of this patch). A running per-generation
++# (not a fixed global number -- absolute S_32 values aren't comparable
++# across different prompts/runs; the offline sweep this design is based on
++# also percentile-calibrated PER CASE, not against one shared cutoff; see
++# analysis/semantic_guard/README.md) 99.9th-percentile threshold flags a
++# "recurrence crossing"; BUDGET=25 such crossings within the trailing
++# WINDOW=600 committed tokens arms the actuator -- BUDGET this high (not
++# the originally-planned 3) because a real live 8-case pilot at budget=3
++# showed the guard active 50-73% of the time on EVERY case, not a
++# selective, occasional intervention; see the _HSR_BUDGET default's own
++# comment below for the sweep that found this value.
++#
++# Actuator: force genuinely strict verification (spec-casc-tok's trusted
++# top set forced EMPTY, its own alpha=-inf limit -- see
++# spec-casc-tok-semantic-guard's module comment in rejection_sampler.py for
++# the derivation) for the next K=8 real committed tokens. Deliberately
++# reuses spec-casc-tok-semantic-guard's STATELESS, per-round mask-forcing
++# mechanism (a plain [num_tokens] bool tensor, forced into in_top_set both
++# in Python and via a from-scratch recheck in the kernel), NOT
++# spec-casc-tok-semantic-guard-future-guard's persistent Triton-kernel-
++# carried counter -- that mechanism was found to have a real, reproducible
++# bug this investigation (a marker that re-arms the window while already
++# inside an active window silently fails to reset it, ~3% of the time in
++# the one trace with ground-truth instrumentation; see HASHES.txt and
++# analysis/semantic_guard/README.md). Deliberately imprecise trigger, on
++# purpose: this investigation tested three different local-recurrence
++# metrics against real ground-truth loop labels and none cleanly separated
++# genuine stuck loops from benign one-off self-checks (see
++# analysis/semantic_guard/README.md) -- but forcing strict verification is
++# SAFE even when wrong (never corrupts content, only costs some efficiency
++# on false positives), unlike every earlier actuator this investigation
++# tried (reject-and-resample, forced pivots, ...), so a recall-favoring,
++# imprecise trigger is an acceptable trade here in a way it wasn't for
++# those.
++#
++# Coordination with rejection_sampler.py: this class only ever ARMS (writes
++# a fresh K to the remaining-window file below) -- the actual per-position
++# countdown/consumption is entirely rejection_sampler.py's own job, using
++# only its own already-known num_draft_tokens for the round plus the
++# REMAINING count it reads back. This is round-granular, not per-verified-
++# position: this class's own update() only ever runs from REAL, COMMITTED
++# tokens (this file's own equivalent of every other patch's "state only
++# transitions from real output_token_ids" rule), so there's no persistent
++# state threaded through the kernel and no reject-while-active kernel bug
++# class for this design to inherit.
++_HSR_PROJECTION_DIM = 128
++_HSR_PROJECTION_SEED = 20260810  # SAME seed as patches/hidden_state_trace.py
++_HSR_K_TRAIL = 32  # trailing-window size for S_32 (join_hidden_states.py's own S_k, k=32)
++_HSR_MIN_GAP = 32  # exclude candidate matches closer than this many committed tokens back
++_HSR_HISTORY = 800  # kept projected vectors, comfortably >= WINDOW + K_TRAIL + MIN_GAP
++_HSR_WARMUP_BATCH_THRESHOLD = 8  # same convention as relaxation_trace.py's own _MAX_REAL_BATCH
++
++
++def _hsr_read_knob(path: str, default, cast=int):
++    try:
++        with open(path) as f:
++            return cast(f.read().strip())
++    except (OSError, ValueError):
++        return default
++
++
++_HSR_WINDOW_FILE = f"/tmp/lossy-token-eff-hsr-guard-window-{os.getuid()}"
++_HSR_BUDGET_FILE = f"/tmp/lossy-token-eff-hsr-guard-budget-{os.getuid()}"
++_HSR_PERCENTILE_FILE = f"/tmp/lossy-token-eff-hsr-guard-percentile-{os.getuid()}"
++_HSR_ACTUATOR_K_FILE = f"/tmp/lossy-token-eff-hsr-guard-actuator-k-{os.getuid()}"
++# Cross-file runtime signal -- WRITTEN here (on trigger only), READ AND
++# DECREMENTED by rejection_sampler.py -- same convention as spec-casc-tok-
++# judge-nudge's own nudge_remaining file, just with the write/read roles
++# split differently (there the sampler was the sole writer; here both
++# sides write, but never concurrently -- generation is strictly sequential,
++# one round fully completes before the next begins, same assumption every
++# stateful patch in this repo already relies on).
++_HSR_REMAINING_FILE = f"/tmp/lossy-token-eff-hsr-guard-remaining-{os.getuid()}"
++
++_HSR_WINDOW = _hsr_read_knob(_HSR_WINDOW_FILE, 600)
++# 25, not the originally-planned 3: a real, live 8-case pilot run at
++# budget=3/pct=99 showed the guard active 50-73% of the time on EVERY
++# case (not just genuinely stuck ones) -- a live end-to-end debug replay
++# (see HASHES.txt's own "fixed" note below) confirmed the mechanism itself
++# works correctly; budget=3 was simply far too permissive once a window's
++# worth of crossings can accumulate and keep re-arming faster than an
++# 8-token actuator window expires. An offline sweep against two REAL
++# captured cases (one a genuinely-stuck AIME case, one a known severe
++# literal-repeat loop) found a sharp cliff: budget<=15 stays 15-23%
++# active, budget>=40 never fires at all even on the known severe loop,
++# budget=25 lands at a genuinely selective 0.4-2.6% -- see
++# analysis/semantic_guard/README.md for the full sweep.
++_HSR_BUDGET = _hsr_read_knob(_HSR_BUDGET_FILE, 25)
++_HSR_PERCENTILE = _hsr_read_knob(_HSR_PERCENTILE_FILE, 99.9, cast=float)
++_HSR_ACTUATOR_K = _hsr_read_knob(_HSR_ACTUATOR_K_FILE, 8)
++
++
++def _hsr_write_remaining(value: int) -> None:
++    try:
++        with open(_HSR_REMAINING_FILE, "w") as f:
++            f.write(str(value))
++    except OSError:
++        pass
++
++
++class _HSRecurrenceGuard:
++    """Incremental S_32 recurrence tracker + budget/window trigger. See the
++    module-level comment above for the full design. Single-real-sequence-
++    per-process scoping, same as every other stateful patch in this repo --
++    this class tracks exactly one running history, not one per request."""
++
++    def __init__(self) -> None:
++        self._projection: np.ndarray | None = None
++        self._vecs: list[np.ndarray] = []
++        self._score_history: list[float] = []
++        self._crossing_positions: list[int] = []
++        self._total_committed = 0
++
++    def _get_projection(self, hidden_size: int) -> np.ndarray:
++        if self._projection is None or self._projection.shape[1] != hidden_size:
++            gen = torch.Generator(device="cpu").manual_seed(_HSR_PROJECTION_SEED)
++            r = torch.randn((_HSR_PROJECTION_DIM, hidden_size), generator=gen)
++            self._projection = r.numpy().astype(np.float32)
++        return self._projection
++
++    def reset_for_warmup(self) -> None:
++        """A large (warmup/CUDA-graph-capture) batch means whatever comes
++        next is not a continuation of real generation's own history --
++        same convention as spec-casc-tok-semantic-guard-future-guard's own
++        warmup reset, applied here to this class's rolling state instead of
++        a kernel-carried counter."""
++        self._vecs = []
++        self._score_history = []
++        self._crossing_positions = []
++        self._total_committed = 0
++
++    @torch.no_grad()
++    def update(self, target_hidden_states: torch.Tensor, n_real: int) -> None:
++        try:
++            self._update_impl(target_hidden_states, n_real)
++        except Exception as exc:  # pragma: no cover -- must never crash generation
++            print(f"[HSR GUARD] update() failed, disabling for this call: {exc}", file=sys.stderr, flush=True)
++
++    def _update_impl(self, target_hidden_states: torch.Tensor, n_real: int) -> None:
++        if n_real <= 0 or target_hidden_states.shape[0] < n_real:
++            return
++        rows = target_hidden_states[:n_real]
++        proj = self._get_projection(rows.shape[-1])
++        z = rows.float().cpu().numpy() @ proj.T  # [n_real, _HSR_PROJECTION_DIM]
++        norms = np.linalg.norm(z, axis=-1, keepdims=True)
++        norms[norms == 0] = 1.0
++        z = z / norms
++
++        triggered = False
++        for row in z:
++            self._vecs.append(row)
++            if len(self._vecs) > _HSR_HISTORY:
++                self._vecs = self._vecs[-_HSR_HISTORY:]
++            t = self._total_committed
++            self._total_committed += 1
++
++            score = self._compute_s32()
++            if score is not None:
++                self._check_and_record_crossing(score, t)
++                if len(self._crossing_positions) >= _HSR_BUDGET:
++                    triggered = True
++
++        if triggered:
++            _hsr_write_remaining(_HSR_ACTUATOR_K)
++
++    def _check_and_record_crossing(self, score: float, t: int) -> None:
++        """Compares `score` against a percentile of PRIOR history only
++        (never including `score` itself -- comparing a fresh value against
++        a percentile of a set that already contains it systematically
++        over-flags "new extremes" in a small, still-growing sample, since
++        there's nothing else yet to outrank it) and only once a FULL
++        window's worth of prior history exists (not a small fixed floor --
++        a small floor has the same self-inclusion-flavored problem: a
++        percentile computed from a handful of samples is dominated by
++        whichever few points happen to be in it). Extracted as its own
++        method for direct, deterministic unit testing -- see
++        patches/test_spec_casc_tok_hsr_guard.py."""
++        if len(self._score_history) >= _HSR_WINDOW:
++            threshold = float(np.percentile(self._score_history, _HSR_PERCENTILE))
++            if score >= threshold:
++                self._crossing_positions.append(t)
++        self._score_history.append(score)
++        if len(self._score_history) > _HSR_WINDOW:
++            self._score_history = self._score_history[-_HSR_WINDOW:]
++        self._crossing_positions = [p for p in self._crossing_positions if t - p <= _HSR_WINDOW]
++
++    def _compute_s32(self) -> float | None:
++        """S_32 for the vector just appended (last entry of self._vecs),
++        against earlier buffer entries >= MIN_GAP and <= WINDOW positions
++        back -- join_hidden_states.py's recurrence_scores(), k=32, computed
++        incrementally instead of as one whole-run O(n^2) matmul.
++
++        Candidate lookback is bounded to _HSR_WINDOW positions back from
++        t, NOT the full buffer -- an unbounded lookback makes the
++        candidate pool (and therefore this score's own typical/expected
++        value, since it's a MAX over the pool) grow without bound as more
++        history accumulates, which is a genuinely non-stationary process
++        even for pure i.i.d. noise (max-over-N-samples grows with N).
++        That non-stationarity silently invalidates the percentile self-
++        calibration in update() above during the whole ramp-up period --
++        caught by patches/test_spec_casc_tok_hsr_guard.py's own
++        test_budget_window_trigger (250 tokens of pure noise spuriously
++        tripped the budget, crossings clustered at the LATE end of the run
++        where the candidate pool was largest -- the tell that this was
++        structural drift, not random chance). Bounding lookback to WINDOW
++        also matches the budget/window's own semantics: "does this
++        position recur within the last WINDOW tokens," not "ever, all the
++        way back to the buffer's own eviction horizon."
++        """
++        n = len(self._vecs)
++        t = n - 1
++        if t + 1 < _HSR_K_TRAIL + _HSR_MIN_GAP:
++            return None
++        j_max = t - _HSR_MIN_GAP
++        if j_max < _HSR_K_TRAIL - 1:
++            return None
++        j_lo = max(_HSR_K_TRAIL - 1, j_max - _HSR_WINDOW + 1)
++        if j_lo > j_max:
++            return None
++        vecs = np.stack(self._vecs)  # [n, _HSR_PROJECTION_DIM]
++        w_t = vecs[t - _HSR_K_TRAIL + 1 : t + 1].reshape(-1)  # trailing-32 window ending at t, flattened
++        cand = np.lib.stride_tricks.sliding_window_view(
++            vecs[j_lo - _HSR_K_TRAIL + 1 : j_max + 1], _HSR_K_TRAIL, axis=0
++        )
++        cand = np.moveaxis(cand, -1, 1).reshape(cand.shape[0], -1)  # [num_windows ending in [j_lo, j_max], 32*dim]
++        if cand.shape[0] == 0:
++            return None
++        sims = cand @ w_t / _HSR_K_TRAIL
++        return float(sims.max())
++
++
++_HSR_GUARD = _HSRecurrenceGuard()
++print(
++    f"[HSR GUARD] pid={os.getpid()} window={_HSR_WINDOW} budget={_HSR_BUDGET} "
++    f"percentile={_HSR_PERCENTILE} actuator_k={_HSR_ACTUATOR_K}",
++    file=sys.stderr,
++    flush=True,
++)
++
+ logger = init_logger(__name__)
+ 
+ AttnMetadataDict: TypeAlias = dict[str, AttentionMetadata]
+@@ -5209,6 +5462,36 @@
+             else:
+                 mm_embed_inputs = None
+ 
++            # HSR GUARD: live S_32 recurrence tracking, see the module-level
++            # comment above. Right where target_hidden_states becomes
++            # available -- same call site convention as patches/hidden_state_
++            # trace.py's own capture hook, right before self.drafter.propose().
++            # Single-real-sequence-per-process scoping: only request 0's own
++            # committed tokens ever update state; a large (warmup/CUDA-graph-
++            # capture) batch resets state instead of being treated as a
++            # continuation of real generation's own history -- same
++            # batch-size check spec-casc-tok-semantic-guard-future-guard's
++            # own warmup reset uses, just against sampled_token_ids' own
++            # per-request rows instead of a kernel batch tensor.
++            _hsr_batch_size = (
++                len(sampled_token_ids)
++                if isinstance(sampled_token_ids, list)
++                else int(sampled_token_ids.shape[0])
++            )
++            if _hsr_batch_size > _HSR_WARMUP_BATCH_THRESHOLD:
++                _HSR_GUARD.reset_for_warmup()
++            elif _hsr_batch_size > 0:
++                if spec_decode_metadata is None:
++                    # First round (prompt prefill) -- seed history with the
++                    # whole prompt too, harmless (S_32 needs 64 committed
++                    # tokens of runway before it can score anything anyway).
++                    _hsr_n_real = int(target_hidden_states.shape[0])
++                elif isinstance(sampled_token_ids, list):
++                    _hsr_n_real = len(sampled_token_ids[0]) if sampled_token_ids else 0
++                else:
++                    _hsr_n_real = int((sampled_token_ids[0] != -1).sum().item())
++                _HSR_GUARD.update(target_hidden_states, _hsr_n_real)
++
+             draft_token_ids = self.drafter.propose(
+                 num_speculative_tokens=num_spec_tokens_to_schedule,
+                 target_token_ids=target_token_ids,

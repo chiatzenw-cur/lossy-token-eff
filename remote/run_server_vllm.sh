@@ -55,6 +55,21 @@ SPEC_CASC_TOK_FORCE_COMMIT_THRESHOLD="${SPEC_CASC_TOK_FORCE_COMMIT_THRESHOLD:-28
 SPEC_CASC_TOK_SELF_CHECK_ALPHA="${SPEC_CASC_TOK_SELF_CHECK_ALPHA:-0.3}"  # spec-casc-tok's own alpha; periodic self-check always on
 SPEC_CASC_TOK_SELF_CHECK_INTERVAL="${SPEC_CASC_TOK_SELF_CHECK_INTERVAL:-3000}"  # tokens between self-checks
 SPEC_CASC_TOK_SELF_CHECK_FINAL_THRESHOLD="${SPEC_CASC_TOK_SELF_CHECK_FINAL_THRESHOLD:-28000}"  # "yes" past this forces final instead of pivoting
+SPEC_CASC_TOK_JUDGE_NUDGE_ALPHA="${SPEC_CASC_TOK_JUDGE_NUDGE_ALPHA:-0.3}"  # spec-casc-tok's own alpha; judge runs every round
+# Fixed to match vllm-0.26.0-jn-model-runner.patch's own pattern lengths:
+# NUM_SPEC_final = REAL_DRAFT_LEN + max(JUDGE_LEN=21, REAL_DRAFT_LEN+RV_PROMPT_LEN=6+18=24) = REAL_DRAFT_LEN+24,
+# NOT independently configurable here (both python-side halves hardcode
+# the same patterns; the server side only needs the resulting extra width).
+JUDGE_NUDGE_EXTRA_WIDTH=24
+SPEC_CASC_TOK_JUDGE_NUDGE_THRESHOLD="${SPEC_CASC_TOK_JUDGE_NUDGE_THRESHOLD:-0.03}"  # NOT rigorously calibrated -- see patches/HASHES.txt's own spec-casc-tok-judge-nudge entry
+SPEC_CASC_TOK_JUDGE_NUDGE_RV_ALPHA="${SPEC_CASC_TOK_JUDGE_NUDGE_RV_ALPHA:-0.3}"  # Reflective Verification's own default (arXiv:2505.18629)
+SPEC_CASC_TOK_JUDGE_NUDGE_WINDOW="${SPEC_CASC_TOK_JUDGE_NUDGE_WINDOW:-4}"  # fixed rounds of nudging per trigger, not re-derived from anything
+SPEC_CASC_TOK_JUDGE_NUDGE_TRACE_PATH="${SPEC_CASC_TOK_JUDGE_NUDGE_TRACE_PATH:-}"  # empty = disabled (no-op observation)
+SPEC_CASC_TOK_HSR_GUARD_ALPHA="${SPEC_CASC_TOK_HSR_GUARD_ALPHA:-0.3}"  # spec-casc-tok's own alpha; no extra verification width needed (unlike judge-nudge)
+HSR_GUARD_WINDOW="${HSR_GUARD_WINDOW:-600}"          # committed-token window for both the recurrence budget and the percentile self-calibration
+HSR_GUARD_BUDGET="${HSR_GUARD_BUDGET:-25}"           # recurrence-crossings required within WINDOW to trip the guard -- not 3, see patches/HASHES.txt's own "fixed" entry
+HSR_GUARD_PERCENTILE="${HSR_GUARD_PERCENTILE:-99.9}" # self-calibrated per-generation, not one fixed global score cutoff -- not 99.0, see patches/HASHES.txt
+HSR_GUARD_ACTUATOR_K="${HSR_GUARD_ACTUATOR_K:-8}"    # strict-verification window length once tripped
 SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA="${SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA:-0.3}"  # spec-casc-tok's own alpha; free-judgment observation always on
 # Fixed to match vllm-0.26.0-free-judgment-model-runner.patch's own
 # _FREE_JUDGMENT_CRITERION_PATTERN length -- NOT independently configurable
@@ -125,6 +140,31 @@ spec_casc_tok_free_judgment_file="/tmp/lossy-token-eff-spec-casc-tok-free-judgme
 free_judgment_real_draft_len_file="/tmp/lossy-token-eff-free-judgment-real-draft-len-$(id -u)"
 free_judgment_trace_path_file="/tmp/lossy-token-eff-free-judgment-trace-path-$(id -u)"
 free_judgment_reject_threshold_file="/tmp/lossy-token-eff-free-judgment-reject-threshold-$(id -u)"
+# judge_nudge has its OWN alpha file (own print/probe is via _JN_STATE
+# presence, not a separate alpha knob) -- same "own file, never alias"
+# convention as self-check/force-commit/free-judgment; a real bug caught
+# live (not by review) when a first draft aliased plain spec-casc-tok's
+# own file, see patches/HASHES.txt's own "fixed 2026-08-14" entry.
+# real_draft_len is shared between judge-nudge's OWN two python halves
+# (own filename, not free-judgment's -- different patches, never co-installed).
+spec_casc_tok_judge_nudge_file="/tmp/lossy-token-eff-spec-casc-tok-judge-nudge-alpha-$(id -u)"
+judge_nudge_real_draft_len_file="/tmp/lossy-token-eff-judge-nudge-real-draft-len-$(id -u)"
+judge_nudge_threshold_file="/tmp/lossy-token-eff-judge-nudge-threshold-$(id -u)"
+judge_nudge_rv_alpha_file="/tmp/lossy-token-eff-judge-nudge-rv-alpha-$(id -u)"
+judge_nudge_window_file="/tmp/lossy-token-eff-judge-nudge-window-$(id -u)"
+judge_nudge_trace_path_file="/tmp/lossy-token-eff-judge-nudge-trace-path-$(id -u)"
+judge_nudge_remaining_file="/tmp/lossy-token-eff-judge-nudge-remaining-$(id -u)"
+# hsr-guard has its OWN alpha file (same "own file, never alias" convention
+# as every method above). No real_draft_len/extra-width knob at all --
+# unlike judge-nudge/free-judgment, this method never widens verification;
+# the trigger is computed for free from target_hidden_states, already
+# produced every round for EAGLE3's own drafting.
+spec_casc_tok_hsr_guard_file="/tmp/lossy-token-eff-spec-casc-tok-hsr-guard-alpha-$(id -u)"
+hsr_guard_window_file="/tmp/lossy-token-eff-hsr-guard-window-$(id -u)"
+hsr_guard_budget_file="/tmp/lossy-token-eff-hsr-guard-budget-$(id -u)"
+hsr_guard_percentile_file="/tmp/lossy-token-eff-hsr-guard-percentile-$(id -u)"
+hsr_guard_actuator_k_file="/tmp/lossy-token-eff-hsr-guard-actuator-k-$(id -u)"
+hsr_guard_remaining_file="/tmp/lossy-token-eff-hsr-guard-remaining-$(id -u)"
 
 neutralise_all_knobs() {
   # Each method's own "no relaxation" value -- NOT uniformly 0.0. See
@@ -154,6 +194,19 @@ neutralise_all_knobs() {
   printf '%s\n' "0"      > "$free_judgment_real_draft_len_file"  # 0 = disabled -- CRITICAL: also disables gpu_model_runner.py's overwrite for every other mode, not just this one
   printf '%s\n' ""       > "$free_judgment_trace_path_file"
   printf '%s\n' "0.08"   > "$free_judgment_reject_threshold_file"  # moot once real_draft_len=0, written for cleanliness
+  printf '%s\n' "-inf"   > "$spec_casc_tok_judge_nudge_file"
+  printf '%s\n' "0"      > "$judge_nudge_real_draft_len_file"  # 0 = disabled -- CRITICAL: also disables gpu_model_runner.py's own jn-model-runner overwrite
+  printf '%s\n' "0.03"   > "$judge_nudge_threshold_file"  # moot once real_draft_len=0, written for cleanliness
+  printf '%s\n' "0.3"    > "$judge_nudge_rv_alpha_file"
+  printf '%s\n' "4"      > "$judge_nudge_window_file"
+  printf '%s\n' ""       > "$judge_nudge_trace_path_file"
+  printf '%s\n' "0"      > "$judge_nudge_remaining_file"  # runtime signal, not config -- reset so a stale nudge state can't leak into a fresh run
+  printf '%s\n' "-inf"   > "$spec_casc_tok_hsr_guard_file"
+  printf '%s\n' "600"    > "$hsr_guard_window_file"      # moot once alpha=-inf, written for cleanliness
+  printf '%s\n' "25"     > "$hsr_guard_budget_file"
+  printf '%s\n' "99.9"   > "$hsr_guard_percentile_file"
+  printf '%s\n' "8"      > "$hsr_guard_actuator_k_file"
+  printf '%s\n' "0"      > "$hsr_guard_remaining_file"  # runtime signal, not config -- reset so a stale guard window can't leak into a fresh run
 }
 
 common_args=(
@@ -445,8 +498,53 @@ PY
         NUM_SPEC=$((NUM_SPEC + FREE_JUDGMENT_CRITERION_LEN))
         echo "mode=lossy rule=spec_casc_tok_free_judgment alpha=$SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA real_draft_len=$(($NUM_SPEC - FREE_JUDGMENT_CRITERION_LEN)) criterion_len=$FREE_JUDGMENT_CRITERION_LEN trace=${SPEC_CASC_TOK_FREE_JUDGMENT_TRACE_PATH:-<disabled>} reject_threshold=$SPEC_CASC_TOK_FREE_JUDGMENT_REJECT_THRESHOLD (via $spec_casc_tok_free_judgment_file, $free_judgment_real_draft_len_file, $free_judgment_trace_path_file, $free_judgment_reject_threshold_file -- reject-and-resample: per-round score=p_yes-p_no crossing threshold bans only the last real drafted token, rejection sampling resamples a fresh alternative there) draft=$DRAFT_MODEL_PATH k_total=$NUM_SPEC port=$PORT seed=$SEED"
         ;;
+      spec_casc_tok_judge_nudge)
+        printf '%s\n' "$SPEC_CASC_TOK_JUDGE_NUDGE_ALPHA" > "$spec_casc_tok_judge_nudge_file"
+        printf '%s\n' "$NUM_SPEC" > "$judge_nudge_real_draft_len_file"
+        printf '%s\n' "$SPEC_CASC_TOK_JUDGE_NUDGE_THRESHOLD" > "$judge_nudge_threshold_file"
+        printf '%s\n' "$SPEC_CASC_TOK_JUDGE_NUDGE_RV_ALPHA" > "$judge_nudge_rv_alpha_file"
+        printf '%s\n' "$SPEC_CASC_TOK_JUDGE_NUDGE_WINDOW" > "$judge_nudge_window_file"
+        printf '%s\n' "$SPEC_CASC_TOK_JUDGE_NUDGE_TRACE_PATH" > "$judge_nudge_trace_path_file"
+        printf '%s\n' "0" > "$judge_nudge_remaining_file"
+        # _JN_STATE, not _SPEC_CASC_TOK_ALPHA: the latter is defined by
+        # every spec-casc-tok-family patch, so it wouldn't disambiguate
+        # this variant from plain spec-casc-tok or any other sibling; the
+        # judge-nudge state dict is genuinely unique.
+        probe_patched "_JN_STATE" || {
+          echo "LOSSY_RULE=spec_casc_tok_judge_nudge needs the patch: bash patches/apply.sh spec-casc-tok-judge-nudge" >&2
+          exit 5
+        }
+        # CRITICAL: bump num_speculative_tokens up so every downstream
+        # fixed-size structure sizes itself for the true per-round width
+        # from the start -- same reason as free-judgment's own patch
+        # (see that patch's own model-runner module comment). NUM_SPEC
+        # itself (the "real" draft length, written to
+        # judge_nudge_real_draft_len_file above) is captured BEFORE this
+        # reassignment.
+        NUM_SPEC=$((NUM_SPEC + JUDGE_NUDGE_EXTRA_WIDTH))
+        echo "mode=lossy rule=spec_casc_tok_judge_nudge alpha=$SPEC_CASC_TOK_JUDGE_NUDGE_ALPHA real_draft_len=$(($NUM_SPEC - JUDGE_NUDGE_EXTRA_WIDTH)) extra_width=$JUDGE_NUDGE_EXTRA_WIDTH judge_threshold=$SPEC_CASC_TOK_JUDGE_NUDGE_THRESHOLD rv_alpha=$SPEC_CASC_TOK_JUDGE_NUDGE_RV_ALPHA nudge_window=$SPEC_CASC_TOK_JUDGE_NUDGE_WINDOW trace=${SPEC_CASC_TOK_JUDGE_NUDGE_TRACE_PATH:-<disabled>} (via $spec_casc_tok_judge_nudge_file, $judge_nudge_real_draft_len_file, $judge_nudge_threshold_file, $judge_nudge_rv_alpha_file, $judge_nudge_window_file, $judge_nudge_trace_path_file, $judge_nudge_remaining_file -- judge every round via TRUE/FALSE criterion; on threshold crossing, nudge via spec-casc-tok-rv's own ephemeral logit blend for a fixed window) draft=$DRAFT_MODEL_PATH k_total=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      spec_casc_tok_hsr_guard)
+        printf '%s\n' "$SPEC_CASC_TOK_HSR_GUARD_ALPHA" > "$spec_casc_tok_hsr_guard_file"
+        printf '%s\n' "$HSR_GUARD_WINDOW" > "$hsr_guard_window_file"
+        printf '%s\n' "$HSR_GUARD_BUDGET" > "$hsr_guard_budget_file"
+        printf '%s\n' "$HSR_GUARD_PERCENTILE" > "$hsr_guard_percentile_file"
+        printf '%s\n' "$HSR_GUARD_ACTUATOR_K" > "$hsr_guard_actuator_k_file"
+        printf '%s\n' "0" > "$hsr_guard_remaining_file"
+        # _HSR_REMAINING_FILE: unique to this patch, unlike _SPEC_CASC_TOK_ALPHA
+        # (defined by every spec-casc-tok-family patch).
+        probe_patched "_HSR_REMAINING_FILE" || {
+          echo "LOSSY_RULE=spec_casc_tok_hsr_guard needs the patch: bash patches/apply.sh spec-casc-tok-hsr-guard" >&2
+          exit 5
+        }
+        # No NUM_SPEC widening -- unlike free-judgment/judge-nudge, this
+        # method never extends the verification span; the trigger is
+        # computed for free from target_hidden_states, already produced
+        # every round for EAGLE3's own drafting.
+        echo "mode=lossy rule=spec_casc_tok_hsr_guard alpha=$SPEC_CASC_TOK_HSR_GUARD_ALPHA window=$HSR_GUARD_WINDOW budget=$HSR_GUARD_BUDGET percentile=$HSR_GUARD_PERCENTILE actuator_k=$HSR_GUARD_ACTUATOR_K (via $spec_casc_tok_hsr_guard_file, $hsr_guard_window_file, $hsr_guard_budget_file, $hsr_guard_percentile_file, $hsr_guard_actuator_k_file, $hsr_guard_remaining_file -- live S_32 hidden-state-recurrence trigger forces strict verification for actuator_k committed tokens on a self-calibrated recurrence-crossing budget) draft=$DRAFT_MODEL_PATH k_spec=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
       *)
-        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|spec_casc_tok_antiloop|r_fuzzy_semantic_guard|r_fuzzy_semantic_guard_v2|r_fuzzy_window_entropy_guard|spec_casc_tok_semantic_guard|spec_casc_tok_semantic_guard_v2|spec_casc_tok_semantic_guard_and|spec_casc_tok_semantic_guard_future_guard|spec_casc_tok_semantic_guard_future_guard_and|spec_casc_tok_force_commit|spec_casc_tok_self_check|spec_casc_tok_free_judgment|synthetic)" >&2
+        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|spec_casc_tok_antiloop|r_fuzzy_semantic_guard|r_fuzzy_semantic_guard_v2|r_fuzzy_window_entropy_guard|spec_casc_tok_semantic_guard|spec_casc_tok_semantic_guard_v2|spec_casc_tok_semantic_guard_and|spec_casc_tok_semantic_guard_future_guard|spec_casc_tok_semantic_guard_future_guard_and|spec_casc_tok_force_commit|spec_casc_tok_self_check|spec_casc_tok_free_judgment|spec_casc_tok_judge_nudge|spec_casc_tok_hsr_guard|synthetic)" >&2
         exit 2
         ;;
     esac

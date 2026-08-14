@@ -29,6 +29,47 @@ eeaaf46b172a029871af0f4c1d68ca6b59d76cb8a003edff6cd4ed6be92738ab  spec-casc-tok-
 # on this hash are suspect): ac73cdaedb672d23d73c9867448108ae80e2d430e28f0968c37d9b1ebc75fb03
 25c47696e194be91c180754a8377ec315062f690980a04141c109f948669d177  spec-casc-tok-self-check
 9b599132c945e30b180a3f85419be4d2f0350767383943a33302dea0c59ccac4  spec-casc-tok-free-judgment
+29e1841c562171a88c4f6522f8bdaa46e6bc0d0ba43e199b77218f4cb68a7d04  spec-casc-tok-rv
+07da2d702810928f4a3c121eac47ac4f8a0eb3d60f759e3339102a870fa96db3  spec-casc-tok-judge-nudge
+# added 2026-08-14, "judge + nudge" -- combines the best of six
+# free-judgment criterion phrasings tested against 48 real ground-truth-
+# labeled points (TRUE/FALSE + completion scaffold, strongest on
+# confirmed reasoning loops specifically -- see analysis/semantic_guard/
+# README.md) as trigger, with spec-casc-tok-rv's own ephemeral logit
+# blend as actuator instead of free-judgment's own reject-and-resample
+# (proven, via a positionally-verified causal trace on case_010, not to
+# work: resampling from an UNMODIFIED target distribution barely moves a
+# stuck reasoning state). Originally designed as a 3-stage screen->
+# verify->nudge pipeline gating the wide rounds behind a cheap hidden-
+# state-recurrence screen; that stage was DROPPED after an empirical
+# test showed no live per-round cost lever exists within this repo's
+# patch scope (num_speculative_tokens is server-startup-static; making
+# free-judgment's own criterion-append conditional, 1/20 rounds, still
+# measured 0.02807 s/round -- identical to the always-wide baseline
+# 0.02799, nowhere near the genuinely-narrow 0.01250). See
+# analysis/semantic_guard/DESIGN_screen_verify_nudge.md for the full
+# design history including that amendment. Pays the wide-verification
+# tax every round, unconditionally, same order of cost as free-judgment's
+# own criterion (~+150%/round for a comparable width) -- an accepted
+# cost, not an oversight. Real-kernel adversarial tests confirm both
+# halves are mechanically live: the judge ban holds even when draft and
+# target both favor the banned token, and the NUDGE blend measurably
+# displaces the real-favored token (20/20 trials at alpha=0.7 in the
+# adversarial test) when z_reflect strongly disagrees -- not yet run on
+# a live multi-case rollout.
+# fixed 2026-08-14: built on spec-casc-tok's own base without editing
+# that patch's own _SPEC_CASC_TOK_ALPHA_FILE line -- caught live, not by
+# review: a real smoke-test run refused to start with "spec_casc_tok's
+# knob is 0.3, not its strict value -inf", because judge-nudge was
+# literally reading alpha from the SAME /tmp file plain spec-casc-tok
+# uses, violating this repo's own "own alpha file, never alias"
+# convention every OTHER spec-casc-tok sibling (self-check, force-
+# commit, free-judgment) already follows -- the same bug class caught
+# and fixed multiple times earlier this session for those patches, this
+# time in a NEW patch instead of an old one. Fixed by pointing
+# _SPEC_CASC_TOK_ALPHA_FILE at its own dedicated path
+# (spec-casc-tok-judge-nudge-alpha, not spec-casc-tok-alpha). Superseded
+# hash (do not use): 3b1828ca93294c40066dd3e0a596406ec5f78f272fc29c9c701267b1b8cced33
 # CALIBRATION FINDING, 2026-08-13 (no code change, defaults changed
 # instead -- see remote/run_server_vllm.sh's own comment on
 # SPEC_CASC_TOK_FREE_JUDGMENT_PIVOT_MARGIN): a real 6-case test (alpha=0.3,
@@ -345,6 +386,61 @@ eeaaf46b172a029871af0f4c1d68ca6b59d76cb8a003edff6cd4ed6be92738ab  spec-casc-tok-
 # before trusting this as a fix rather than a safer bet. Previous hash
 # (do not use): ed0e7673a73f509a77a57997d692653a430b011f63c14aa27377eab1a3bbd238
 #
+# added 2026-08-13-14, "Reflective Verification via extended verification
+# span" (RV) -- spec-casc-tok-free-judgment's own sibling/successor, built
+# after that patch's every acted-on variant (trend-based EMA pivot, then
+# per-round reject-and-resample) was proven on real 6-case rollouts to hurt
+# more cases than it helped. Modeled on Reflective Verification (arXiv:
+# 2505.18629): reuses free-judgment's own "EAGLE verification is already
+# ONE parallel forward pass, so appending fixed tokens after the real draft
+# lets the target's SAME pass compute more real logits at marginal FLOPs
+# cost" trick, but for a structurally different purpose -- instead of
+# reading a scalar judgment and thresholding it (every free-judgment
+# variant, all found wanting), this duplicates the real draft tokens after
+# a fixed "keep going, don't restart" reflection prompt, gets a SECOND set
+# of logits (z_reflect) from the SAME target forward pass, and blends
+# z_mix = (1-alpha)*z0 + alpha*z_reflect at the LOGIT level into
+# target_probs at the real positions -- UNCONDITIONALLY, every round, no
+# judge, no threshold, no trigger to get wrong. The blended distribution
+# feeds BOTH the accept test and the recovery/residual draw (spec-casc-
+# tok's own eta/pi_rej math runs on the already-blended target_probs), so
+# a rejected token gets resampled from a nudged distribution, not the same
+# untouched state that produced the bad draft -- closing the exact gap
+# free-judgment's reject-and-resample had (proven, via real-trace
+# comparison, that resampling from an unmodified target barely moves a
+# stuck reasoning state: case_010 flipped correct->wrong at only a 17%
+# reject rate, evidence the SAMPLED TOKEN, not the trigger rate, was the
+# weak link).
+#
+# Two files, same "own real_draft_len file, shared between both python
+# halves" convention as free-judgment: vllm-0.26.0-rv-model-runner.patch
+# (gpu_model_runner.py -- duplicates the real draft's own already-drafted
+# tokens into a second span after the fixed reflection-prompt tokens) and
+# spec-casc-tok-rv (rejection_sampler.py -- reads target_logits at both
+# spans, does the blend, bans the reflection-prompt span's own first token
+# so neither the prompt nor the duplicate span is ever committed). See
+# vllm-0.26.0-rv-model-runner.patch's own module comment for the full
+# round layout and gpu_model_runner.py's copy of this explanation.
+#
+# STATUS: mechanically built and verified (real imports, real-kernel
+# adversarial test showing the blend genuinely changes what gets accepted,
+# see gpu_model_runner.py's own comment) but NOT YET run on a live
+# multi-case rollout -- unlike every other hash in this file, there is no
+# accuracy/efficiency finding attached to this one yet. A width-only
+# control experiment (plain spec-casc-tok, num_spec=6->29, no forced
+# tokens at all) found widening the round alone costs +123.9% wall-time/
+# round on this MoE model, essentially the same tax free-judgment's own
+# widening paid (+150%) -- so RV's real cost is expected to be comparable
+# to free-judgment's, not cheaper, despite adding zero drafting overhead
+# for the synthetic tokens (the tax is the wider verification pass itself,
+# not what's in it). See analysis/semantic_guard/README.md for the
+# reasoning-progress/loop-detection side investigation (TPV- and Word-
+# Salad-Chopper-style trained linear probes, arXiv:2506.07240 and arXiv:
+# 2511.00536) that motivated trying an unconditional blend instead of
+# another gated trigger, and for why those two probes did not replicate
+# well enough on this repo's own (small, compressed) hidden-state captures
+# to gate anything yet either. Hash for gpu_model_runner.py's own RV half
+# is recorded in that file's own section below, not here.
 # added 2026-08-09, verified by the same pristine-round-trip diff as the rest
 # of this manifest (see analysis/semantic_guard/README.md for the experiment)
 # r-fuzzy-semantic-guard's original hash (36a7429f...) is SUPERSEDED as of
@@ -495,3 +591,149 @@ b86e0f3643a715b7f15c7a3fa0e314baa40aa00dc3af5ceeaf26cd5ad146804b  hidden-state-c
 # check (not just py_compile) was added to this patch's own verification
 # workflow going forward. Superseded hash (do not use):
 # 1329dc4973fa6c0510834a2bc46c17bfe824116bc32b562a0d6a22ebcbc87a78
+
+655e42719c7d408db46a7cec354531956180f2c8373dd390f72c699f516ef5c6  rv-model-runner
+# added 2026-08-13-14, spec-casc-tok-rv's OTHER half -- see the
+# rejection_sampler.py section's own spec-casc-tok-rv entry for the full
+# motivation. Duplicates the real sequence's own already-drafted tokens
+# (positions [0:REAL_DRAFT_LEN)) into a second span after a fixed
+# reflection-prompt pattern is force-injected in between -- round layout:
+#   [0:REAL_DRAFT_LEN)                          real drafted tokens (untouched)
+#   [REAL_DRAFT_LEN:REAL_DRAFT_LEN+PROMPT_LEN)   fixed reflection prompt (forced)
+#   [+PROMPT_LEN:+REAL_DRAFT_LEN)                literal copy of the real tokens (forced)
+# Same "own real_draft_len knob file" convention as free-judgment-model-
+# runner (0 = disabled). Not independently unit-tested here (same reason
+# as free-judgment-model-runner: mocking gpu_model_runner.py's internal
+# scheduling state is impractical) -- validated by real imports and by the
+# rejection_sampler.py half's own real-kernel adversarial test instead.
+
+72c34b023a79fc79954845cfd3a57157f1befd4e0592a37215a5afa1a8365bbe  jn-model-runner
+# added 2026-08-14, spec-casc-tok-judge-nudge's OTHER half -- see the
+# rejection_sampler.py section's own spec-casc-tok-judge-nudge entry for
+# the full motivation. Two modes: JUDGE (default) overwrites
+# [REAL_DRAFT_LEN:) with the fixed TRUE/FALSE judge criterion; NUDGE
+# (while rejection_sampler.py's own nudge_remaining counter, read from a
+# shared file, is > 0) overwrites with spec-casc-tok-rv's own reflection-
+# prompt + duplicate-draft pattern instead. Same "own real_draft_len knob
+# file" convention as free-judgment-model-runner/rv-model-runner (0 =
+# disabled). Not independently unit-tested here (same reason as those two
+# -- mocking gpu_model_runner.py's internal scheduling state is
+# impractical) -- validated by real imports and by the
+# rejection_sampler.py half's own real-kernel adversarial tests instead.
+
+2f7f2357a03a1c9e9a446b11e666d3d42d1e0dc6b8a526f425c128a3a8f3eb7d  spec-casc-tok-hsr-guard
+# added 2026-08-14. Pivot from judge-nudge's "detect precisely via a
+# criterion prompt" approach (expensive: needs an extended verification
+# span every round) to "detect cheaply, act safely, tolerate imprecision":
+# a hidden-state-recurrence trigger (see hsr-guard-model-runner's own
+# entry below for the trigger side, computed at zero extra cost from
+# target_hidden_states, already produced every round for EAGLE3's own
+# drafting) forces genuinely strict verification for the next 8 real
+# committed tokens whenever a self-calibrated recurrence-crossing budget
+# is hit. Reuses spec-casc-tok-semantic-guard's STATELESS per-round
+# top-set-forcing mechanism verbatim (own alpha file, own hsr_guard_mask
+# derived from a POSITION count instead of a token-identity check) --
+# deliberately NOT spec-casc-tok-semantic-guard-future-guard's persistent
+# Triton-kernel-carried counter, which this investigation found to have a
+# real, reproducible bug this session (a marker that re-arms the window
+# while one is already active silently fails to reset it, ~3% of the time
+# in the one trace with ground-truth debug instrumentation -- see that
+# patch's own HASHES.txt entry below). This design has no kernel-carried
+# state at all: the remaining-window count lives in a plain /tmp file,
+# ARMED by gpu_model_runner.py's own trigger class and DECREMENTED here
+# (after the kernel runs, from real walked-position counts only) --
+# round-granular, not per-verified-position, by construction avoiding the
+# whole class of bug future-guard has. See analysis/semantic_guard/
+# README.md for the trigger design (three earlier local-recurrence metrics
+# tested against real ground-truth loop labels, none cleanly separated
+# genuine loops from benign repetition -- the imprecision is deliberately
+# tolerated here because the actuator, unlike every earlier one in this
+# investigation, is SAFE even when wrong).
+
+497c86d7b3de85ace94f9e53ae1d5ea0feff1221d005a556322ac8e2913eea99  hsr-guard-model-runner
+# fixed 2026-08-14: default parameters (window=600, budget=3, pct=99.0)
+# corrected after a real 8-case AIME24 pilot -- own analysis bug first
+# made this look like a NO-OP (checked a trace field named
+# "token_marker_guard_mask", which doesn't exist; the tracer's own output
+# field is "token_marker_guard_active", the same field this session's own
+# earlier future-guard investigation used correctly), which triggered a
+# live end-to-end debug session (temporary print statements, a real
+# server, a real 20k-token request) that instead found the OPPOSITE
+# problem: with the correct field name, the guard was active 50-73% of
+# ALL positions across EVERY one of the 8 pilot cases, not a selective,
+# occasional intervention -- budget=3 crossings within a 600-token window
+# is trivial to clear once a window's worth of crossings can accumulate,
+# and each accumulation re-arms the 8-token actuator faster than it can
+# expire, producing a near-permanent strict-mode state. An offline sweep
+# against two REAL captured cases (a genuinely-stuck AIME case and a
+# known severe literal-repeat loop, both with hidden_states.bin captured)
+# found a sharp cliff varying budget alone: <=15 stays 15-23% active,
+# >=40 never fires even on the known severe loop, 25 lands at a
+# genuinely selective 0.4-2.6% on both real cases. New defaults:
+# budget=25 (was 3), percentile=99.9 (was 99.0), window=600 and
+# actuator_k=8 unchanged. Superseded hash (do not use):
+# 844738a3010fa8312137c2fe83fb712a3a4cf558c92fae9bb859a67aa8ba0e78
+# fixed 2026-08-14 (three rounds, two real bugs plus one wrong test
+# expectation): first build's threshold check compared each new S_32
+# score against a percentile computed from a score-history SET THAT
+# ALREADY INCLUDED that same score, with only a small fixed floor (50
+# samples) before evaluating -- systematically over-flags "new extremes"
+# in a still-growing sample. Fix #1: compare against PRIOR history only
+# (score appended after the comparison) and require a FULL WINDOW of
+# prior history before evaluating at all. Not sufficient alone --
+# crossings still clustered at the LATE end of a 250-token noise test.
+# Real root cause: S_32's own candidate search (_compute_s32) looked back
+# across the ENTIRE buffer (up to HISTORY=800 vectors), so the candidate
+# pool a MAX gets taken over keeps growing as more history accumulates --
+# genuinely non-stationary even for pure noise (max-over-N-samples grows
+# with N). Fix #2: bound _compute_s32's own candidate lookback to
+# _HSR_WINDOW positions back from t, not the full buffer, so the
+# candidate pool size stays constant once there's enough history. Even
+# with both real fixes applied, a 250-token pure-noise test STILL
+# occasionally trips the budget -- traced to a THIRD thing, but this one
+# is not a bug: adjacent committed positions share all but one of their
+# own trailing-32 window's vectors, so a single chance near-match at one
+# position shows up as several highly-correlated (not independent)
+# elevated scores at its immediate neighbors, clustering multiple
+# "crossings" from ONE underlying event -- and this exact
+# clustering-counts-toward-budget property already exists in the OFFLINE
+# analysis this design's parameters (window=600, budget=3, pct=99) were
+# swept against (analysis/semantic_guard/README.md's own sweep already
+# measured 50-60% benign false-positive rates at these settings on REAL
+# generation data, a known and accepted recall-favoring tradeoff -- the
+# actuator is safe even when wrong). The test's own assumption that
+# noise should "never" trip the budget was simply the wrong bar; fixed by
+# replacing that assertion with deterministic unit tests of the
+# self-inclusion/prior-history fix instead of relying on synthetic-noise
+# luck (see patches/test_spec_casc_tok_hsr_guard.py). Superseded hashes
+# (do not use):
+# e089a4515a68da96e4a550a196691754e2caed4e497d95f6a33a54b0f7788fb2
+# 2ae09a84d8bd3c30d836ce7c306ff753a5f5e85e710eb71c40ad213d330c0e89
+# 120d79284bb79df87710b17820c0628e2936e493810881216ebee706711fb2c8
+# added 2026-08-14, spec-casc-tok-hsr-guard's OTHER half -- see the
+# rejection_sampler.py section's own spec-casc-tok-hsr-guard entry above
+# for the full motivation. Computes a live, incremental replica of
+# analysis/semantic_guard/join_hidden_states.py's own S_32 trajectory-
+# recurrence signal (fixed 128-dim projection, seed 20260810 -- IDENTICAL
+# to patches/hidden_state_trace.py's own seed, same projected space as
+# this investigation's offline analysis; min_gap=32) from
+# target_hidden_states, right where it's already computed for EAGLE3's own
+# drafting -- zero extra forward-pass cost. One disclosed, deliberate
+# deviation from the offline join_hidden_states.py reference: this live
+# version only scores FULL 32-length trailing windows on both ends, where
+# the offline script's own vectorized formula also scores PARTIAL windows
+# for early positions (an artifact of its count-normalized matrix, not a
+# documented design choice) -- verified via patches/
+# test_spec_casc_tok_hsr_guard.py against a "fair" (full-window-only)
+# reference matching the offline formula exactly wherever both are
+# defined. Self-calibrated (per-generation, not one fixed global score
+# cutoff) 99th-percentile threshold over a trailing 600-committed-token
+# score history; 3 crossings within that window arm an 8-token strict
+# window (all four numbers -- window/budget/percentile/K -- are file-
+# configurable, defaults chosen from this investigation's own offline
+# sweep, see analysis/semantic_guard/README.md). Unlike free-judgment-
+# model-runner/rv-model-runner/jn-model-runner, this half IS independently
+# unit-tested (patches/test_spec_casc_tok_hsr_guard.py) -- the trigger
+# class (_HSRecurrenceGuard) is self-contained tensor/file-I/O logic with
+# no scheduling-state to mock, unlike those three patches' own draft-
+# content-overwrite hooks.

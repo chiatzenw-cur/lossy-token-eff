@@ -1,0 +1,140 @@
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -4,6 +4,7 @@
+ import functools
+ import gc
+ import itertools
++import os
+ import threading
+ import time
+ from collections import defaultdict
+@@ -247,6 +248,117 @@
+     from vllm.v1.spec_decode.ngram_proposer import NgramProposer
+     from vllm.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
+ 
++# LOSSY-VERIFICATION PILOT PATCH (not upstream vLLM). "Reflective
++# verification via extended verification span" (RV) -- reuses free-
++# judgment's own trick (EAGLE verification is already ONE parallel forward
++# pass over the whole drafted block, so appending fixed tokens after the
++# real draft lets the target's SAME pass compute real logits there too,
++# at marginal FLOPs cost, not an extra round-trip) but for a genuinely
++# different purpose: instead of reading a scalar yes/no judgment and
++# thresholding it (free-judgment's own design, and every variant of it
++# tried this session -- trend-based pivot, per-round reject-and-resample
++# -- proven to do more harm than good on a real 6-case rollout, see
++# analysis/semantic_guard/README.md), this computes a full ALTERNATE
++# target distribution under a fixed "keep going, don't restart" nudge and
++# BLENDS it into the real distribution every round, unconditionally -- no
++# judge, no threshold, no trigger to get wrong. Modeled after Reflective
++# Verification (arXiv:2505.18629): the paper's actual mechanism duplicates
++# the draft after a reflection prompt, gets two logit sets from one target
++# forward pass, and mixes them at the LOGIT level (not probability level)
++# before the accept test AND the recovery/residual sampling both use the
++# mixed distribution -- so a rejected token gets resampled from a nudged
++# distribution, not the untouched one that produced the bad draft in the
++# first place. That "resample from the SAME state" gap is exactly what
++# this investigation's own reject-and-resample design got wrong.
++#
++# Round layout (row 0 -- single-real-sequence-per-process scoping, same
++# convention as this repo's other cross-round-state patches):
++#   [0 : REAL_DRAFT_LEN)                                    real drafted tokens (untouched, EAGLE's own proposal)
++#   [REAL_DRAFT_LEN : REAL_DRAFT_LEN+PROMPT_LEN)             fixed reflection-prompt pattern (forced)
++#   [REAL_DRAFT_LEN+PROMPT_LEN : +REAL_DRAFT_LEN)            the SAME real draft tokens, copied verbatim (forced)
++# The duplicate span is a literal copy of the real tokens, not an
++# independent draft -- their logits, computed with the reflection prompt
++# now in their causal history, are directly comparable position-by-
++# position to the real span's own (unreflected) logits. This is what lets
++# rejection_sampler.py's own RV half blend z0 (real span logits) with
++# z_reflect (duplicate span logits) at the SAME position index.
++#
++# Requires num_speculative_tokens configured as 2*REAL_DRAFT_LEN +
++# PROMPT_LEN -- same load-bearing reason as free-judgment's own patch
++# (draft_token_ids_cpu is a fixed-width buffer sized at the config's own
++# num_spec_tokens; padding a narrower call's output afterward does not
++# work, see that patch's own module comment for the full story).
++_RV_REAL_DRAFT_LEN_FILE = f"/tmp/lossy-token-eff-rv-real-draft-len-{os.getuid()}"
++try:
++    with open(_RV_REAL_DRAFT_LEN_FILE) as _f:
++        _RV_REAL_DRAFT_LEN = int(float(_f.read().strip()))
++except (OSError, ValueError):
++    _RV_REAL_DRAFT_LEN = 0  # 0 = disabled (no-op), the safe default
++
++# Reflection-prompt token ids, tokenized once via openai_harmony's
++# HARMONY_GPT_OSS encoding and pinned as a literal constant (same
++# "looked up once, stable across runs" convention as this repo's other
++# fixed-phrase patches). Text:
++#   "\n\nContinue the current approach without switching methods or
++#    restarting. Make one concrete new deduction next.\n\n"
++# Deliberately the OPPOSITE valence from free-judgment's own pivot phrase
++# ("Yes -- I am going in circles, let me restart") -- that phrase's own
++# live rollout showed persistent restart-nudging text becoming part of
++# the context is what caused harm (false positives got redirected off a
++# perfectly good derivation). This phrase nudges toward continuation
++# instead, and -- critically -- is NEVER committed to real output at all,
++# only used to compute z_reflect; see rejection_sampler.py's own module
++# comment for why that structural difference (ephemeral vs persistent)
++# is the actual point of this whole redesign.
++_RV_REFLECT_PROMPT_PATTERN = [
++    279, 35648, 290, 2208, 7139, 2935, 45236, 7933, 503, 189759, 13, 9393,
++    1001, 19230, 620, 106545, 2613, 364,
++]
++_RV_REFLECT_PROMPT_LEN = len(_RV_REFLECT_PROMPT_PATTERN)
++
++
++def _rv_overwrite(draft_token_ids, draft_probs) -> None:
++    """In-place: overwrite row 0's own [REAL_DRAFT_LEN : REAL_DRAFT_LEN+
++    PROMPT_LEN) columns with the fixed reflection-prompt pattern, and
++    [REAL_DRAFT_LEN+PROMPT_LEN : +REAL_DRAFT_LEN) with a literal COPY of
++    the real drafted tokens (positions [0:REAL_DRAFT_LEN), untouched).
++    draft_probs at the overwritten positions is set one-hot purely to
++    stay a valid, non-NaN distribution -- these positions are always
++    force-rejected on the rejection_sampler.py side regardless of what
++    draft_probs says there, same convention as free-judgment's own
++    criterion overwrite."""
++    if _RV_REAL_DRAFT_LEN <= 0:
++        return
++    if not torch.is_tensor(draft_token_ids) or draft_token_ids.shape[0] == 0:
++        return
++    total_width = draft_token_ids.shape[1]
++    needed = 2 * _RV_REAL_DRAFT_LEN + _RV_REFLECT_PROMPT_LEN
++    if total_width < needed:
++        # Round is narrower than the full RV layout (e.g. the scheduler
++        # clamped num_new_tokens near the context limit) -- forcing a
++        # truncated layout would produce a garbage z_reflect, so skip
++        # entirely rather than force a broken fragment.
++        return
++    prompt_start = _RV_REAL_DRAFT_LEN
++    dup_start = _RV_REAL_DRAFT_LEN + _RV_REFLECT_PROMPT_LEN
++    pattern = torch.tensor(
++        _RV_REFLECT_PROMPT_PATTERN, dtype=draft_token_ids.dtype, device=draft_token_ids.device
++    )
++    draft_token_ids[0, prompt_start:dup_start] = pattern
++    draft_token_ids[0, dup_start:dup_start + _RV_REAL_DRAFT_LEN] = draft_token_ids[0, 0:_RV_REAL_DRAFT_LEN]
++    if torch.is_tensor(draft_probs) and draft_probs.shape[0] > 0 and draft_probs.shape[1] >= total_width:
++        vocab = draft_probs.shape[-1]
++        draft_probs[0, prompt_start:dup_start, :] = 0.0
++        for i, tok in enumerate(_RV_REFLECT_PROMPT_PATTERN):
++            if 0 <= tok < vocab:
++                draft_probs[0, prompt_start + i, tok] = 1.0
++        draft_probs[0, dup_start:dup_start + _RV_REAL_DRAFT_LEN, :] = 0.0
++        for i in range(_RV_REAL_DRAFT_LEN):
++            tok = int(draft_token_ids[0, dup_start + i].item())
++            if 0 <= tok < vocab:
++                draft_probs[0, dup_start + i, tok] = 1.0
++
++
+ logger = init_logger(__name__)
+ 
+ AttnMetadataDict: TypeAlias = dict[str, AttentionMetadata]
+@@ -5228,6 +5340,11 @@
+                     self._draft_probs = draft_probs
+                     self._draft_prob_req_ids = self.input_batch.req_ids.copy()
+ 
++            # RV: overwrite the real sequence's own reflection-prompt and
++            # duplicate-draft columns -- see the module-level comment.
++            # No-op unless enabled (knob file readable and > 0).
++            _rv_overwrite(draft_token_ids, self._draft_probs)
++
+         return draft_token_ids
+ 
+     def update_config(self, overrides: dict[str, Any]) -> None:

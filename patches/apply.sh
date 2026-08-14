@@ -24,9 +24,9 @@ HASHES="$here/HASHES.txt"
 
 METHOD="${1:-}"
 case "$METHOD" in
-  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and) ;;
+  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard) ;;
   *)
-    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and>" >&2
+    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard>" >&2
     exit 2
     ;;
 esac
@@ -106,41 +106,47 @@ elif [[ "$v2_label" != "upstream" ]]; then
   exit 1
 fi
 
-# spec-casc-tok-free-judgment is the one method that ALSO needs
-# gpu_model_runner.py patched (the half that overwrites the real
-# sequence's last drafted columns with the fixed criterion pattern -- see
-# vllm-0.26.0-free-judgment-model-runner.patch's own module comment for
-# why this can't be done from rejection_sampler.py alone). Same
-# pristine-or-already-correct safety check as every other file here, just
-# inlined for this one method rather than a fully separate installer
-# script (unlike hidden-state-capture, this file is NOT meant to compose
-# with arbitrary other methods -- it only makes sense together with this
-# method's own rejection_sampler.py half).
+# Three methods ALSO need gpu_model_runner.py patched (the half that
+# overwrites the real sequence's own trailing drafted columns -- see each
+# method's own model-runner patch for why this can't be done from
+# rejection_sampler.py alone). Same pristine-or-already-correct safety
+# check as every other file here, just inlined for these methods rather
+# than a fully separate installer script (unlike hidden-state-capture,
+# these files are NOT meant to compose with arbitrary other methods --
+# each only makes sense together with its own rejection_sampler.py half).
 GMR_REL="v1/worker/gpu_model_runner.py"
 GMR="$pkg/$GMR_REL"
-if [[ "$METHOD" == "spec-casc-tok-free-judgment" ]]; then
+gmr_label_for_method=""
+case "$METHOD" in
+  spec-casc-tok-free-judgment) gmr_label_for_method="free-judgment-model-runner" ;;
+  spec-casc-tok-rv) gmr_label_for_method="rv-model-runner" ;;
+  spec-casc-tok-judge-nudge) gmr_label_for_method="jn-model-runner" ;;
+  spec-casc-tok-hsr-guard) gmr_label_for_method="hsr-guard-model-runner" ;;
+esac
+if [[ -n "$gmr_label_for_method" ]]; then
+  gmr_patch_file="$here/vllm-0.26.0-$gmr_label_for_method.patch"
   gmr_hash="$(hash_of "$GMR")"
   gmr_label="$(label_for_hash x "$gmr_hash")"
-  if [[ "$gmr_label" == "free-judgment-model-runner" ]]; then
-    echo "free-judgment-model-runner already applied to $GMR (sha256 matches)"
+  if [[ "$gmr_label" == "$gmr_label_for_method" ]]; then
+    echo "$gmr_label_for_method already applied to $GMR (sha256 matches)"
   elif [[ "$gmr_label" == "upstream" ]]; then
-    echo "applying free-judgment-model-runner to pristine $GMR_REL"
+    echo "applying $gmr_label_for_method to pristine $GMR_REL"
     gmr_work="$(mktemp -d)"
     trap 'rm -rf "$gmr_work"' EXIT
     mkdir -p "$(dirname "$gmr_work/vllm/$GMR_REL")"
     cp "$GMR" "$gmr_work/vllm/$GMR_REL"
-    patch -p1 -d "$gmr_work" < "$here/vllm-0.26.0-free-judgment-model-runner.patch"
+    patch -p1 -d "$gmr_work" < "$gmr_patch_file"
     new_gmr_hash="$(hash_of "$gmr_work/vllm/$GMR_REL")"
     new_gmr_label="$(label_for_hash x "$new_gmr_hash")"
-    if [[ "$new_gmr_label" != "free-judgment-model-runner" ]]; then
-      echo "patched result does not match HASHES.txt's recorded free-judgment-model-runner hash (got $new_gmr_hash) -- refusing to install" >&2
+    if [[ "$new_gmr_label" != "$gmr_label_for_method" ]]; then
+      echo "patched result does not match HASHES.txt's recorded $gmr_label_for_method hash (got $new_gmr_hash) -- refusing to install" >&2
       exit 1
     fi
     cp --remove-destination "$gmr_work/vllm/$GMR_REL" "$GMR"
-    echo "installed free-judgment-model-runner"
+    echo "installed $gmr_label_for_method"
   else
     echo "$GMR matches no known state (hash $gmr_hash) -- reinstall vLLM 0.26.0 fresh, or reverse whatever is there:" >&2
-    echo "  patch -p1 -R -d '$sp' < '$here/vllm-0.26.0-free-judgment-model-runner.patch'  (if it's this patch)" >&2
+    echo "  patch -p1 -R -d '$sp' < '$gmr_patch_file'  (if it's this patch)" >&2
     echo "  or: patch -p1 -R -d '$sp' < '$here/vllm-0.26.0-hidden-state-capture.patch'  (if that's what's there instead)" >&2
     exit 1
   fi
@@ -149,10 +155,10 @@ else
   # hard-fail if hidden-state-capture happens to be installed alongside
   # (that one IS meant to compose with any method, including this repo's
   # own methods); only warn if it's something else entirely (e.g. stale
-  # free-judgment-model-runner state from a previous session).
+  # model-runner state from a previous session).
   gmr_label_other="$(label_for_hash x "$(hash_of "$GMR")")"
   if [[ "$gmr_label_other" != "hidden-state-capture" && "$gmr_label_other" != "upstream" ]]; then
-    echo "note: gpu_model_runner.py is patched as '${gmr_label_other:-unknown}', not upstream/hidden-state-capture -- if that's stale free-judgment-model-runner state, it's harmless here (disabled by its own knob file being unset for any OTHER method), but consider reversing it: patch -p1 -R -d '$sp' < '$here/vllm-0.26.0-free-judgment-model-runner.patch'" >&2
+    echo "note: gpu_model_runner.py is patched as '${gmr_label_other:-unknown}', not upstream/hidden-state-capture -- if that's stale model-runner state from free-judgment/rv/judge-nudge, it's harmless here (disabled by its own knob file being unset for any OTHER method), but consider reversing it with the matching vllm-0.26.0-<label>.patch" >&2
   fi
 fi
 

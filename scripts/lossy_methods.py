@@ -48,10 +48,12 @@ class MethodSpec:
             raise ValueError(f"cactus alpha must be >= 0 (it bounds a KL divergence); got {alpha}")
         if self.name in (
             "spec_casc_tok", "spec_casc_tok_antiloop", "spec_casc_tok_force_commit",
-            "spec_casc_tok_self_check", "spec_casc_tok_free_judgment",
+            "spec_casc_tok_self_check", "spec_casc_tok_free_judgment", "spec_casc_tok_rv",
+            "spec_casc_tok_judge_nudge",
             "spec_casc_tok_semantic_guard", "spec_casc_tok_semantic_guard_v2",
             "spec_casc_tok_semantic_guard_and",
             "spec_casc_tok_semantic_guard_future_guard", "spec_casc_tok_semantic_guard_future_guard_and",
+            "spec_casc_tok_hsr_guard",
         ) and alpha == 0.0:
             raise ValueError(
                 f"{self.name} alpha=0.0 is NOT the strict point for this method (alpha=-inf is) -- "
@@ -125,6 +127,16 @@ class MethodSpec:
                 "costs real budget -- v1 is observation-only (traced, not acted on) -- "
                 "see analysis/semantic_guard/README.md"
             )
+        if self.name == "spec_casc_tok_judge_nudge":
+            return (
+                f"pi_rej(v) = q(v)+eta*p(v) for v with p(v) >= (1-{alpha:g})*max(p), else eta*p(v), computed "
+                "on target_probs AFTER judge/nudge modifies it -- every round appends either a TRUE/FALSE "
+                "judge criterion (default) or, while a nudge window is active, spec-casc-tok-rv's own "
+                "reflection-prompt+duplicate-draft pattern; NUDGE mode blends z_mix=(1-rv_alpha)*z0+"
+                "rv_alpha*z_reflect at the LOGIT level into target_probs at the real positions before this "
+                "method's own eta/pi_rej math runs -- see analysis/semantic_guard/"
+                "DESIGN_screen_verify_nudge.md"
+            )
         if self.name == "spec_casc_tok_semantic_guard":
             return (
                 f"pi_rej(v) = q(v)+eta*p(v) for v with p(v) >= (1-{alpha:g})*max(p), else eta*p(v) -- "
@@ -161,6 +173,18 @@ class MethodSpec:
                 "would accept (min(p,pi_rej) as the effective target, same AND-combination as "
                 "spec_casc_tok_semantic_guard_and but applied to the K-window instead of the marker "
                 "itself) -- see analysis/semantic_guard/README.md"
+            )
+        if self.name == "spec_casc_tok_hsr_guard":
+            return (
+                f"pi_rej(v) = q(v)+eta*p(v) for v with p(v) >= (1-{alpha:g})*max(p), else eta*p(v) -- "
+                "UNLESS a hidden-state-recurrence budget has been hit (a self-calibrated 99.9th-"
+                "percentile S_32 trajectory-recurrence signal, computed live from target_hidden_states "
+                "at zero extra forward-pass cost, crossing 25 times within a trailing 600-committed-"
+                "token window), in which case the trusted top set is forced empty (pi_rej=p exactly) "
+                "for the next 8 real committed tokens -- pure-Python, round-granular, no state carried "
+                "through the kernel (unlike spec_casc_tok_semantic_guard_future_guard, which was found "
+                "to have a real, reproducible kernel-level bug this investigation) -- "
+                "see analysis/semantic_guard/README.md"
             )
         raise ValueError(self.name)
 
@@ -361,6 +385,32 @@ METHODS: dict[str, MethodSpec] = {
             },
         ),
         MethodSpec(
+            name="spec_casc_tok_judge_nudge",
+            hashes_label="spec-casc-tok-judge-nudge",
+            env_var="SPEC_CASC_TOK_JUDGE_NUDGE_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-tok-judge-nudge-alpha-{_uid()}"),
+            # Own alpha file (a first draft aliased plain spec-casc-tok's own file -- a real bug caught
+            # live, see patches/HASHES.txt's own "fixed 2026-08-14" entry). Log prefix is still the
+            # inherited "[SPEC-CASC-TOK PATCH]" (no separate print() added on top of the base) --
+            # distinguished from plain spec-casc-tok by probe_patched("_JN_STATE"), not the log line.
+            log_prefix="[SPEC-CASC-TOK PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf), NOT 0.0 for strict",
+            default_alpha=0.3,
+            taxonomy={
+                "family": "spec-casc-tok + judge/nudge (this repo's own pilot experiment, not in Xia et al.) "
+                "-- combines the best of six free-judgment criterion phrasings tested against 48 real "
+                "ground-truth-labeled points (TRUE/FALSE + completion scaffold) as trigger with "
+                "spec-casc-tok-rv's own ephemeral logit blend as actuator instead of reject-and-resample "
+                "(proven not to work via a positionally-verified causal trace); originally designed with a "
+                "hidden-state-recurrence screen to gate the wide rounds, dropped after an empirical finding "
+                "that no live per-round cost lever exists in this repo's patch scope -- pays the wide-"
+                "verification tax every round, unconditionally",
+                "paper_name": "spec-casc-tok-judge-nudge",
+                "reference": "analysis/semantic_guard/DESIGN_screen_verify_nudge.md",
+            },
+        ),
+        MethodSpec(
             name="spec_casc_tok_semantic_guard",
             hashes_label="spec-casc-tok-semantic-guard",
             env_var="SPEC_CASC_TOK_GUARD_ALPHA",
@@ -432,6 +482,29 @@ METHODS: dict[str, MethodSpec] = {
             taxonomy={
                 "family": "spec-casc-tok + K-token future-guard semantic guard, AND-combined inside the window (this repo's own pilot experiment, not in Xia et al.)",
                 "paper_name": "spec-casc-tok-semantic-guard-future-guard-and",
+                "reference": "analysis/semantic_guard/README.md",
+            },
+        ),
+        MethodSpec(
+            name="spec_casc_tok_hsr_guard",
+            hashes_label="spec-casc-tok-hsr-guard",
+            env_var="SPEC_CASC_TOK_HSR_GUARD_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-tok-hsr-guard-alpha-{_uid()}"),
+            log_prefix="[SPEC-CASC-TOK-HSR-GUARD PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf), NOT 0.0 for strict",
+            default_alpha=0.3,
+            taxonomy={
+                "family": "spec-casc-tok + hidden-state-recurrence guard (this repo's own pilot "
+                "experiment, not in Xia et al.) -- pivot from judge-nudge's expensive precise-"
+                "detection approach to cheap, imprecise-but-safe detection: a live S_32 trajectory-"
+                "recurrence signal (analysis/semantic_guard/join_hidden_states.py's own formulation, "
+                "computed incrementally from target_hidden_states -- zero extra cost, already produced "
+                "for EAGLE3's own drafting) triggers a K=8-token strict-verification window on a "
+                "self-calibrated recurrence-crossing budget. Round-granular, no kernel-carried state "
+                "(unlike spec-casc-tok-semantic-guard-future-guard, whose Triton-kernel counter was "
+                "found to have a real, reproducible rearm-while-active bug this investigation)",
+                "paper_name": "spec-casc-tok-hsr-guard",
                 "reference": "analysis/semantic_guard/README.md",
             },
         ),

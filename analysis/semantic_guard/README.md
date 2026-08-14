@@ -1769,6 +1769,83 @@ v2's one distinctive regression (no other guard variant loses it), and it
 regresses again here at full scale -- a real, reproducible cost specific to
 this variant, not pilot noise.
 
+## Resolved: the future-guard debug instrumentation's own open question -- a real, rare kernel bug
+
+`patches/HASHES.txt`'s `spec-casc-tok-semantic-guard-future-guard` entry
+has carried an open question since the DEBUG INSTRUMENTATION was added: a
+hand-simulation of the arm/decrement logic against a real trace (case_004,
+alpha=0.7) suggested the K-token window was only enforcing strict
+verification ~50-65% of the time it should, and the instrumentation
+(`window_guard_active`, ground truth for what the kernel actually used at
+each position) was added to get a real answer instead of inferring one.
+That answer, now resolved:
+
+**The 50-65% figure does not hold up.** Only one run in the whole repo
+actually has the instrumentation field populated (every other future-guard
+run predates the patch that added it, so `window_guard_active` is `null`
+throughout those traces and unusable for this check) --
+`runs/fg_debug_diagnostic/case_004/seed_0/specCascTokSemanticGuardFutureGuard0p7k8/proposals.jsonl`,
+K=8, alpha=0.7, 5,756 rounds, 19,144 verified positions. A correct-per-spec
+Python simulation of the arm/decrement algorithm matches the kernel's real
+per-position decisions on **19,132/19,144 (99.94%)** of them.
+
+**But there IS a real, rare bug in the remaining 0.06%.** Of 501 total
+marker-accept events in that trace, 64 are "warm" rearms -- a marker
+accepted while a strict window from an EARLIER trigger is still active
+(the documented behavior: "the moment one is ACCEPTED... whichever rule
+accepted it -- normal spec-casc-tok, or an already-active window" should
+re-arm the window to a fresh K=8 regardless). 2 of those 64 (3.1%) silently
+fail to re-arm: the window instead behaves exactly as if the marker were
+an ordinary non-marker token (decrements by 1 instead of resetting to 8).
+Verified precisely -- in both failures, the observed window duration after
+the "rearm" equals exactly `(remaining-before − 1)`, never K, as if the
+`is_marker` branch was skipped and the ordinary decrement branch ran
+instead. The other 62/64 warm rearms (96.9%) behave correctly, so this
+isn't a deterministic logic error (the Python source, hand-traced against
+spec, is correct) -- it's an intermittent fault specific to the
+"already-active + rearm" code path inside the Triton kernel's own
+loop-carried `strict_remaining` variable, not fully isolated (would need
+IR/PTX-level inspection to pin the exact mechanism). Net effect: 12 of
+19,144 verified positions (0.06%) in this one trace got the relaxed
+`spec_casc_tok` test where they should have gotten strict -- small, real,
+and distinct from the already-documented 3.5% "marker token itself isn't
+gated" leak.
+
+**This does not change any of this document's own full-scale numbers.**
+12 mispositioned tokens out of a run this length has no material effect on
+accuracy/length/wall-time at the scale those numbers are reported to, and
+none of the full-scale sweeps above happen to depend on the specific
+window that was corrupted. It's flagged here because it directly informed
+the design choice below: `spec_casc_tok_hsr_guard` deliberately does NOT
+reuse future-guard's persistent Triton-kernel-carried counter mechanism,
+choosing a simpler, purely round-granular, plain-Python state-carry
+instead specifically to not inherit this bug class.
+
+Reproduce the verification (no live server needed, just the existing trace):
+
+```
+python3 -c "
+import json, collections
+rows = [json.loads(l) for l in open('runs/fg_debug_diagnostic/case_004/seed_0/specCascTokSemanticGuardFutureGuard0p7k8/proposals.jsonl')]
+by_round = collections.defaultdict(list)
+for r in rows: by_round[r['round']].append(r)
+for k in by_round: by_round[k].sort(key=lambda r: r['pos_in_round'])
+seq = [r for rnd in sorted(by_round) for r in by_round[rnd] if r['emission_source'] != 'bonus']
+K = 8
+strict_remaining = 0
+mismatches = 0
+for r in seq:
+    pred = strict_remaining > 0
+    if pred != r['window_guard_active']: mismatches += 1
+    is_marker, accepted = r['token_marker_guard_active'], r['actually_accepted']
+    if accepted:
+        if is_marker: strict_remaining = K
+        elif strict_remaining > 0: strict_remaining -= 1
+    elif strict_remaining > 0: strict_remaining -= 1
+print(f'{len(seq)} positions, {mismatches} mismatches ({mismatches/len(seq):.4%})')
+"
+```
+
 ## Overall AIME24 conclusion: eight variants compared at full 30-case scale
 
 Everything in this document's `spec_casc_tok`-family investigation, one
@@ -1915,6 +1992,226 @@ python3 scripts/fresh_server_replay.py \
     --log-root logs/humaneval_candidates_pilot --max-new-tokens 9000
 ```
 
+## `spec_casc_tok_hsr_guard`: hidden-state recurrence as a live, free trigger -- and two real bugs found calibrating it
+
+Every guard variant above triggers on TOKEN IDENTITY (a hesitation marker
+like "wait"/"hmm" was drafted). This one triggers on a completely
+different, non-lexical signal: S_32, the SAME trajectory-recurrence score
+this document's own earlier sections used for OFFLINE analysis (fixed
+128-dim random projection of `target_hidden_states`, seed 20260810,
+trailing-32-mean cosine similarity against the best match >=32 committed
+tokens back -- see `analysis/semantic_guard/join_hidden_states.py`),
+computed LIVE and incrementally instead of after the fact. This is
+genuinely free: `target_hidden_states` is already computed every round for
+EAGLE3's own drafting, so reading it costs nothing extra.
+
+Design pivot from `spec_casc_tok_judge_nudge` (the previous mechanism in
+this investigation): judge-nudge tried to detect precisely (a criterion
+prompt read via an extended verification span, at real cost every round)
+and act narrowly. This design deliberately inverts that: detect cheaply
+(free, from data already computed) and act safely -- the actuator is
+"force genuinely strict verification for the next K=8 real committed
+tokens," which is never WRONG, only occasionally unnecessary, so an
+imprecise trigger is an acceptable trade here in a way it wasn't for
+judge-nudge's own reject-and-resample actuator (proven not to work via a
+positionally-verified causal trace on case_010).
+
+Mechanism (round-granular, not per-verified-position, and NOT built on
+`spec_casc_tok_semantic_guard_future_guard`'s Triton-kernel-carried
+counter, which this investigation found to have a real, reproducible bug
+-- see below): `vllm/v1/worker/gpu_model_runner.py` computes S_32 for
+each newly-committed real token (bounded lookback: only the last WINDOW
+positions are ever searched as candidates, not the whole run -- see the
+first bug below for why this bound exists at all), self-calibrates a
+percentile threshold from its own trailing WINDOW score history, and on
+BUDGET threshold-crossings within that window, ARMS a shared `/tmp` file
+to K=8. `vllm/v1/sample/rejection_sampler.py` reads that file each round,
+forces the trusted top set EMPTY (this method's own strict limit) for the
+leading N=min(remaining, this round's width) positions of the real
+request's own draft block (reusing `spec_casc_tok_semantic_guard`'s exact
+stateless mask-forcing code, just with a position-derived mask instead of
+a token-identity one), and decrements by whatever was actually walked.
+
+### Bug #1 (build-time): self-inclusion + unbounded candidate pool made the trigger non-stationary
+
+Caught by `patches/test_spec_casc_tok_hsr_guard.py`'s own regression test
+before any live run: the first version compared each new score against a
+percentile computed from a history set that ALREADY included that score,
+with only a small fixed floor (50 samples) before evaluating -- 250 tokens
+of pure synthetic noise spuriously tripped the budget. Fixing the
+self-inclusion alone wasn't enough: the SAME test still failed, with
+crossings clustered at the LATE end of the run, because the candidate
+search (`_compute_s32`) looked back across the entire buffer, so the
+candidate pool a MAX gets taken over keeps growing as more history
+accumulates -- genuinely non-stationary even for noise (max-over-N-samples
+grows with N). Fixed by comparing against PRIOR history only, requiring a
+FULL window of it before evaluating at all, and bounding the candidate
+lookback to WINDOW positions back from the current one. See
+`patches/HASHES.txt`'s own `hsr-guard-model-runner` entry for the full
+blow-by-blow.
+
+### Bug #2 (post-pilot): an own analysis mistake hid a real miscalibration
+
+An 8-case pilot (same standard set as every guard pilot in this document,
+alpha=0.3, budget=3/window=600/pct=99 -- the ORIGINAL, not the corrected,
+parameters) initially looked like the guard was a complete no-op: checking
+the trace for `token_marker_guard_active` == True returned ZERO rows
+across all 8 cases (98,576 total verified positions) --
+
+| tag | runs | correct | wrong | no answer | hit cap |
+|---|---:|---:|---:|---:|---:|
+| baseline (spec_casc_tok 0.3) | 8 | 7 | 0 | 1 | 1 |
+| hsr_guard budget=3/pct=99 | 8 | 6 | 1 | 1 | 1 |
+
+1 rescue (case_002: no_answer -> correct) against 2 regressions (case_011:
+correct -> wrong, 104->294; case_003: correct -> no_answer) -- the same
+"net -1" shape as most guard pilots in this document, but with the guard
+apparently NEVER firing, the natural read was "these outcome differences
+are ordinary stochastic run-to-run variation, not a causal effect of the
+mechanism" (spec-decode sampling isn't bit-reproducible run-to-run even
+at a fixed seed, a property this whole investigation has run into before).
+
+That read was itself wrong, caught only by a live, end-to-end debug
+session (temporary print statements compiled into a real, running server,
+a real 20k-token request against case_002): internal state showed the
+guard actively cycling (crossings accumulating, the shared remaining-file
+going nonzero, `token_marker_guard_active` NOT actually all-False when
+checked directly on that exact run). The real bug was in the checking
+script, not the guard: it queried a dict key named
+`token_marker_guard_mask` -- the PARAMETER name the code passes into
+`_TRACER.record()` -- when the tracer's own OUTPUT field, the one
+literally written to every JSONL row, is `token_marker_guard_active` (the
+same field this document's own future-guard bug investigation, two
+sections up, used correctly). Re-querying the SAME 8 pilot traces with the
+right key name gave a completely different picture:
+
+| case | guarded / total positions | active % |
+|---|---:|---:|
+| case_005 | 4,971 / 8,443 | 58.9% |
+| case_028 | 6,088 / 8,472 | 71.9% |
+| case_002 | 10,798 / 16,953 | 63.7% |
+| case_020 | 2,554 / 5,095 | 50.1% |
+| case_021 | 4,293 / 6,046 | 71.0% |
+| case_015 | 3,628 / 5,220 | 69.5% |
+| case_011 | 11,369 / 15,578 | 73.0% |
+| case_003 | 23,357 / 32,769 | 71.3% |
+
+The guard was active 50-73% of essentially every position in EVERY case --
+not the rare, targeted intervention the design intended, but something
+close to "run mostly strict," on ordinary AIME cases and a genuinely stuck
+one alike. `budget=3` crossings within a 600-token window is trivial to
+clear once a window's worth of crossings can accumulate, and each
+accumulation re-arms the K=8 actuator faster than it can expire.
+
+### Correcting the calibration: an offline sweep against two real captured cases
+
+Rather than guess a fix, an offline sweep recomputed S_32 (the exact live,
+bounded-lookback formulation) against two REAL runs with
+`hidden_states.bin` captured: `case_002` (a genuinely-stuck AIME case,
+`--capture-hidden-states` re-run of the same case above) and the
+already-existing `case_004` "|"-repeat capture from earlier in this
+document (a known severe, literal loop). Varying percentile alone
+plateaus with diminishing returns -- even at pct=99.99, active_frac only
+drops to 38% (case_002) / 30% (case_004). Varying budget alone finds a
+sharp cliff instead:
+
+| budget | case_002 active % | case_004 active % |
+|---:|---:|---:|
+| 3 | 72.8% | 70.6% |
+| 15 | 19.6-22.6% | 15.8-15.9% |
+| **25** | **1.6-2.6%** | **0.4-1.3%** |
+| 40 | 0.0% (never fires) | 0.0% (never fires) |
+
+`budget=25` is the sweet spot: genuinely selective (0.4-2.6% active) on
+BOTH a real stuck case and a real severe-loop case, while `budget>=40`
+would never fire even on the known severe loop. Combined with tightening
+percentile to 99.9 (from 99.0), the new defaults are **window=600,
+budget=25, percentile=99.9, actuator_k=8** (K unchanged -- reproduce the
+sweep with `analysis/semantic_guard/results/` or see
+`patches/HASHES.txt`'s own entry for the exact script logic).
+
+A live sanity check with the corrected parameters, same case_002, same
+seed: the guard fired on 12.95% of positions (3,138/24,228) -- far more
+selective than 63.7%, though still higher than the offline sweep's own
+1.6-2.6% (expected: a different, fresh stochastic draw of the same case,
+plus the offline sweep analyzed a DIFFERENT capture of case_002 than this
+live run). Baseline `spec_casc_tok` hit the length cap on this case
+(L=32768, no_answer, matching its own earlier result); the guard reached
+a natural stop at L=24219 with the correct final answer (113, matching
+the reference).
+
+### Full-scale AIME24 results (corrected parameters, budget=25/pct=99.9)
+
+`spec_casc_tok_hsr_guard` run across all 30 AIME24 cases (baseline for
+cases 1-16 run fresh alongside it; cases 17-30 reused the existing
+`runs/aime24_fresh` baseline instead of re-running it, after confirming
+bit-identical `output_tokens`/`finish_reason` between a fresh re-run and
+that existing data on all 16 overlapping cases -- generation is genuinely
+deterministic run-to-run in this setup at a fixed seed, so reusing
+existing baseline data is valid, not just convenient, and is this
+document's own established practice elsewhere, e.g. the alpha=0.5/0.7
+sections above):
+
+| metric | baseline (spec_casc_tok 0.3) | hsr_guard (budget=25/pct=99.9) |
+|---|---:|---:|
+| accuracy | **26/30 (86.7%)** | **26/30 (86.7%)** |
+| correct / wrong / no_answer | 26 / 2 / 2 | 26 / 3 / 1 |
+| mean completion length | 9,439.6 | 9,032.4 (-4.3%) |
+| mean accepted length (l̄) | 2.421 | 2.404 |
+| mean verifier rounds | 2,896.8 | 2,840.2 (-1.9%) |
+| guard active (all positions, all cases) | -- | **13,549 / 271,040 (5.00%)** |
+| cases where guard fired at least once | -- | 17/30 (57%) |
+
+**Accuracy is exactly tied (26/30 both)**, but the FAILURE COMPOSITION
+shifted rather than simply improving or regressing. Verdict changes:
+2 genuine rescues (case_002: no_answer/cap at L=32768 -> correct at
+L=24,219, natural stop, matching the earlier live sanity check exactly;
+case_006: wrong [88 vs reference 104] -> correct [104]) and 1 partial
+improvement (case_004, the case this whole investigation's earlier
+sections used as the canonical severe-loop example: no_answer/cap ->
+still WRONG [3 vs reference 385], but now actually terminates instead of
+exhausting the token budget) against 2 regressions (case_003: correct ->
+no_answer/cap; case_028: correct [699] -> wrong [629]). Net effect on the
+specific failure MODE that originally motivated this whole mechanism --
+"never terminates, exhausts the length cap" -- is a real, if modest,
+improvement: cap-hits dropped from 2 to 1 (case_004's cap-hit converted to
+a termination, wrong but not indefinite; case_003 is a NEW cap-hit not
+present in baseline, so this isn't a clean win, just a net -1).
+
+**The guard's own activity, at these corrected parameters, is genuinely
+selective**: active on only 5.00% of all 271,040 verified positions
+across the whole sweep, and completely silent (0% -- mathematically
+identical to plain `spec_casc_tok`, per this patch's own unit tests) on
+13/30 cases where nothing recurrence-like ever crossed the self-calibrated
+threshold. Where it DOES fire, per-case activity ranges from under 2%
+(case_006, case_029) up to 19% (case_001) -- not a fixed rate, tracking
+whatever each generation's own trajectory actually does. This is the
+qualitative behavior the design intended (rare, targeted intervention,
+not "run mostly strict") and is a direct, measured correction of this
+same section's own first (budget=3) attempt, which was active 50-73% of
+positions on every single case with no accuracy benefit to show for it.
+
+Worth noting against this document's own "Overall AIME24 conclusion" table
+above: every marker-triggered guard variant tested there (override, AND,
+v2, all three future-guard combinations, at every alpha tried) scores
+STRICTLY BELOW plain `spec_casc_tok`'s own 86.7% -- "no guard variant
+beats vanilla `spec_casc_tok`" was that section's own headline finding.
+`spec_casc_tok_hsr_guard` is the first guard variant in this whole
+investigation to TIE baseline's accuracy exactly (26/30 both) while ALSO
+being cheaper (-4.3% length, -1.9% rounds) -- not a win, but the first
+guard whose length/round savings don't cost accuracy to buy.
+
+Reproduce:
+
+```
+python3 scripts/fresh_server_replay.py \
+    --arms spec_casc_tok spec_casc_tok_hsr_guard \
+    --spec-casc-tok-alpha 0.3 --spec-casc-tok-hsr-guard-alpha 0.3 \
+    --cases $(printf 'case_%03d ' $(seq 1 30)) \
+    --prompt-root prompts/aime24 --runs-root runs/hsr_guard_full/aime24 \
+    --log-root logs/hsr_guard_full/aime24 --max-new-tokens 32768
+```
+
 ## Reference: every `spec_casc_tok`-family method explained, and every full-scale AIME24 result in one place
 
 Everything above this section built up incrementally; this section is the
@@ -2049,3 +2346,10 @@ transition rather than just its endpoints).
 
 Full narrative, mechanism analysis, and reproduce commands for every row
 above are in the sections preceding this one.
+
+`spec_casc_tok_hsr_guard`'s own full-scale AIME24 result (26/30, tying
+baseline, the first guard variant in this document to do so) isn't in the
+table above -- its trigger is calibrated on a budget/percentile pair, not
+a token-count K, so it doesn't share this table's own columns. See its own
+"Full-scale AIME24 results" section earlier in this document for the
+complete numbers.
