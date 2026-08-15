@@ -70,7 +70,9 @@ def count_markers(text: str) -> dict[str, int]:
 
 
 def collect_rows(runs_root: pathlib.Path) -> list[dict[str, Any]]:
-    run_dirs = sorted({p.parent for p in runs_root.glob("*/seed_*/*/run.json")})
+    # runs_root layout: <runs-root>/<method>/<params>/<case>/<seed_N>/ (runs-root
+    # is expected to be a per-benchmark path, e.g. runs/aime24 or runs/humaneval).
+    run_dirs = sorted({p.parent for p in runs_root.glob("*/*/*/seed_*/run.json")})
     if not run_dirs:
         print(f"no runs under {runs_root}", file=sys.stderr)
         return []
@@ -88,9 +90,11 @@ def collect_rows(runs_root: pathlib.Path) -> list[dict[str, Any]]:
         run_data = json.loads(run_path.read_text(encoding="utf-8")) if run_path.is_file() else {}
 
         counts = count_markers(text)
+        params = run_dir.parent.parent.name
+        method = run_dir.parent.parent.parent.name
         row = {
-            "case": config.get("prompt_case", run_dir.parent.parent.name),
-            "tag": run_dir.name,
+            "case": config.get("prompt_case", run_dir.parent.name),
+            "tag": f"{method}/{params}",
             "arm": arm_label(config),
             "completion_tokens": run_data.get("output_tokens"),
             **counts,

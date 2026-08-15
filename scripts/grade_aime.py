@@ -65,11 +65,15 @@ def extract_answer(text: str) -> tuple[str | None, str]:
 
 
 def grade(run_dir: pathlib.Path, prompt_root: pathlib.Path) -> dict[str, Any] | None:
+    # run_dir layout: <runs-root>/<method>/<params>/<case>/<seed_N>/ -- run_dir
+    # IS the seed_N directory (case is its parent, params its grandparent).
     run = read_json(run_dir / "run.json")
     config = read_json(run_dir / "config.json")
     if not run and not config:
         return None
-    case = run_dir.parent.parent.name
+    case = run_dir.parent.name
+    params = run_dir.parent.parent.name
+    method = run_dir.parent.parent.parent.name
     reference = config.get("reference_answer")
     if reference is None:
         meta = read_json(prompt_root / case / "metadata.json")
@@ -88,8 +92,10 @@ def grade(run_dir: pathlib.Path, prompt_root: pathlib.Path) -> dict[str, Any] | 
         verdict = "wrong"
     return {
         "case": case,
-        "seed": config.get("seed", run_dir.parent.name.removeprefix("seed_")),
-        "tag": run_dir.name,
+        "seed": config.get("seed", run_dir.name.removeprefix("seed_")),
+        "tag": f"{method}/{params}",
+        "method": method,
+        "params": params,
         "mode": config.get("mode"),
         "lossy_method": config.get("lossy_method"),
         "alpha": (config.get("lossy_parameters") or {}).get("alpha"),
@@ -121,9 +127,12 @@ def render(rows: list[dict[str, Any]]) -> str:
 
 def main() -> int:
     args = parse_args()
+    # runs_root layout: <runs-root>/<method>/<params>/<case>/<seed_N>/run.json
+    # (runs-root is expected to be a per-benchmark path, e.g. runs/aime24).
     rows = []
-    for run_json in sorted(args.runs_root.glob("*/seed_*/*/run.json")):
-        if args.tags and run_json.parent.name not in args.tags:
+    for run_json in sorted(args.runs_root.glob("*/*/*/seed_*/run.json")):
+        tag = f"{run_json.parent.parent.parent.name}/{run_json.parent.parent.name}"
+        if args.tags and tag not in args.tags:
             continue
         row = grade(run_json.parent, args.prompt_root)
         if row is not None:

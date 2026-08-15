@@ -199,9 +199,13 @@ def analyze_run(run_dir: pathlib.Path) -> dict[str, Any] | None:
     relaxed_only = sum(marker_relaxed_only.values())
     all_tokens_relaxed_only = sum(relaxed_only_tok)
 
+    # run_dir layout: <runs-root>/<method>/<params>/<case>/<seed_N>/ -- run_dir
+    # IS the seed_N directory (case is its parent, params its grandparent).
+    params = run_dir.parent.parent.name
+    method = run_dir.parent.parent.parent.name
     return {
-        "case": config.get("prompt_case", run_dir.parent.parent.name),
-        "tag": run_dir.name,
+        "case": config.get("prompt_case", run_dir.parent.name),
+        "tag": f"{method}/{params}",
         "arm": arm_label(config),
         "total_tokens": len(starts),
         "relaxed_only_tokens": all_tokens_relaxed_only,
@@ -213,7 +217,9 @@ def analyze_run(run_dir: pathlib.Path) -> dict[str, Any] | None:
 
 
 def collect_rows(runs_root: pathlib.Path) -> list[dict[str, Any]]:
-    run_dirs = sorted({p.parent for p in runs_root.glob("*/seed_*/*/run.json")})
+    # runs_root layout: <runs-root>/<method>/<params>/<case>/<seed_N>/ (runs-root
+    # is expected to be a per-benchmark path, e.g. runs/aime24 or runs/humaneval).
+    run_dirs = sorted({p.parent for p in runs_root.glob("*/*/*/seed_*/run.json")})
     if not run_dirs:
         print(f"no runs under {runs_root}", file=sys.stderr)
         return []

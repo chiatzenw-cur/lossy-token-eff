@@ -126,11 +126,15 @@ def execute(
 def grade(
     run_dir: pathlib.Path, prompt_root: pathlib.Path, timeout: float, memory_limit_mb: int
 ) -> dict[str, Any] | None:
+    # run_dir layout: <runs-root>/<method>/<params>/<case>/<seed_N>/ -- run_dir
+    # IS the seed_N directory (case is its parent, params its grandparent).
     run = read_json(run_dir / "run.json")
     config = read_json(run_dir / "config.json")
     if not run and not config:
         return None
-    case = run_dir.parent.parent.name
+    case = run_dir.parent.name
+    params = run_dir.parent.parent.name
+    method = run_dir.parent.parent.parent.name
     source = read_json(prompt_root / case / "source.json")
     entry_point = source.get("entry_point")
     test_code = source.get("test")
@@ -149,8 +153,10 @@ def grade(
 
     return {
         "case": case,
-        "seed": config.get("seed", run_dir.parent.name.removeprefix("seed_")),
-        "tag": run_dir.name,
+        "seed": config.get("seed", run_dir.name.removeprefix("seed_")),
+        "tag": f"{method}/{params}",
+        "method": method,
+        "params": params,
         "mode": config.get("mode"),
         "lossy_method": config.get("lossy_method"),
         "entry_point": entry_point,
@@ -181,8 +187,11 @@ def render(rows: list[dict[str, Any]]) -> str:
 def main() -> int:
     args = parse_args()
     rows = []
-    for run_json in sorted(args.runs_root.glob("*/seed_*/*/run.json")):
-        if args.tags and run_json.parent.name not in args.tags:
+    # runs_root layout: <runs-root>/<method>/<params>/<case>/<seed_N>/run.json
+    # (runs-root is expected to be a per-benchmark path, e.g. runs/humaneval).
+    for run_json in sorted(args.runs_root.glob("*/*/*/seed_*/run.json")):
+        tag = f"{run_json.parent.parent.parent.name}/{run_json.parent.parent.name}"
+        if args.tags and tag not in args.tags:
             continue
         row = grade(run_json.parent, args.prompt_root, args.timeout, args.memory_limit_mb)
         if row is not None:

@@ -163,7 +163,14 @@ def parse_args() -> argparse.Namespace:
         help="spec_casc_tok_hsr_guard only: strict-verification window length once the budget trips.",
     )
     parser.add_argument("--prompt-root", type=pathlib.Path, default=pathlib.Path("prompts/humaneval"))
-    parser.add_argument("--runs-root", type=pathlib.Path, default=pathlib.Path("runs/humaneval_fresh"))
+    parser.add_argument(
+        "--runs-root",
+        type=pathlib.Path,
+        default=pathlib.Path("runs"),
+        help="Top-level runs directory; the benchmark name (prompt-root's own basename, "
+        "e.g. 'aime24', 'humaneval') is appended automatically, giving "
+        "<runs-root>/<bench>/<method>/<params>/<case>/seed_N/.",
+    )
     parser.add_argument("--log-root", type=pathlib.Path, default=pathlib.Path("logs/humaneval_fresh"))
     parser.add_argument("--tag-suffix", default="", help="Appended to the default per-arm tag.")
     parser.add_argument("--temperature", type=float, default=1.0, help="Fixed, not 0: draft_sample_method=probabilistic needs a real distribution to sample from.")
@@ -207,30 +214,55 @@ def alpha_for(args: argparse.Namespace, method: str) -> float:
 
 
 def tag_for(args: argparse.Namespace, arm: str) -> str:
+    """Compact single-string display label (log filenames only, not the
+    run directory -- see method_and_params_for() for that)."""
+    method, params = method_and_params_for(args, arm)
+    if method == params:  # strict/baseline: no separate params axis
+        return method + args.tag_suffix
+    camel = "".join(part.capitalize() if i else part for i, part in enumerate(method.split("_")))
+    # params is e.g. "alpha0.3_budget25_pct99.9_k8" -- turn it into the same
+    # compact CamelCase+suffix shape tag_for() has always produced, purely
+    # for readable log filenames.
+    compact = params.replace("alpha", "", 1)
+    return f"{camel}{compact}" + args.tag_suffix
+
+
+def method_and_params_for(args: argparse.Namespace, arm: str) -> tuple[str, str]:
+    """(method, params) for the run directory: runs-root/<bench>/<method>/
+    <params>/<case>/seed_N/. params always starts with alpha<value> for
+    every relaxed method (the one knob every MethodSpec has), with any
+    extra per-method knobs appended -- this must be the FULL set of knobs
+    that actually affects the generation, not just alpha, or two genuinely
+    different configs can collide under the same directory (this bit
+    hsr-guard for real: its old tag only had alpha+K, not budget/
+    percentile, so a mis-calibrated pilot and the corrected full sweep
+    both landed under the same directory name -- see patches/HASHES.txt's
+    own hsr-guard-model-runner "fixed" entry and analysis/semantic_guard/
+    README.md)."""
     if arm in ("strict", "baseline"):
-        base = arm
-    else:
-        spec = METHODS[arm]
-        camel = "".join(part.capitalize() if i else part for i, part in enumerate(arm.split("_")))
-        base = f"{camel}{alpha_for(args, arm):g}".replace(".", "p").replace("-", "neg")
-        if arm == "spec_casc_tok_semantic_guard_future_guard":
-            # K into the tag too, not just alpha -- run directories from
-            # different K sweeps must not collide under the same tag.
-            base += f"k{args.spec_casc_tok_semantic_guard_future_guard_k}"
-        if arm == "spec_casc_tok_semantic_guard_future_guard_and":
-            base += f"k{args.spec_casc_tok_semantic_guard_future_guard_and_k}"
-        if arm == "spec_casc_tok_force_commit":
-            # Threshold into the tag too, not just alpha -- run directories
-            # from different threshold sweeps must not collide.
-            base += f"t{args.spec_casc_tok_force_commit_threshold}"
-        if arm == "spec_casc_tok_self_check":
-            base += f"i{args.spec_casc_tok_self_check_interval}"
-        if arm == "spec_casc_tok_hsr_guard":
-            # K into the tag too, not just alpha -- run directories from
-            # different actuator-K sweeps must not collide (same reason as
-            # the future-guard variants' own K-in-tag convention above).
-            base += f"k{args.spec_casc_tok_hsr_guard_actuator_k}"
-    return base + args.tag_suffix
+        return arm, arm
+    alpha = alpha_for(args, arm)
+    # Dots kept literal (alpha0.3, not alpha0p3): matches the params strings
+    # already on disk from the runs/ reorganization (see runs/readme.md and
+    # patches/HASHES.txt), so future runs land next to, not beside, the
+    # historical data for the same config. "-" is still escaped since a
+    # literal minus is a directory-naming footgun (e.g. -inf).
+    params = f"alpha{alpha:g}".replace("-", "neg")
+    if arm == "spec_casc_tok_semantic_guard_future_guard":
+        params += f"_k{args.spec_casc_tok_semantic_guard_future_guard_k}"
+    if arm == "spec_casc_tok_semantic_guard_future_guard_and":
+        params += f"_k{args.spec_casc_tok_semantic_guard_future_guard_and_k}"
+    if arm == "spec_casc_tok_force_commit":
+        params += f"_t{args.spec_casc_tok_force_commit_threshold}"
+    if arm == "spec_casc_tok_self_check":
+        params += f"_i{args.spec_casc_tok_self_check_interval}"
+    if arm == "spec_casc_tok_hsr_guard":
+        params += (
+            f"_budget{args.spec_casc_tok_hsr_guard_budget}"
+            f"_pct{args.spec_casc_tok_hsr_guard_percentile:g}"
+            f"_k{args.spec_casc_tok_hsr_guard_actuator_k}"
+        )
+    return arm, params
 
 
 def stop_server() -> None:
@@ -432,7 +464,8 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
 
 
 def request_once(
-    args: argparse.Namespace, arm: str, case: str, seed: int, tag: str, log_path: pathlib.Path
+    args: argparse.Namespace, arm: str, case: str, seed: int, tag: str, method: str, params: str,
+    runs_root: pathlib.Path, log_path: pathlib.Path,
 ) -> subprocess.CompletedProcess:
     mode = "baseline" if arm == "baseline" else ("strict" if arm == "strict" else "lossy")
     command = [
@@ -440,10 +473,12 @@ def request_once(
         str(REPO_ROOT / "scripts" / "run_experiment_vllm.py"),
         "--mode", mode,
         "--prompt-root", str(args.prompt_root),
-        "--runs-root", str(args.runs_root),
+        "--runs-root", str(runs_root),
         "--cases", case,
         "--seeds", str(seed),
         "--tag", tag,
+        "--method-dir", method,
+        "--params-dir", params,
         "--temperature", str(args.temperature),
         "--top-p", str(args.top_p),
         "--max-new-tokens", str(args.max_new_tokens),
@@ -466,24 +501,27 @@ def main() -> int:
         print(f"unknown cases under {args.prompt_root}: {', '.join(unknown)}", file=sys.stderr)
         return 2
 
+    bench = args.prompt_root.name
+    runs_root = REPO_ROOT / args.runs_root / bench
+
     plan = [
-        (case, seed, arm, tag_for(args, arm))
+        (case, seed, arm, tag_for(args, arm), *method_and_params_for(args, arm))
         for case in args.cases
         for seed in args.seeds
         for arm in args.arms
     ]
     todo = []
-    for case, seed, arm, tag in plan:
-        run_json = REPO_ROOT / args.runs_root / case / f"seed_{seed}" / tag / "run.json"
+    for case, seed, arm, tag, method, params in plan:
+        run_json = runs_root / method / params / case / f"seed_{seed}" / "run.json"
         if run_json.is_file() and not args.overwrite:
-            print(f"skip {case} seed={seed} {tag}: already present ({run_json})")
+            print(f"skip {case} seed={seed} {method}/{params}: already present ({run_json})")
             continue
-        todo.append((case, seed, arm, tag))
+        todo.append((case, seed, arm, tag, method, params))
 
     print(f"{len(todo)} run(s), one fresh server each")
     if args.dry_run:
-        for case, seed, arm, tag in todo:
-            print(f"  {case} seed={seed} arm={arm} tag={tag}")
+        for case, seed, arm, tag, method, params in todo:
+            print(f"  {case} seed={seed} arm={arm} -> {bench}/{method}/{params}")
         return 0
     if not todo:
         return 0
@@ -493,7 +531,7 @@ def main() -> int:
 
     results = []
     failures = 0
-    for index, (case, seed, arm, tag) in enumerate(todo, start=1):
+    for index, (case, seed, arm, tag, method, params) in enumerate(todo, start=1):
         stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         log_path = REPO_ROOT / args.log_root / f"{tag}_{case}_seed{seed}_{stamp}.log"
         print(f"\n[{index}/{len(todo)}] {case} seed={seed} arm={arm} -> {log_path}", flush=True)
@@ -507,7 +545,7 @@ def main() -> int:
             # run_experiment_vllm.py refuses to write into a directory that
             # already exists, so creating the trace there first would trip
             # its overwrite guard. Moved into the run directory afterwards.
-            run_dir = REPO_ROOT / args.runs_root / case / f"seed_{seed}" / tag
+            run_dir = runs_root / method / params / case / f"seed_{seed}"
             trace_stage = (
                 REPO_ROOT / args.log_root / f"{tag}_{case}_seed{seed}_proposals.jsonl"
                 if args.trace_proposals
@@ -522,7 +560,7 @@ def main() -> int:
             set_hidden_state_destination(hidden_state_stage)
             process = start_server(args, arm, log_path)
             try:
-                completed = request_once(args, arm, case, seed, tag, log_path)
+                completed = request_once(args, arm, case, seed, tag, method, params, runs_root, log_path)
                 if completed.returncode != 0:
                     status = f"request failed (exit {completed.returncode})"
                     failures += 1
@@ -561,13 +599,15 @@ def main() -> int:
                 "seed": seed,
                 "arm": arm,
                 "tag": tag,
+                "method": method,
+                "params": params,
                 "status": status,
                 "wall_time_seconds": round(elapsed, 1),
                 "server_log": os.path.relpath(log_path, REPO_ROOT),
             }
         )
 
-    manifest = REPO_ROOT / args.runs_root / "fresh_server_replay.json"
+    manifest = runs_root / "fresh_server_replay.json"
     manifest.parent.mkdir(parents=True, exist_ok=True)
     previous = []
     if manifest.is_file():

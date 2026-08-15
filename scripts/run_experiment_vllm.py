@@ -53,7 +53,9 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Required for --lossy-method synthetic_acceptance; must match SYNTH_LEN.",
     )
-    parser.add_argument("--tag", help="Output directory label; defaults to a name built from the arm.")
+    parser.add_argument("--tag", help="Display/config.json label; defaults to a name built from the arm. No longer used for the output directory (see --method-dir/--params-dir).")
+    parser.add_argument("--method-dir", help="Output directory's <method> level; defaults to args.mode/args.lossy_method. Callers with extra per-method knobs beyond alpha (e.g. K, budget) should pass this explicitly together with --params-dir so the directory fully identifies the config.")
+    parser.add_argument("--params-dir", help="Output directory's <params> level; defaults to alpha<value> (or the mode name for strict/baseline). Paired with --method-dir.")
     parser.add_argument("--server-url", default="http://127.0.0.1:30000")
     parser.add_argument("--prompt-root", type=pathlib.Path, default=DEFAULT_PROMPT_ROOT)
     parser.add_argument("--cases", nargs="+", default=None)
@@ -365,10 +367,40 @@ def safe_tag(args: argparse.Namespace) -> str:
             for i, part in enumerate(args.lossy_method.split("_"))
         )
         tag = f"{camel}{args.alpha:g}".replace(".", "p").replace("-", "neg")
-    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
+    # "." allowed: tag is metadata/log-filename only now (not a path
+    # component -- see --method-dir/--params-dir), and callers such as
+    # fresh_server_replay.py's tag_for() pass explicit --tag values with a
+    # literal decimal point (e.g. "specCascTok0.31") to match its own
+    # dot-preserving params convention.
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
     if not tag or any(ch not in allowed for ch in tag):
         raise ValueError(f"Unsafe tag: {tag!r}")
     return tag
+
+
+def safe_method_and_params(args: argparse.Namespace) -> tuple[str, str]:
+    """(method, params) for the output directory: runs_root/<method>/<params>/
+    <case>/seed_<N>/. Explicit --method-dir/--params-dir win (needed for
+    methods with extra knobs beyond alpha -- K, budget, threshold, interval
+    -- that this script has no other way to know about, since those are set
+    via /tmp knob files or env vars by the caller, not CLI args here);
+    otherwise derived the same way safe_tag() derives its own single string,
+    just split into two levels instead of one."""
+    if args.method_dir and args.params_dir:
+        method, params = args.method_dir, args.params_dir
+    elif args.mode != "lossy":
+        method, params = args.mode, args.mode
+    elif args.lossy_method == "synthetic_acceptance":
+        method = "synthetic_acceptance"
+        params = f"length{args.synthetic_acceptance_length:g}".replace(".", "p")
+    else:
+        method = args.lossy_method
+        params = f"alpha{args.alpha:g}".replace(".", "p").replace("-", "neg")
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
+    for value, label in ((method, "method"), (params, "params")):
+        if not value or any(ch not in allowed for ch in value):
+            raise ValueError(f"Unsafe {label}: {value!r}")
+    return method, params
 
 
 def validate_args(args: argparse.Namespace) -> None:
@@ -498,6 +530,8 @@ def run_one(
     case: str,
     seed: int,
     tag: str,
+    method: str,
+    params: str,
     info: dict[str, Any],
     provenance: dict[str, Any],
     ordinal: int,
@@ -510,7 +544,15 @@ def run_one(
 
     prompt = prompt_path.read_text(encoding="utf-8")
     prompt_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    output_dir = args.runs_root / case / f"seed_{seed}" / tag
+    # runs_root/<method>/<params>/<case>/seed_<N>/ -- not runs_root/<case>/
+    # seed_<N>/<tag>/ (the old, now-abandoned flat layout: too many
+    # scattered campaign directories and a single "tag" string that could
+    # under-specify a method's real config, e.g. hsr-guard's own budget/
+    # percentile knobs weren't in its tag, so two genuinely different
+    # configs collided under one directory name). The prompt itself is
+    # NOT copied into the run directory -- prompts/<bench>/<case>/
+    # rendered_prompt.txt is already the canonical, single copy.
+    output_dir = args.runs_root / method / params / case / f"seed_{seed}"
     if output_dir.exists() and not args.overwrite:
         raise FileExistsError(f"Refusing to overwrite {output_dir}; pass --overwrite to replace files")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -561,7 +603,10 @@ def run_one(
     write_json(output_dir / "config.json", config)
     write_json(output_dir / "request.json", request_payload)
     write_json(output_dir / "server_info.json", info)
-    (output_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+    # No prompt.txt: prompts/<bench>/<case>/rendered_prompt.txt (read above)
+    # is already the single canonical copy; request.json's own "prompt"
+    # field carries the exact text actually sent, for anyone who needs it
+    # inline without cross-referencing the prompt root.
 
     counters_before = spec_counters(args.server_url)
     started = time.perf_counter()
@@ -631,6 +676,7 @@ def main() -> int:
     try:
         validate_args(args)
         tag = safe_tag(args)
+        method, params = safe_method_and_params(args)
         cases = args.cases or selected_cases(args.prompt_root)
         unknown = [case for case in cases if not (args.prompt_root / case).is_dir()]
         if unknown:
@@ -701,7 +747,7 @@ def main() -> int:
         for seed in args.seeds:
             ordinal += 1
             try:
-                run_one(args, case, seed, tag, info, provenance, ordinal)
+                run_one(args, case, seed, tag, method, params, info, provenance, ordinal)
             except Exception as exc:
                 failures += 1
                 print(f"{case} seed={seed} failed: {type(exc).__name__}: {exc}", file=sys.stderr)

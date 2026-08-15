@@ -111,11 +111,13 @@ def read_run_json_field(run_dir: pathlib.Path, field: str) -> Any:
 
 def main() -> int:
     args = parse_args()
-    run_dirs = sorted({p.parent for p in args.runs_root.glob("*/seed_*/*/run.json")})
+    # runs_root layout: <runs-root>/<method>/<params>/<case>/<seed_N>/ (runs-root
+    # is expected to be a per-benchmark path, e.g. runs/aime24 or runs/humaneval).
+    run_dirs = sorted({p.parent for p in args.runs_root.glob("*/*/*/seed_*/run.json")})
     if not run_dirs:
         print(f"no runs under {args.runs_root}", file=sys.stderr)
         return 1
-    cases = sorted({d.parent.parent.name for d in run_dirs})
+    cases = sorted({d.parent.name for d in run_dirs})
     benchmark = detect_benchmark(args.prompt_root, cases)
     print(f"detected benchmark: {benchmark}", file=sys.stderr)
 
