@@ -117,3 +117,25 @@ Append-only. One entry per work session. See `campaign/PLAN.md` for the design.
   first thing to recycle if tracing's real disk cost turns out to matter)
   and documented it in `campaign/PLAN.md`, but haven't needed to touch it
   yet.
+- **Session recovered after SSH disconnect**: the monitoring session died
+  around 2026-08-15T04:42Z mid-check-in (last message was confirming the
+  first traced `proposals.jsonl` landed). `scripts/campaign_all.sh` itself
+  was launched via `nohup` and kept running the whole time, unaffected --
+  at recovery it was still on gsm8k's `spec_casc_tok` calibration sweep
+  (alpha0.8, case_007/9), ~5h20m of continuous uptime. gsm8k run counts at
+  recovery: cactus 39, mentored_dec 39, r_fuzzy 39, spec_casc_opt 39,
+  spec_casc_tok 27 (of 39) -- no dataset has a finished calibration+sweep
+  yet, so nothing new for `campaign_report.py` to do this check-in.
+  Restarted the self-paced check-in loop (same ~20-30 min cadence as
+  before) to pick back up where it left off.
+- **gsm8k finished** (2026-08-15T10:05:08Z, ~5h25m total for this dataset).
+  `campaign_report.py --dataset gsm8k` ran automatically at the end of
+  `campaign_all.sh`'s gsm8k stage: `campaign/tables/gsm8k.csv` (186 rows,
+  raw per-run data across all 5 methods' calibration grids),
+  `campaign/results/gsm8k.csv` (14 rows -- the picked 3-target-alpha
+  comparison points per method), and `campaign/graphs/gsm8k.png` (the
+  5-line mean-accept-length-vs-completion-length graph) all written, report
+  script exited 0. Campaign auto-advanced straight into **aime24**
+  (started same second, mentored_dec calibration alpha0.15/0.35 first --
+  aime24's 32768-token budget makes each run much slower than gsm8k's,
+  e.g. case_002/alpha0.15 alone took 231s of generation).
