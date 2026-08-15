@@ -101,3 +101,19 @@ Append-only. One entry per work session. See `campaign/PLAN.md` for the design.
   20-30 min between checks while runs are actively landing), update this
   journal, and run `campaign_report.py` for any dataset whose full sweep
   finishes, until all 6 are done.
+- User asked for the per-token trace after all: turned tracing back on
+  (dropped `--no-trace-proposals` from `campaign_run.py`'s
+  `fresh_server_replay.py` invocation -- tracing is that script's own
+  default). At that point gsm8k's `mentored_dec` calibration grid had
+  finished (14 runs) and `cactus` calibration had just started -- cleanly
+  killed the running driver + server (`kill -TERM` on `campaign_run.py`/
+  `fresh_server_replay.py`, then `remote/stop_server.sh`, confirmed 0MiB GPU
+  used afterwards), deleted `runs/gsm8k` entirely (14 small untraced runs,
+  ~110s/run to redo -- cheaper and cleaner than leaving a traced/untraced
+  split in the same dataset's table), and relaunched
+  `scripts/campaign_all.sh` from a clean gsm8k start. Disk was still 4.1G
+  free at this point (the untraced runs cost ~25KB each, negligible either
+  way) -- re-checked the contingency plan (`runs_old_backup/`, 2.3G, is the
+  first thing to recycle if tracing's real disk cost turns out to matter)
+  and documented it in `campaign/PLAN.md`, but haven't needed to touch it
+  yet.

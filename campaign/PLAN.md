@@ -26,14 +26,26 @@ this campaign trades case count for alpha-sweep breadth (see "Scale" below).
 
 **Disk**: root disk was at 96% full / 4.2G free when this started -- a real,
 pre-existing constraint (large `.venv-vllm`s, HF cache, uv cache, other
-repos), not something to work around by writing elsewhere by default. Fix:
-`fresh_server_replay.py --no-trace-proposals` -- this campaign needs
-`run.json`'s summary fields (`l_bar`, `mean_accept_length`,
-`output_tokens`), never the per-token `proposals.jsonl` trace, so tracing
-is off. That drops a run dir from ~1-1.5MB to ~25KB, so the full campaign
-(~1,200 runs) costs **~30MB**, not several GB -- comfortably fits on the
-existing disk with tracing off, so `/srv/data` and `/ephemeral` (both
-root-owned, no write access for this user) turned out not to be needed.
+repos), not something to work around by writing elsewhere by default.
+Initially ran with `fresh_server_replay.py --no-trace-proposals` (the
+`run.json` summary fields this campaign needs -- `l_bar`,
+`mean_accept_length`, `output_tokens` -- never needed the per-token
+`proposals.jsonl` trace on their own), but the user asked for the trace
+data too (2026-08-15) -- tracing is back on as of the second launch (13
+untraced gsm8k calibration runs from the first launch were cheap enough to
+delete and redo, rather than leaving a traced/untraced split in the data).
+With tracing on, a run dir is back to its old ~1-1.5MB-for-AIME-length-
+completions size (much smaller for short-output datasets -- proportional to
+completion length, not fixed); ballparked at **~600-700MB for the full
+campaign** (see JOURNAL for the real number once it's in). Still
+comfortably short of the 4.1G free at relaunch, so `/srv/data`/`/ephemeral`
+(root-owned, no write access for this user) are still not needed by
+default. **Contingency, per the user's "recycle from unused data" if it
+gets tight**: `runs_old_backup/` (2.3G, a stale pre-git-history backup from
+an earlier "reorg" commit, already superseded by both git history and
+`old_runs/`) is the first thing to free if disk pressure actually shows up
+-- not touched pre-emptively, only if a real check during the campaign
+finds it's needed (see JOURNAL for whether that happened).
 
 **Per-dataset case count**: **12 full-sweep cases + 3 of those held out as
 the calibration probe subset** (so calibration cost is reused, not extra).

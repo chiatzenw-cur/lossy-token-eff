@@ -118,7 +118,9 @@ def run_fresh_server_replay(
         "--log-root", str(log_root),
         "--max-new-tokens", str(max_new_tokens),
         "--port", str(port),
-        "--no-trace-proposals",  # see campaign/PLAN.md's disk-budget section
+        # Tracing is ON (fresh_server_replay.py's own default) -- see
+        # campaign/PLAN.md's disk-budget section for why this was briefly
+        # off and got turned back on.
     ]
     if dry_run:
         command.append("--dry-run")
