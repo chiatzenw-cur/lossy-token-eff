@@ -1,0 +1,151 @@
+<|channel|>analysis<|message|>We need to parse a string like `'o o| .| o| o| .| .| .| .| o o'`. We need to parse tokens separated by whitespace? Provided example: tokens separated by spaces. The predicates: 'o' == whole note, 'o' with a trailing '|'? Wait description: `'o' - whole note, lasts four beats`. `'o' - half note, lasts two beats`. Wait but they say `'o|' - half note, lasts two beats`, ' .|" - quarter note, lasts one beat.
+
+Thus notes: 'o' plain; 'o' plus '|'? Actually spec: 'o' - whole note, 'o' - half note? That seems redundant. Usually: 'o' is symbol of whole? But the example uses 'o' alone means whole note. For half note, 'o' followed by '|'? This may be 'o|'? The values: 'o' 4 beats, 'o|' 2 beats, '.| 1 beat.
+
+Test: `'o o| .| o| o| .| .| .| .| o o'`
+Break tokens: 'o', 'o|', '.|', 'o', 'o|', '.|', '.|', '.|', '.|', 'o', 'o'
+
+But the example string: `'o o| .| o| o| .| .| .| .| o o'`: there is further 'o' before 'o'? Wait actual given: `'o o| .| o| o| .| .| .| .| o o'`. Let's parse: tokens: 'o', 'o|', '.|', 'o', 'o|', '.|', '.|', '.|', '.|', 'o', 'o'. But they provided answer: `[4, 2, 1, 2, 2, 1, 1, 1, 1, 4, 4]`. Let's test: 4 beats for 'o', 2 beats for 'o|', 1 beat for '.|', 2 for 'o', 2 for 'o|', 1 for 'o'? Wait no, we have 'o' again? Actually after 'o| .|', there is space 'o|', then 'o|', then '.|', etc. Let's compare: They produce 4,2,1,2,2,1,1,1,1,4,4. Let's match tokens:
+
+- 'o' -> 4
+- 'o|' -> 2
+- '.| -> 1
+- 'o'? Wait but originally there is 'o|', but we have 'o|' again. Let's map again: tokens: 'o', 'o|', '.|', 'o', 'o|', '.|', '.|', '.|', '.|', 'o', 'o'
+
+But the 'o' tokens after 'o' maybe part of 'o' note: 'o' alone may be 'whole note', not 'o|'? No they had 'o' mid. Example: `'o o| .| o| o| .| .| .| .| o o'`. Let's re-evaluate sequence:
+
+1. 'o' (whole)
+2. 'o'?? Wait there are two 'o's after first? Actually `'o o| .| .| o| ...` The string: `'o o| .| o| o| .| .| .| .| o o'`. There is a space between 'o' and 'o|', then a space then '.|', etc. So tokens: 'o', 'o|', '.|', 'o|', 'o|', '.|', '.|', '.|', '.|', 'o', 'o'. So tokens: 'o', 'o|', '.|', 'o|', 'o|', '.|', '.|', '.|', '.|', 'o', 'o'.
+
+Now mapping to beats: 'o'->4, 'o|'->2, 'o|->2', 'o|->? Wait token 4 'o|', 2 'o|', 3. 'o|' -> 2, 'o|' pair? Wait we have only two 'o|' patterns. But the answer list: [4,2,1,2,2,1,1,1,1,4,4]. Let's mapping tokens:
+
+Token 1: 'o' -> 4
+Token 2: 'o|' -> 2
+Token 3: '.| -> 1
+Token4: 'o| -> 2
+Token5: 'o| -> 2
+Token6: '.| -> 1
+Token7: '.| -> 1
+Token8: '.| -> 1
+Token9: '.| -> 1
+Token10: 'o' -> 4
+Token11: 'o' -> 4
+
+That seems to match the output list of 11 numbers: 4,2,1,2,2,1,1,1,1,4,4. Yes matches. But note we counted 5 notes: 'o' at token 1, 'o|' at 3 but we have two 'o|' before "o|"? Actually earlier we had 'o| = half note contributions.
+
+Now, what about the note 'o' mapping? There's 'o' alone multiple times and 'o' only one.
+
+But note 'o r' etc. So algorithm: parse string by whitespace and major tokens. Each token might be 'o', 'o|', '.|', or be something else? Eg 'o extra'? In examples we have none. As per spec, there's only 'o', 'o', 'o', but there are duplicates. But the spec: 'o' alone is whole note, 'o|' half note, ' .| unit note. Implementation: parse tokens separated by whitespace. For each token, create mapping: 'o' -> 4, 'o|' -> 2, '.| ' -> 1. Use dictionary mapping. But might have token containing trailing spaces? But we just split by whitespace. Edge: They might include apostrophes errone? But we implement robust.
+
+Also may need to treat tokens 'o' with trailing spaces? but split solves.
+
+Also for 'o' tokens maybe we need to include multiple? In this case, it's separate token.
+
+Edge: Might we have other tokens like 'o' preceded by space? But it's fine.
+
+Thus implement parse_music: iterate tokens separated by whitespace; for each token, if token == 'o', append 4; elif token == 'o|', append 2; elif token == '.|', append 1; else => but we may need to ignore? Not specified. But we can raise ValueError. Could treat unmatched mapping as zero? But maybe fine.
+
+Potential improvement: tokens may contain other characters? maintain strict mapping.
+
+We could also handle 'o^' or 'o*' but not necessary.
+
+Let's implement.
+
+Also should treat "o|" replaced with "o|" exactly. Use dictionary mapping: {"o":4}, {"o|":2}, {" .|":1}. But we need to treat '.|' may have trailing ' '|? e.g., '.| including trailing? The token may include whitespace; but here we trimmed as split.
+
+Thus final code:
+
+def parse_music(music_string: str) -> List[int]:
+    if not music_string:
+        return []
+    token_map = {"o": 4, "o|": 2, ".|": 1}
+    mapping = []
+    for token in music_string.split():
+        if token in token_map:
+            mapping.append(token_map[token])
+        else:
+            raise ValueError(f"unknown token {token!r}")
+    return mapping
+
+Ensure correct imports: List from typing.List.
+
+Return list of ints. That should satisfy.
+
+Test: parse_music('o o| .| o| o| .| .| .| o o') yields [4,2,1,2,2,1,1,1,1,4,4]? Wait we predicted 4 tokens for 'o|'? Actually we had tokens after the first 'o', 'o|' and ' .|', 'o|', 'o|', ' .|', ' .|', ' .|', ' .|', ' o', 'o'? Wait we had 'o|' 3 times? Let's simulate: string has 'o o| .| o| o| .| .| .| .| o o'. Counting: "o" 1; "o" 2? Actually "o" is before first "o|". But tokens: 'o', 'o|', '.|', 'o|', 'o|', ' .|', '.|', '.|', '.|', 'o', 'o'. Wait we have 'o' before second 'o|', yeah.
+
+Let's compute using mapping; should produce index 4-2-1-2-2-1-1-1-1-4-4? Wait there are 11 tokens: 4,2,1,2,2,1,1,1,1,4,4.
+
+Our mapping will produce 4->2->1->2->? Wait the tokens:
+
+1) 'o' -> 4 ok
+2) 'o|' -> 2
+3) '.|' -> 1
+4) 'o|' -> second
+5) 'o|?' but we have 'o|', indeed third; further token 6: '.|', 7: '.|', 8: '.|', 9: '.|', 10: 'o', 11: 'o'.
+
+But we have four 'o|'? Wait we had 'o|' tokens: 2, 4, 5? Actually we have 'o|', 'o|', 'o|', .... Wait the string 'o o| .| o| o| .| .| .| .| o o' - after 'o' there is 'o|', then '.|', then 'o|', then 'o|', then '.|', then '.|', then '.|', then '.|', then 'o', then 'o'. So there are 3 'o|' tokens: that 2,4,5? Wait e.g., tokens: 1 'o', 2 'o|', 3 '.|', 4 'o|', 5 'o|', 6 '.|', 7 '.|', 8 '.|', 9 '.|', 10 'o', 11 'o'. Actually we had 3 'o|'? But token 5 also 'o|', yes. So there are 3 'o '| tokens. But output list has 2 'o| '? Wait output list includes 4,2,1,2,2,1,1,1,1,4,4. That's 4 to start; then 2; then 1; then 2; then 2; each other 1 and 1. This uses 5 'o|' or 2? Wait not 3. Let's count: In output, after first 4 there is 2, then 1, then 2, then 2. That used one 'o|' token for 2, then 2 'o|' tokens for 2 and 2; that's 3 'o|' tokens in total. So mapping matches.
+
+Thus our mapping matches exactly.
+
+Edge: Might there be 'o' alone? Yes.
+
+Ok produce code.
+
+Better to handle whitespace and ignore empties. splitting by whitespace.
+
+Ok produce final function.
+
+Also docstring: Should include adaptation? The docstring already includes examples. Might keep.
+
+Also test. We'll produce.
+
+Time to produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>```python
+from typing import List
+
+
+def parse_music(music_string: str) -> List[int]:
+    """
+    Parse the string of musical notes into a list of beat durations.
+
+    Notes present in the string are encoded as:
+        * ``o``   – whole note (4 beats)
+        * ``o|``  – half note (2 beats)
+        * ``.|`` – quarter note (1 beat)
+
+    The notes are separated by whitespace.  Any unused characters will
+    raise a ``ValueError`` at a non‑standard token.
+
+    Parameters
+    ----------
+    music_string : str
+        A string containing one or more notes drawn from the set above.
+
+    Returns
+    -------
+    List[int]
+        A list of integers, each representing the number of beats the
+        corresponding note lasts.
+
+    Example
+    -------
+    >>> parse_music('o o| .| o| o| o| .| .| .| .| o o')
+    [4, 2, 1, 2, 2, 1, 1, 1, 1, 4, 4]
+    """
+    # Define mapping from token to beat duration
+    token_map = {"o": 4, "o|": 2, ".|": 1}
+
+    # If the input is empty we return an empty list
+    if not music_string:
+        return []
+
+    result: List[int] = []
+
+    # Split the string on whitespace and iterate over each token
+    for token in music_string.split():
+        if token in token_map:
+            result.append(token_map[token])
+        else:
+            raise ValueError(f"Unexpected token {token!r}")
+
+    return result
+```
