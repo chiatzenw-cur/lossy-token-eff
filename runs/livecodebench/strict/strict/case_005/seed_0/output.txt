@@ -1,0 +1,733 @@
+<|channel|>analysis<|message|>We need minimal cost to make all bits equal. We can use two operations: prefix invert cost i+1, suffix invert cost n-i.
+
+Observation: operations invert contiguous segments from an endpoint. Equivalent to we can flip prefix or suffix any number. Goal all same. Equivalent to we need to make string constant by flips. We can think of each operation toggling the parity of each position included. Each position gets toggled some times. Final desired bit equals original bit XOR (#flips affecting that position mod 2). If we decide final value target v (0 or 1). For each position pos, requirement: parity of flips over pos equals (s[pos] XOR v). Equivalent to we need to cover positions whose required parity is 1 with odd number of operations covering them.
+
+Operations are prefixes or suffixes. This is like we have two types of intervals: prefixes [0,i] and suffixes [i,n-1]. We need to choose multiset of intervals such that each position with required parity receives odd count of intervals covering it. Each interval cost depends on its i.
+
+We can think of linear programming over GF(2). Maybe there is greedy? Let's analyze.
+
+Let n length. Consider edges between adjacent bits. Changing parity toggles across boundary? Hmm.
+
+Note that applying prefix at i toggles first i+1 bits. So it toggles parity for all positions j <= i. Similarly suffix toggles positions j >= i.
+
+This is like we can flip indicating prefix or suffix icon.
+
+Observe that applying prefix at i and suffix at i+1 may cancel? Let's attempt to find minimal cost by dynamic programming over index? Another view: Each operation corresponds to flipping prefix or suffix, which is like toggling a cumulative sum variable. We can think of difference array d where d[0] = number of flips affecting position 0 mod2, d[j] = d[j-1] XOR stuff? Actually parity of position j depends on number of prefixes with i>=j plus number of suffixes with i<=j. Let's denote x_prefix[i] (0/1) indicating if we apply prefix operation at i an odd number of times; similarly x_suffix[i].
+
+Parity at j: sum_{i >= j} x_prefix[i] + sum_{i <= j} x_suffix[i] mod2. Because prefix i covers positions 0..i: j <= i; suffix i covers positions i..n-1: j >= i.
+
+Define P[j] = sum_{i=j}^{n-1} x_prefix[i] mod2; S[j] = sum_{i=0}^{j} x_suffix[i] mod2. Then parity at j = (P[j] + S[j]) mod2.
+
+We need parity equals t_j (desired). Possibly choose target 0 or 1. But t_j = s[j] XOR v.
+
+Goal minimize sum cost of indices with x_prefix=1 times (i+1) + sum cost of x_suffix=1 times (n-i).
+
+We have binary variables.
+
+We need to solve a linear system with objective. Might be solvable by simple algorithm.
+
+Potential approach: Because cost functions are linear and variables independent, we can separate prefix and suffix? But constraints couple via parity requirement.
+
+Notice that parity at j = P[j] XOR S[j]. Where both P[j] and S[j] are cumulative sums (mod2). Observe that P[j] is non-increasing as j increases: Because P[j] = P[j+1] XOR x_prefix[j]. Similarly S[j] is non-decreasing? S[j] = S[j-1] XOR x_suffix[j].
+
+Thus P[0..n-1] forms a sequence that starts with P[n-1] = x_prefix[n-1], and then each step XOR x_prefix[j]. S[0..n-1] starts with S[0] = x_suffix[0], etc.
+
+Maybe we can reduce to flipping bits using prefix operations only or suffix only? Let's observe: we can transform using only one type? Example 0011, we used suffix at i=2 cost2. Only suffix operations: Inverting suffix toggles trailing part. If we only allowed suffix, we could start from end: if s[last]==1 and target=0 we flip suffix at last? Wait flipping suffix at i includes positions i..n-1. Good.
+
+We can choose target 0 or 1, we perform greedy scanning from right to left applying suffix operations when needed. For example: Starting target 0. Suppose scanning from left to right? Let's test.
+
+Consider using only suffix operations: For each position from left to right compute current bit after previous flips. We might choose to flip suffix at some i to correct current. If we traverse from left to right, flipping suffix at i would affect current and later bits. Might lead to solution.
+
+Similarly using only prefix operations scanning right to left.
+
+Compute cost of only suffix operations to reach all equal to v:
+
+Algorithm: start with array cur bits same as s but we track parity flips applied. Let flips=0. We iterate i from 0 to n-1. But flipping suffix at i affects i..n-1, so decisions at earlier indices will affect later ones. So might need to process from left to right: at i, if cur[i] after flips differs from target v, we need to flip suffix at i. Adding cost n-i. flips toggles for subsequent indices. This is straightforward.
+
+Similarly, using only prefix operations: process from right to left, if bit at i differs from target after flips, flip prefix at i cost i+1.
+
+But we are allowed both types, potentially cheaper.
+
+Observation: Any operation prefixes or suffixes can be replaced by two operations: e.g., a suffix at i can be seen as prefix at n-1 plus some adjustments? Not simple.
+
+Maybe we can compute minimal cost by dynamic programming on index j representing processed part? Represent state whether we have had an odd number of prefix flips affecting j? Not.
+
+Alternative viewpoint: Because cost of prefix at i only depends on i, we can treat selecting prefix flips like selecting a set of indices. Similarly suffix flips.
+
+Let's create arrays for prefix parity contributions: Define p[i] = parity of number of prefix flips with index >= i. That's P[i]. Similarly s[i]. For parity at i to be t[i] (target cond). Then we have p[i] XOR s[i] = t[i].
+
+We also have recurrence: p[i] = p[i+1] XOR x_prefix[i]. with p[n] = 0 (since no prefix index beyond n-1). s[i] = s[i-1] XOR x_suffix[i] with s[-1] = 0.
+
+Thus p[i] and s[i] can be deduced from sequence of x's.
+
+We can treat x_prefix[i] as variable to adjust.
+
+Consider building from left to right using DP over p[i], s[i]. But that number of states maybe 4? Because p[i] and s[i] each 0/1. We consider two possibilities for each i: choose to apply prefix or suffix at i.
+
+However x_prefix[i] influences p[i] and earlier positions. x_prefix[i] will affect p[i] only. Actually p[i] depends on x_prefix[i] and future ones; s[i] depends on suffix up to i.
+
+We could formulate DP over i with current p[i] parity (value affected by future prefixes) and current s[i] parity (value affected by prefixes? Wait s[i] determined by suffix up to i). But s[i] is cumulative and we can keep its current value as we move i forward. That seems manageable.
+
+Let's iterate i from 0 to n-1.
+
+At step i, we need p[i] XOR s[i] = t[i], else we need to modify variable x_prefix[i] (affects p[i]) or x_suffix[i] (affects s[i])? Actually s[i] depends on suffix flips up to i. When moving from i-1 to i, s[i] = s[i-1] XOR x_suffix[i]. Similarly, p[i] = p[i+1] XOR x_prefix[i], but we don't know p[i+1] yet since it's in future. So can't process using i forward easily. Instead process from right to left for prefix contributions: For i from n-1 down to 0, we can keep current p value.
+
+Let's attempt DP from right to left. Maintain variable s_parity: parity contributed by suffix flips up to i-1? Wait suffix flips affect indices i to n-1. So when moving leftwards, we need to keep track of cumulative effect of suffix flips that affect current i. Actually suffix flips starting at index <= i will affect i. So when we are at index i, we know all suffix flips with start <= i; they are all determined by variables x_suffix[0..i]. As we move leftwards from n-1 to 0, when we step to i-1, we still know suffix flips up to i-1 less than i. So we need s_parity reaching i.
+
+Define s_parity_i = XOR_{j=0..i} x_suffix[j] (parity affecting index i). When we are at i, s_parity_i known. After we decide x_suffix[i], it's included in s_parity_i and also for earlier indices? Wait earlier indices j<i: they are not affected by suffix at i because suffix from i to n-1 covers j < i? Actually j < i means j is before i; suffix i covers from i to n-1; it does not affect j < i. So suffix at i does not impact earlier indices. So s_parity_j for j < i does not depend on x_suffix[i]. So when moving leftwards, we don't need to reconsider it. Instead we need to process sequentially i from 0 to n-1 for suffix parity.
+
+Thus easier might be to consider DP over two independent sequences: prefix sequence applied from right to left; suffix sequence from left to right. They are independent because they affect distinct sets of indices: prefix flips only affect prefixes; but suffix flips only affect suffixes. But they overlap in terms of positions. Wait they affect all positions except XOR combination.
+
+But we might treat each position j parity as sum of P[j] (prefix cumulative up to j from right) and S[j] (suffix cumulative up to j from left). So to satisfy equation, we can decide P[j] suff and S[j] accordingly.
+
+Maybe we can treat P sequence independent of S because equation at each j gives constraint linking them. Suppose we decide P[j] values arbitrarily (they must form a sequence that can be realized by prefix flips). Similarly S[j] must be realizable. Then we can find whether they satisfy t[j] relation. So we need to minimize cost of prefix flips (depends on where transitions happen in P) plus suffix flips.
+
+We can formulate as we choose final parity sequence P[0..n-1] such that it is non-increasing in terms of flips? Actually P[j] = XOR of x_prefix indices >= j. Equivalent to: If we add x_prefix at some index k, it flips all P[j] for j <= k. Wait typical property: The prefix flip at index i toggles all P[j] for j <= i (since P[j] is XOR of x_prefix[j..]. If i >= j, then x_prefix[i] contributes to P[j]. So toggling x_prefix at i flips P[0..i]. Thus x_prefix values correspond to differences of P: x_prefix[i] = P[i] XOR P[i+1] with P[n] = 0. Similarly x_suffix[j] = S[j] XOR S[j-1] with S[-1] = 0. Because S[j] = XOR_{k=0..j} x_suffix[k].
+
+Thus cost for prefix flips equals sum_{i=0}^{n-1} cost_prefix[i] * (P[i] XOR P[i+1]), where cost_prefix[i] = i+1. Similarly suffix cost sum_{i=0}^{n-1} cost_suffix[i] * (S[i] XOR S[i-1]), cost_suffix[i] = n-i.
+
+We need to choose binary sequences P[0..n-1], S[0..n-1], with P[n] = 0, S[-1] = 0, to satisfy for all j: P[j] XOR S[j] = t[j] (t[j] = s[j] XOR v), where v is target bit (0 or 1). Aim to minimize total cost.
+
+We also have connectivity: S[0] = x_suffix[0] ; S[j] parity cumulative.
+
+Now we can treat this as a shortest path problem on a graph of states representing (P[j], S[j]) as we progress j from 0 to n-1.
+
+Because we have equations linking consecutive indices: For j, P[j] depends on P[j+1] plus whether x_prefix[j] = P[j] XOR P[j+1]. Actually we can choose x_prefix[j] independent? But P[j] and S[j] need to satisfy constraints at all indices.
+
+We might set dynamic programming over j with state representing current P[j] and S[j-1]?
+
+But S[j] depends on S[j-1] and x_suffix[j]. We can incremental.
+
+Let's think iteratively over j from 0 to n-1:
+
+At step j, we have previous P[j+1] (from future), S[j-1] (from past). But we don't know P[j+1] yet if we process forward; if we process backward, we know P[j+1] because we processed later indices first.
+
+Let's process from n-1 down to 0. We'll keep current P_next = P[j+1] and S_parity (so far) maybe? However S[j] depends on S[j-1] which we keep as we go earlier indices. But we are going backward so S[j-1] hasn't been computed yet. Hmm.
+
+Alternate: solve by constructing minimal cost using bit DP with 2x2 states.
+
+Goal: choose sequences P and S satisfying equations. Equivalent to choose binary variables X = (P[0..n-1], S[0..n-1] with boundary). Might model as 1D cut problem. Observing that cost depends on transitions of P (between consecutive indices). Similarly S transitions. With constraints at each index connecting P and S with t.
+
+We can view each index j as having pair (P[j], S[j]) with constraint XOR = t[j]. There are only 2 possible pairs: (0, t[j]) or (1, 1^t[j]). So at each j we choose P[j], S[j] accordingly. Transitions cost: For prefix, if P[j] ≠ P[j+1] then add cost_prefix[j] else 0. For suffix, if S[j] ≠ S[j-1] then add cost_suffix[j] else 0.
+
+Thus we can think of DP over j from 0..n-1 with state representing S[j] maybe? Because P[j] determined by t[j] XOR S[j]. So we can encode state variable as S[j] (0 or1). Similarly, P[j] automatically derived.
+
+Similarly we need to know P[j+1] to compute cost of prefix transition. P[j] XOR P[j+1] difference depends on forward variable. If we traverse from 0 to n-1, we need P[j] and P[j+1]. But P[j] depends on S[j]. So if we know S[j] and S[j+1], we can compute P[j] and P[j+1], then cost prefix difference.
+
+Thus DP could be over both S[j] and S[j+1]? Let's attempt DP forward. When we process position j, we need to consider previous state S[j-1]. So state includes previous S value. Also need to consider S[j] choice at this step. Transition cost includes:
+
+- Suffix transition cost at j: (S[j] XOR S[j-1]) * cost_suffix[j] if j>0.
+- Prefix transition cost between j and j+1: we cannot compute yet because unknown S[j+1] now. But we can accumulate cost when we leave j (i.e., when we decide next position's S). So transition from state (S_prev) to new S_curr will cost: suffix cost diff + maybe prefix diff for previous index j? Wait prefix diff for index j depends on P[j] and P[j+1], which involve S[j] and S[j+1]? Actually P[j] = t[j] XOR S[j]. P[j+1] = t[j+1] XOR S[j+1]. So the cost for prefix difference at j is (P[j] XOR P[j+1]) * cost_prefix[j] = (t[j] XOR S[j] XOR t[j+1] XOR S[j+1]) * cost_prefix[j].
+
+Thus when transitioning from state with S[j-1] = a to S[j] = b, we need also S[j+1] for computing prefix cost. That suggests DP that keeps last two states? We can use DP over pair (S[j-1], S[j]) as we progress j? Let's attempt.
+
+Define dp[j][s_prev][s_cur] minimal cost up to position j (processing positions 0..j), where s_prev = S[j-1], s_cur = S[j]. For j=0, we set s_prev = 0 (since S[-1] = 0 boundary). Actually we need to handle boundaries.
+
+The DP transition from j to j+1: we will pick s_next = S[j+1] (0 or 1). We need to pay:
+
+- suffix cost at j+1: (s_next XOR s_cur) * cost_suffix[j+1].
+- prefix cost at j: (t[j] XOR s_cur XOR t[j+1] XOR s_next) * cost_prefix[j].
+
+Additionally, we need to include prefix cost at last index n-1? At end after j=n-1, we need to ensure P[n] = 0. Since P[n] depends on S? Actually P[n] is defined to be 0. But we don't have S[n], as standard definition. But we need cost for transition from P[n-1] to P[n] = 0, i.e., at index n-1, additional cost if P[n-1] != 0? Let's compute: prefix flip cost at i = n-1 corresponds to x_prefix[n-1] = P[n-1] XOR P[n] = P[n-1] XOR 0 = P[n-1]. So if P[n-1] =1 then we need to flip prefix at n-1 cost n? Wait cost_prefix[n-1] = i+1 = n. So we need to add cost n if P[n-1] = 1. But that is accounted as x_prefix[n-1] in the sum over i of cost_prefix[i]*(P[i] XOR P[i+1]) . That's the same formula as earlier.
+
+Thus at final step j=n-1, after we have s_cur = S[n-1], we need to add cost for prefix transition between P[n-1] and P[n] (known =0). The formula using j=n-1: (t[n-1] XOR s_cur XOR t[n] XOR s_next)? But t[n] not defined. So we treat separately: cost for last prefix transition: (P[n-1]) * cost_prefix[n-1] where P[n-1] = t[n-1] XOR s_cur.
+
+Thus the DP approach: iterate j from 0 to n-2 to compute transitions adding both suffix cost for new position and prefix cost for previous index. After loop, at j=n-1, compute final cost including suffix? Suffix after last index? Yet suffix at index n-1? Actually suffix operation at i = n-1 flipping only last character cost n-(n-1)=1; That is part of suffix cost considered earlier. Our DP includes suffix cost at each j for new S, which includes j from 0 to n-1? We'll start with j=0 computing cost for suffix at 0? Use initial s_prev=0; For j=0 we also need suffix cost at index 0? Wait suffix cost at index 0: if S[0] != S[-1] (0). So cost includes (S[0] XOR 0)*cost_suffix[0].
+
+Thus DP initialization should include suffix cost at position 0.
+
+Similarly, for j from 0 to n-2, transition adding suffix cost for next index and prefix cost for j.
+
+At final j = n-1, we will add suffix cost for j (but already accounted when we transitioned into j). But we also must add prefix cost for index n-1 to zero. So we add additional cost: if P[n-1] XOR P[n] (which is P[n-1]) times cost_prefix[n-1]. That's (t[n-1] XOR S[n-1]) * cost_prefix[n-1].
+
+Also we need to ensure boundary condition S[-1] =0 pre-initial. Good.
+
+We need to loop twice for target v=0 and v=1, compute minimal cost each and return min.
+
+Let's implement DP.
+
+Let n length.
+
+Let t[j] = int(s[j]) ^ v  (0 or 1). Actually t[j] is desired parity: current bit after flips to become target bit. Suppose target v=0: we want bit 0; need parity 1 where s[j] is 1? Wait t[j] = (s[j] XOR v) meaning if we want final 0, we need to flip parity where s[j] XOR 0 = s[j] ? Actually if s[j] is '1' and target 0, need parity 1 to flip it. So t[j] = int(s[j]) XOR v.
+
+Thus at each j we can compute P[j] = t[j] XOR S[j]. because requirement P[j] XOR S[j] = t[j], thus P[j] = t[j] XOR S[j].
+
+Now DP state: dp[j][s_cur] minimal cost up to position j inclusive? But we need also previous S value to compute suffix cost for new index j? Wait easier: use dp[j][s_cur] = minimal cost up to and including index j, with S[j] = s_cur. For j=0, dp[0][s0] initial cost = (s0 XOR 0) * cost_suffix[0] (since S[-1]=0). Also no prefix cost yet? For j=0, prefix cost for j=-1? None.
+
+Now for j>=1, compute dp[j][s_cur] = min over prev_s in {0,1} of dp[j-1][prev_s] + suffix_cost_j + prefix_cost_{j-1}. Let's formalize.
+
+Let cost_suffix[j] = n - j.
+
+Suffix cost at j when S[j] != S[j-1]. This is (s_cur XOR prev_s) * cost_suffix[j].
+
+Prefix cost at j-1 is for i=j-1: (P[j-1] XOR P[j]) * cost_prefix[j-1] with cost_prefix[j-1] = (j-1)+1 = j.
+
+We can compute P[j-1] = t[j-1] XOR prev_s; P[j] = t[j] XOR s_cur.
+
+Thus prefix cost(j-1) = ( (t[j-1] XOR prev_s) XOR (t[j] XOR s_cur) ) * j.
+
+Therefore transition formula:
+
+dp[j][s_cur] = min_{prev in {0,1}} dp[j-1][prev] + (s_cur ^ prev) * (n - j) + ((t[j-1] ^ prev) ^ (t[j] ^ s_cur)) * j
+
+At the end j = n-1, after dp[n-1][s] values, we still missing prefix cost from j=n-1 to P[n] (=0). That's x_prefix[n-1] = P[n-1] XOR P[n] = P[n-1] = t[n-1] XOR s.
+
+Add cost (t[n-1] XOR s) * (n) (since cost_prefix[n-1] = n). So final cost for each state s: dp[n-1][s] + (t[n-1] ^ s) * n.
+
+Additionally we must consider that prefixes beyond n-1 no further cost. So minimal cost over s = 0,1.
+
+Similarly need to consider no suffix cost after final? Up to j=n-1 we already added suffix costs for all indices. Because when we compute dp[n-1][s] we already added suffix at j for all j from 0..n-1. Good.
+
+Edge: dp[0] initialization: dp[0][s] = (s ^ 0) * (n - 0) = s * n. Good.
+
+Edge check: suffix at index 0 cost n. That's correct: cost of suffix operation at 0 is n-0 = n.
+
+Similarly prefix cost for index 0 is computed when j=1 transition uses prefix cost 1? Wait j=1: prefix cost at j-1=0 uses j = 0+1=1? Wait above we used cost_prefix[j-1] = j. For j=1, cost_prefix[0] = 1. Good.
+
+Thus formula works.
+
+Now we compute minimal cost for v=0 and v=1; choose min.
+
+Complexity: O(n) per v, with small constants.
+
+Edge test: Example "0011" n=4.
+
+Let's compute quickly.
+
+We'll code and maybe test with python environment but here we just simulate.
+
+Implementation details: use dp_prev array of size 2; start with dp_prev[s] for j=0.
+
+Compute dp_prev[0] = 0; dp_prev[1] = n (since s=1): cost suffix at j=0 for s=1.
+
+Wait dp[0][0] = 0? Because (0 ^ 0)* n =0.
+
+Now iterate j from 1 to n-1 (index j). Keep dp_cur.
+
+Compute t[j-1] etc.
+
+Implementation after loop, add final prefix cost.
+
+Return minimal cost for that target.
+
+We should test for correctness with examples.
+
+Let's do mental test with s="0011" n=4.
+
+Case target v=0.
+
+t = list(int(c) ^ 0): [0,0,1,1].
+Now compute:
+
+dp_prev[0]=0; dp_prev[1]=4.
+
+j=1: t[0]=0, t[1]=0. For s_cur=0:
+
+- prev=0: dp_prev[0] + (0^0)* (n-1=3) + ((0^0) ^ (0^0)) * j=1 => 0+0+0=0.
+- prev=1: dp_prev[1] + (0^1)*3 + ((0^1) ^ (0^0)) *1 => 4 + 1*3 + ((1)^(0)) *1 => 4+3+1=8.
+min=0.
+
+So dp_cur[0]=0.
+
+For s_cur=1:
+
+- prev=0: 0 + (1^0)*3 + ((0^0) ^ (0^1))*1 = 3 + (0 ^ 1)*1 =3+1=4
+- prev=1: 4 + (1^1)*3 + ((0^1)^(0^1))*1 =4+0+((1) ^ (1))*1 = 4+0+0=4
+min=4
+
+So dp_cur[1]=4.
+
+Set dp_prev=dp_cur.
+
+j=2: t[1]=0, t[2]=1. cost_suffix[n-2]?? Actually using formula: suffix cost (n - j) => (4 - 2)=2.
+
+For s_cur=0:
+
+- prev=0: dp_prev[0](=0) + (0^0)*2 + ((t1^0)^(t2^0))*2? Wait j=2 cost_prefix = j=2. compute (t[1]^prev) ^ (t[2]^s_cur) = (0^0)^(1^0) = 0 ^ 1 =1. *2 => 2. Total 0+0+2=2.
+- prev=1: dp_prev[1](=4) + (0^1)*2 + ((0^1)^(1^0))*2 =4+2+((1)^(1))*2=4+2+0=6.
+min=2.
+
+dp_cur[0]=2.
+
+For s_cur=1:
+
+- prev=0: 0 + (1^0)*2 + ((0^0)^(1^1))*2 =2 + (0 ^ 0) *2? compute: (0^0)^(1^1)=0^0=0 =>2+0=2.
+- prev=1: 4 + (1^1)*2 + ((0^1)^(1^1))*2 =4+0+((1)^(0))*2=4+0+2=6.
+min=2.
+
+dp_cur[1] = 2.
+
+Set dp_prev.
+
+j=3: t[2]=1, t[3]=1. cost_suffix[4-3]=1.
+
+For s_cur=0:
+
+- prev=0: dp_prev[0]=2 + (0^0)*1 + ((1^0)^(1^0))*3? Wait j=3 cost_prefix=j=3. compute: (t[2]^0) ^ (t[3]^0) = (1^0) ^ (1^0) =1 ^1=0. times 3 =>0. Total 2+0+0=2.
+- prev=1: dp_prev[1]=2 + (0^1)*1 + ((1^1)^(1^0))*3 =2+1+((0)^(1))*3=2+1+1*3=6.
+min=2
+
+dp_cur[0] =2.
+
+s_cur=1:
+
+- prev=0: 2 + (1^0)*1 + ((1^0)^(1^1))*3 =2+1+((1)^(0))*3=2+1+3=6
+- prev=1: 2 + (1^1)*1 + ((1^1)^(1^1))*3 =2+0+((0)^(0))*3=2+0+0=2
+
+min=2
+
+dp_cur[1]=2.
+
+After loop j=3 (last index), dp_prev=dp_cur.
+
+Now we need to add final prefix cost: For each s in {0,1}, add (t[n-1] ^ s) * n.
+
+t[3]=1.
+
+For s=0: (1^0)*4 =4 -> total 2+4=6.
+
+s=1: (1^1)*4 =0 -> total 2+0=2.
+
+minimum=2.
+
+Thus for target 0 cost 2.
+
+Matches example.
+
+Ok great.
+
+Now test second example: s="010101" n=6 target maybe 1? We'll compute programmatically but trust.
+
+Edge Cases:
+
+When n=1:
+
+We have only one index 0.
+
+dp[0][0] = 0; dp[0][1] = n.
+
+After loop j end (no iterations as n-1=0), we compute final cost: for each s add (t[0]^s)*n.
+
+Check v=0: t[0] = int(s[0]) ^ 0.
+
+Suppose s[0]='0'; t0=0.
+
+If choose s=0: cost 0 + (0^0)*1=0; total 0. Good. Means do nothing -> cost 0.
+
+If s=1: cost 1 + (0^1)*1= 1+1=2. But min selects 0.
+
+Similarly for '1', t0=1.
+
+choose s=1: dp[0][1]=1 + (1^1)*1=0 -> total 1. Means apply suffix at i=0 cost1? But we can also apply prefix at i=0 cost 1; same 1. All fine.
+
+Now check case where target=1 and the optimal may involve prefix at 0? But our DP may produce same.
+
+Thus DP works.
+
+Complexities: O(2*n). Implementation uses two arrays of size 2: dp_prev[0], dp_prev[1].
+
+In Python, we will compute as ints.
+
+Need careful with large n up to 1e5.
+
+We'll compute min over v=0 and v=1.
+
+Let's produce code.
+
+Testing with provided example.
+
+Double-check formula for cost_prefix j (when transitioning from j-1 to j). We earlier used cost_prefix[j-1] = j. Because cost for prefix at index i is i+1. So for i=j-1 cost=i+1 = j-1+1=j. Good.
+
+Similarly cost_suffix[j] = n - j.
+
+Edge: j indexes 0..n-1.
+
+Implementation:
+
+def solve_for_target(v: int) -> int:
+    n = len(s)
+    t = [int(c) ^ v for c in s]
+    dp_prev = [0, n]  # j=0 states
+    for j in range(1, n):
+        t_prev = t[j-1]
+        t_cur = t[j]
+        cost_suffix = n - j
+        cost_prefix = j  # because i=j-1
+        new0 = min(
+            dp_prev[0] + (0 ^ 0) * cost_suffix + ((t_prev ^ 0) ^ (t_cur ^ 0)) * cost_prefix,
+            dp_prev[1] + (0 ^ 1) * cost_suffix + ((t_prev ^ 1) ^ (t_cur ^ 0)) * cost_prefix
+        )
+        new1 = min(
+            dp_prev[0] + (1 ^ 0) * cost_suffix + ((t_prev ^ 0) ^ (t_cur ^ 1)) * cost_prefix,
+            dp_prev[1] + (1 ^ 1) * cost_suffix + ((t_prev ^ 1) ^ (t_cur ^ 1)) * cost_prefix
+        )
+        dp_prev[0], dp_prev[1] = new0, new1
+    # add final prefix cost
+    choice0 = dp_prev[0] + (t[-1] ^ 0) * n
+    choice1 = dp_prev[1] + (t[-1] ^ 1) * n
+    return min(choice0, choice1)
+
+Return min over both v.
+
+Let's test manually quickly for "010101" n=6.
+
+Let's quickly compute maybe by mental: but trust logic.
+
+We also should consider negative large numbers? Not.
+
+Let's consider possibility of using bit operations to compute min with loops over 2 combinations.
+
+Implementation optimization: we can compute for s_cur=0 and 1 using loops.
+
+Let's produce final code.
+
+Potential pitfalls: integer overflow? n up to 1e5, costs up to 1e5, number of operations limited by n. Sum up to maybe 1e10 < 2^31? 1e5*1e5=1e10 fits into 64-bit.
+
+Edge: use int.
+
+Now produce final solution.
+
+Let's craft final answer.
+
+<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every position we may
+
+* **invert a prefix** – indices `0 … i` (cost `i+1`)
+* **invert a suffix** – indices `i … n-1` (cost `n-i`)
+
+The operations may be used any number of times and in any order.
+We have to make all characters equal and minimise the total cost.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.   Observations
+
+* Inverting a character a *parity* number of times changes the final
+  character, an *even* number of times leaves it unchanged.
+
+* Let  
+
+```
+xP[i] = 1 if we apply a prefix invert at index i an odd number of times
+xS[i] = 1 if we apply a suffix   invert at index i an odd number of times
+```
+
+  (doing the operation an even number of times is useless, we keep only odd
+  occurrences).
+
+* For a position `j`
+
+```
+parity(j) = ( XOR of all xP[i] with i >= j )  XOR  ( XOR of all xS[i] with i <= j )
+```
+
+  denote  
+
+```
+P[j] = XOR_{i=j}^{n-1} xP[i]          # influence of all prefixes covering j
+S[j] = XOR_{i=0 }^{j}    xS[i]          # influence of all suffixes covering j
+```
+
+  Then  
+
+```
+parity(j) = P[j] XOR S[j]
+```
+
+* We want all characters equal to a chosen target `v` (0 or 1).
+
+  Let  
+
+```
+t[j] = (s[j] XOR v)            # 1 if the character at j has to be flipped,
+                               # 0 otherwise
+```
+
+  The equality constraint is
+
+```
+P[j] XOR S[j] = t[j]                (1)
+```
+
+* `xP` and `xS` are exactly the *differences* of `P` and `S`
+
+```
+xP[i] = P[i] XOR P[i+1]     with   P[n] = 0
+xS[i] = S[i] XOR S[i-1]     with   S[-1] = 0                 (2)
+```
+
+  Thus the total cost for a fixed pair `P[0…n-1] , S[0…n-1]` is
+
+```
+cost = Σ_{i=0}^{n-1} (i+1)   * (P[i] XOR P[i+1])      (prefix part)
+     + Σ_{i=0}^{n-1} (n-i) * (S[i] XOR S[i-1])      (suffix part)
+```
+
+  We have to find the cheapest binary sequences `P` and `S` that satisfy
+  equation (1).
+
+--------------------------------------------------------------------
+
+#### 2.   Reducing to a DP over the `S` array
+
+Equation (1) gives `P[j]` uniquely from `S[j]` :
+
+```
+P[j] = t[j] XOR S[j]
+```
+
+So we only need to pick the sequence `S[0 … n-1]` (each entry 0 or 1).
+With a fixed `S`, all `P` values are known, hence all transition costs
+(corresponding to `xP` and `xS`) are known.
+
+--------------------------------------------------------------------
+
+#### 3.   DP formulation
+
+We process the string from left to right.
+`S[-1]` is fixed to `0`.
+
+Let  
+
+* `dp[j][s]` – minimal cost after processing positions `0 … j`,
+  with `S[j] = s` (`s` is 0 or 1).
+
+Transition from position `j-1` to `j`  
+(`prev` and `cur` are abbreviations for `S[j-1]` and `S[j]`):
+
+```
+suffix cost at j          :  (cur XOR prev)          * (n - j)
+prefix cost between j-1   :  ( (t[j-1] XOR prev) XOR (t[j] XOR cur) ) * j
+```
+
+The prefix cost uses index `i = j-1`, therefore its weight is `i+1 = j`.
+The suffix cost uses index `j`, its weight is `n-j`.
+
+The recurrence:
+
+```
+dp[j][cur] =  min over prev∈{0,1} {
+                 dp[j-1][prev] +
+                 (cur XOR prev) * (n-j)                                +   // suffix
+                 ( (t[j-1] XOR prev) XOR (t[j] XOR cur) ) * j          // prefix
+             }
+```
+
+Initialisation (`j = 0`):
+`S[-1] = 0` thus the suffix cost for the first position is
+
+```
+dp[0][s] = (s XOR 0) * n                         // (n-0 = n)
+```
+
+After the last position (`j = n-1`) we still have to pay the cost
+for the prefix at index `n-1`, because `P[n] = 0`:
+
+```
+final_extra_cost(s) = (t[n-1] XOR s) * n              // (i+1 = n)
+```
+
+The answer for a fixed target `v` is
+
+```
+min_s ( dp[n-1][s] + final_extra_cost(s) )
+```
+
+We try both targets `v = 0` and `v = 1` and take the smaller one.
+
+The DP uses only two states per position and runs in `O(n)` time
+and `O(1)` extra memory.
+
+--------------------------------------------------------------------
+
+#### 4.   Correctness Proof  
+
+We prove that the algorithm returns the minimum possible cost.
+
+---
+
+##### Lemma 1  
+For any binary sequences `xP[0…n-1]` and `xS[0…n-1]`
+the parity of the character at position `j` after all operations is
+
+```
+P[j] XOR S[j]  with
+P[j] = XOR_{i=j}^{n-1} xP[i]   and   S[j] = XOR_{i=0}^{j} xS[i].
+```
+
+**Proof.**
+
+A prefix operation at index `i` flips all positions `0 … i`.  
+Thus it affects position `j` iff `j ≤ i`.  
+The contribution of this operation to the parity is exactly `xP[i]`.
+Taking the XOR over all such `i ≥ j` gives `P[j]`.
+
+Analogously a suffix operation at index `i` affects position `j`
+iff `j ≥ i`.  
+Taking the XOR over all `i ≤ j` gives `S[j]`.
+
+Parity is the XOR of all contributions, therefore `P[j] XOR S[j]`. ∎
+
+
+
+##### Lemma 2  
+For any target value `v` and any binary sequence `S[0…n-1]`
+there exists a unique binary sequence `P[0…n-1]` satisfying  
+`P[j] XOR S[j] = t[j]  (t[j] = s[j] XOR v)` for all `j`.
+
+**Proof.**
+
+Set `P[j] = t[j] XOR S[j]`.  
+Then `P[j] XOR S[j] = (t[j] XOR S[j]) XOR S[j] = t[j]`.  
+Thus the pair satisfies the constraint, and it is unique because any other
+`P` would violate the equation at `j`. ∎
+
+
+
+##### Lemma 3  
+For a fixed target `v` the value produced by the DP for that target
+equals the minimal cost among all feasible operation sequences that make
+every character equal to `v`.
+
+**Proof.**
+
+*Soundness*  
+During the DP, for every state `dp[j][s]` we maintain the minimal cost
+to reach the prefix `0…j` with `S[j]=s` while respecting constraint (1) for
+positions `0…j`.  
+By the recurrence we add exactly the necessary cost of the *suffix* at
+index `j` and the *prefix* at index `j-1` that connect the two consecutive
+states.  
+The final step adds the cost of the prefix at the last index `n-1`,
+which is required because `P[n] = 0`.  
+Hence every path produced by the DP corresponds to a concrete set of
+operations whose cost equals the DP value.  
+Thus the DP value is a lower bound on the optimal cost.
+
+*Completeness*  
+Consider any optimal sequence of operations achieving target `v`.
+Let `xP`, `xS` be the corresponding odd‑occurrence vectors.
+Define `S[j] = XOR_{i=0}^j xS[i]` and
+`P[j] = XOR_{i=j}^{n-1} xP[i]`.  
+By Lemma&nbsp;2 they satisfy the constraint (1).  
+Follow the DP transitions exactly along the states `S[j]`.
+Each transition cost equals the cost for the operations affecting
+index `j-1` and `j` in the original sequence (Lemma&nbsp;1).
+Therefore the total DP cost equals the total cost of the optimal
+sequence.  
+No smaller cost can exist because the DP computed the minimal value.
+
+Hence the DP value for target `v` is exactly the minimal cost for that
+target. ∎
+
+
+
+##### Lemma 4  
+The optimal answer for the problem is  
+`min( cost(v=0), cost(v=1) )` where each `cost(v)` is the DP value for
+that target.
+
+**Proof.**
+
+All valid final configurations consist of all characters equal to
+either `0` or `1`.  
+For each of the two possibilities a valid solution exists and the DP
+returns the minimal cost to realise it.  
+Thus the global optimum is the cheaper of the two. ∎
+
+
+
+##### Theorem  
+The algorithm described in the solution returns the minimal total cost
+required to make the whole string equal (all `0` or all `1`).
+
+**Proof.**
+
+For each target `v ∈ {0,1}` the algorithm computes, by the DP,
+the minimum cost of achieving that target (Lemma&nbsp;3).  
+Choosing the smaller of the two costs (Lemma&nbsp;4) yields the globally
+optimal cost.  
+Therefore the algorithm is correct. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.   Complexity Analysis
+
+Let `n = |s|`.
+
+```
+For each target (2 times):
+    - one pass over the string →  O(n) time
+    - constant extra memory (two small arrays)
+
+Total time   :  O(n)
+Memory usage :  O(1)
+```
+
+`n ≤ 10^5` easily fits in the limits.
+
+
+
+--------------------------------------------------------------------
+
+#### 6.   Reference Implementation  (Python 3)
+
+```python
+import sys
+
+class Solution:
+    def minimumCost(self, s: str) -> int:
+        n = len(s)
+
+        # helper that returns minimal cost for a fixed target v (0 or 1)
+        def cost_for_target(v: int) -> int:
+            t = [int(ch) ^ v for ch in s]   # t[j] = s[j] XOR v
+
+            # dp[prev_s] for current position j-1
+            dp_prev = [0, n]                # j = 0: suffix cost (n-0)
+            # dp_prev[0] = 0, dp_prev[1] = n
+
+            for j in range(1, n):
+                t_prev = t[j - 1]
+                t_cur = t[j]
+                cost_suffix = n - j           # weight of suffix at position j
+                cost_prefix = j               # weight of prefix at position j-1
+
+                # compute dp_cur[0]  (S[j] = 0)
+                val0_from0 = dp_prev[0] + (0 ^ 0) * cost_suffix + \
+                             ((t_prev ^ 0) ^ (t_cur ^ 0)) * cost_prefix
+                val0_from1 = dp_prev[1] + (0 ^ 1) * cost_suffix + \
+                             ((t_prev ^ 1) ^ (t_cur ^ 0)) * cost_prefix
+                new0 = val0_from0 if val0_from0 < val0_from1 else val0_from1
+
+                # compute dp_cur[1]  (S[j] = 1)
+                val1_from0 = dp_prev[0] + (1 ^ 0) * cost_suffix + \
+                             ((t_prev ^ 0) ^ (t_cur ^ 1)) * cost_prefix
+                val1_from1 = dp_prev[1] + (1 ^ 1) * cost_suffix + \
+                             ((t_prev ^ 1) ^ (t_cur ^ 1)) * cost_prefix
+                new1 = val1_from0 if val1_from0 < val1_from1 else val1_from1
+
+                dp_prev[0], dp_prev[1] = new0, new1
+
+            # add final prefix cost at index n-1
+            res0 = dp_prev[0] + (t[-1] ^ 0) * n
+            res1 = dp_prev[1] + (t[-1] ^ 1) * n
+            return res0 if res0 < res1 else res1
+
+        # try both targets
+        return min(cost_for_target(0), cost_for_target(1))
+
+# Example usage (you can remove this part when submitting)
+if __name__ == "__main__":
+    sol = Solution()
+    print(sol.minimumCost("0011"))   # expected 2
+    print(sol.minimumCost("010101")) # expected 9
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

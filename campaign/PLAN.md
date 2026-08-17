@@ -8,12 +8,32 @@ updated only when a real decision changes.
 
 Datasets: GSM8K, AIME24, HumanEval, LiveCodeBench, MT-Bench, LongBench(-v2).
 Methods: `spec_casc_opt`, `spec_casc_tok`, `cactus`, `mentored_dec`, `r_fuzzy`
-(the 5 taxonomy methods only -- no guard variants, no strict/baseline arm in
-the deliverable). Per (dataset, method): a per-case run-metrics table, and a
-sweep of each method's own alpha to find 3 mean-accepted-length (l̄) points
-that all 5 methods can reach, so completion length is compared at matched l̄.
-Final deliverable: one graph per dataset, 5 lines (one per method), x=l̄,
+(the 5 taxonomy methods only -- no guard variants). Per (dataset, method): a
+per-case run-metrics table, and a sweep of each method's own alpha to find 3
+mean-accepted-length (l̄) points that all 5 methods can reach, so completion
+length is compared at matched l̄. Final deliverable: one graph per dataset,
+5 lines (one per method) plus a lossless (`strict`) reference point, x=l̄,
 y=mean completion length, plus the underlying data.
+
+**2026-08-15 addendum (user request): lossless baselines are back in.**
+Originally scoped out ("no strict/baseline arm in the deliverable", see the
+struck text above) -- the user asked afterwards to include them after all.
+`fresh_server_replay.py` already had a `strict` arm (used elsewhere for the
+semantic-guard analysis), so this was infrastructure reuse, not new
+plumbing: `campaign_run.py` now runs a Stage 0 `--arms strict` pass over
+the full 12-case set (one run per case, no alpha axis -- lossless has
+nothing to sweep) before the calibration/full-sweep stages, and
+`campaign_report.py` aggregates it into `campaign/results/<dataset>.csv`
+as a `method=strict` row and plots it on the graph as a single reference
+point (neutral marker + dashed guide lines to both axes, not a 6th
+categorical line -- see `scripts/campaign_report.py`'s `STRICT_STYLE`
+comment for why). New `--skip-strict` flag on `campaign_run.py` to opt back
+out if needed. **Backfill needed for gsm8k (already finished) and aime24
+(mid-sweep when this landed)**: both need a follow-up `campaign_run.py
+--dataset <x>` pass once the GPU is free (single-GPU, no parallelism -- see
+JOURNAL for when this actually happened) -- cheap, since the 5 methods'
+existing runs all skip-if-done and only the new 12-case strict pass
+actually executes.
 
 ## Why this is NOT a repeat of the existing AIME/HumanEval tables
 
@@ -135,6 +155,7 @@ runs/<dataset>/<method>/alpha<value>/case_NNN/seed_0/{config,request,response,ru
 campaign/
   PLAN.md              this file
   JOURNAL.md            append-only log, updated every work session
+  FINDINGS.md           cross-dataset per-method behaviour notes (ranges, monotonicity, collapse pattern) -- updated as datasets land
   calibration/<dataset>.json      raw grid results + chosen targets, per dataset
   tables/<dataset>_<method>.csv   per-case run-metrics table
   results/<dataset>.csv           aggregated (method, alpha, mean l̄, mean completion length) points used for the graph
@@ -147,12 +168,27 @@ scripts/
 
 ## Grading / correctness
 
-Explicitly **not** part of this deliverable -- the ask is run metrics (l̄,
+**2026-08-16 addendum (user request): accuracy is back in, for the
+datasets where it's cheap.** Originally scoped out entirely (struck text
+below); `scripts/campaign_report.py`'s `GRADERS` dict now grades gsm8k
+(`scripts/grade_gsm8k.py`, new), aime24 (`scripts/grade_aime.py`, already
+existed), humaneval (`scripts/grade_humaneval.py`, already existed,
+execution-based pass@1), and longbench_v2 (`scripts/grade_longbench.py`,
+new) -- each writes an `accuracy` column into `results/<dataset>.csv` and
+a second graph, `graphs/<dataset>_accuracy.png`. **livecodebench and
+mtbench are still ungraded**: livecodebench needs its real test cases
+re-fetched (the original prompt-builder deliberately skipped the ~1.25GB
+test-case blobs, see `build_livecodebench_prompts.py`) plus a stdin/stdout
+execution harness (different shape from HumanEval's `check()`-function
+harness); mtbench needs an LLM-judge, and no such infra exists on this
+machine yet. Both are real scoped-out work, not forgotten -- see
+`campaign/JOURNAL.md` for the day this landed.
+
+~~Explicitly not part of this deliverable -- the ask is run metrics (l̄,
 completion length) only, not accuracy. No LLM-judge infrastructure is stood
-up for MT-Bench, no test-execution harness for LiveCodeBench. (GSM8K and
+up for MT-Bench, no test-execution harness for LiveCodeBench.~~ (GSM8K and
 LongBench-v2 references are still captured in `metadata.json`/`source.json`
-in case they're wanted later -- free, since the prompt builders already
-carry them -- but nothing here reads them.)
+-- now read, by the two new graders above.)
 
 ## Sources for the 4 new prompt sets
 

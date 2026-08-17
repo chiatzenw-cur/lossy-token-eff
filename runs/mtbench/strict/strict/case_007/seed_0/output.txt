@@ -1,0 +1,171 @@
+<|channel|>analysis<|message|>We need to respond with a Python program. The user asked: "Develop a Python program that reads all the text files under a directory and reprompt top-5 words with the most number of occurrences." Likely they want a script that reads all .txt files in a directory tree, counts word frequencies, then prints top 5 words. But "reprompt" maybe means "return"? Probably they want a script that prints out the top 5 words. I'll provide code, explain steps, maybe using argparse, os.walk, collections.Counter, maybe ignoring punctuation and case. Provide guidance. Should we handle encoding errors. Provide a main function.
+
+Also: we can use pathlib. Use regex. Provide optional version. Provide full script.
+
+Also mention usage. Provide safety steps. Provide code block with script. Provide remarks. And possibly allow specifying directory. Easy.
+
+Will respond with explanation: collect all text files, read them, accumulate words, count. Then get most common 5.
+
+We can define a function main that uses argparse to get path.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>Below is a minimal yet production‑ready script that
+
+1. walks an arbitrary directory tree,
+2. reads *every* file that ends with `.txt`,
+3. tokenises its contents into words (ignoring punctuation and case),
+4. counts the frequency of every word, and finally
+5. prints the five most frequent ones.
+
+```python
+#!/usr/bin/env python3
+"""
+top5_words.py
+
+Recursively scan a directory for .txt files, count word frequencies,
+and print the five words that occur most often.
+
+Usage
+-----
+    python top5_words.py /path/to/directory
+
+The script is robust to non‑UTF‑8 files: any unreadable text is skipped
+with a warning emitted to stderr.
+"""
+
+import argparse
+import collections
+import os
+import sys
+import re
+from pathlib import Path
+from typing import Iterator, List, Tuple
+
+# --- 1. Utility helpers ----------------------------------------------------- #
+
+def stream_words_from_file(file_path: Path) -> Iterator[str]:
+    """
+    Yield words from a single text file.
+    Words are sequences of alphabetic characters; everything else is ignored.
+    The function is case‑insensitive and skips badly encoded files.
+
+    :param file_path: Path to the .txt file
+    :return: iterator of cleaned words
+    """
+    word_pattern = re.compile(r"\b[a-zA-Z']+\b")   # keeps apostrophes in words
+    try:
+        with file_path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                for match in word_pattern.finditer(line.lower()):
+                    yield match.group()
+    except (UnicodeDecodeError, PermissionError) as exc:
+        sys.stderr.write(
+            f"WARNING: Cannot read '{file_path}': {exc.__class__.__name__}\n"
+        )
+
+
+def words_from_directory(root_dir: Path) -> Iterator[str]:
+    """
+    Walk *root_dir* recursively, yielding words from every .txt file found.
+    """
+    for txt_file in root_dir.rglob("*.txt"):   # rglob handles subdirectories
+        if txt_file.is_file():
+            yield from stream_words_from_file(txt_file)
+
+
+# --- 2. Core logic ------------------------------------------------------------ #
+
+def count_top_words(
+    root_dir: Path, top_n: int = 5
+) -> List[Tuple[str, int]]:
+    """
+    Count words in all .txt files under *root_dir* and return the top *top_n*.
+
+    :param root_dir: Path to search
+    :param top_n: how many top words to return
+    :return: list of (word, count) tuples sorted by count descending
+    """
+    counter = collections.Counter()
+    for word in words_from_directory(root_dir):
+        counter[word] += 1
+
+    return counter.most_common(top_n)
+
+
+# --- 3. Command line interface ---------------------------------------------- #
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Show the most frequent words in a directory of .txt files"
+    )
+    parser.add_argument(
+        "directory",
+        type=Path,
+        help="Root directory to search",
+    )
+    parser.add_argument(
+        "-n",
+        "--top",
+        type=int,
+        default=5,
+        help="Number of top words to display (default: 5)",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Print progress information to stderr",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    if not args.directory.is_dir():
+        sys.stderr.write(f"ERROR: '{args.directory}' is not a directory\n")
+        sys.exit(1)
+
+    if args.verbose:
+        sys.stderr.write(f"Scanning directory: {args.directory}\n")
+
+    top_words = count_top_words(args.directory, top_n=args.top)
+
+    if not top_words:
+        print("No words found.")
+        return
+
+    print(f"Top {args.top} words in {args.directory}:")
+
+    for rank, (word, count) in enumerate(top_words, start=1):
+        print(f"{rank:2d}. {word:15s} – {count:,} occurrences")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### How it works
+
+| Step | What happens |
+|------|--------------|
+| **`stream_words_from_file`** | Opens a file, lower‑cases the text, pulls out words with a regular expression (letters + apostrophes).|
+| **`words_from_directory`** | Uses `pathlib.Path.rglob` to find every `.txt` file recursively and streams its words. |
+| **`count_top_words`** | Builds a `collections.Counter` from the stream and asks for the `most_common(top_n)` entries. |
+| **CLI** | Accepts the directory path, optional `-n/--top` number, and a verbosity flag. Prints the top words to stdout. |
+
+---
+
+## Usage examples
+
+```bash
+# Show the five most frequent words in the current directory
+python top5_words.py .
+
+# Show the top 10 words from /home/user/documents
+python top5_words.py /home/user/documents -n 10
+
+# Verbose mode — see progress messages
+python top5_words.py . --verbose
+```
+
+Feel free to adapt the regular expression if you want a stricter or looser definition of a “word”, or change the file‑encodings. The script intentionally skips files that can't be read rather than crashing. Happy coding!

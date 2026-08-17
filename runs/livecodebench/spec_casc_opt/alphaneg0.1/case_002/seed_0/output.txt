@@ -1,0 +1,496 @@
+<|channel|>analysis<|message|>We need to analyze problem: We have array A of n integers. We need to find maximum sum of a non-empty subarray such that the parities of consecutive elements alternate (i.e., a[i] and a[i+1] have different parity). Equivalent to subarray length 1 always allowed. For length >2, we must maintain alternating parity.
+
+Goal: maximum sum across all subarrays satisfying these parity constraints. n up to 2e5 per test case, total sum n across test cases <= 2e5. a_i up to 1e3 absolute value small.
+
+We need to process. Problem basically ensures contiguous subarray with alternating parity. So we need to find maximum sum of such subarray.
+
+We have to handle: Use DP sliding window of maximum sum of subarray ending at i satisfying alternating parity.
+
+We can define dp[i] = maximum sum of a subarray that ends at position i and satisfies alternating parities. Another approach: consider constructing possible subarrays of alternating parity. Since parity alternates each step: either odd-even-odd-even or even-odd-even-odd etc. So we want to find consecutive subarray with alternating parity; that is, we have to break whenever there's a pair with same parity.
+
+Thus the array can be partitioned into maximal segments of alternating parity, i.e., split when consecutive same parity occurs. Actually but if it's not strictly alternating adjacency but subarray may skip some elements? Wait subarray must be contiguous. So if we have any two consecutive elements with same parity, they cannot both be in same subarray. So the subarrays are continuous, but each i must be such that parity alternates.
+
+Thus we can segment the array into contiguous segments where parity alternates between successive elements: for any i that no break and we have pattern: a[i] parity **different** from a[i+1] parity. So we need to find maximal segments where for all j inside segment, parity(j) != parity(j+1). That is basically the maximal subarray where parity alternates correctly. When we encounter a pair where parity same, you cannot have subarray that includes both, but we can still have subarray that stops before that adjacency or starts after that adjacency. So we can break segments at those indices.
+
+Thus the array is partitioned into segments where every adjacent pair is alternating. Within each segment, we can use standard Kadane's algorithm to find maximum subarray sum within that segment. Because any subarray inside the segment also satisfies alternating parity (since all adjacent pairs inside segment alternate). So we just need maximum subarray sum across all segments.
+
+But wait: consider a subarray that includes two elements where parity same but they are not adjacent, maybe separated by an odd element? Wait adjacency of elements only considered within subarray. A subarray where elements are not adjacent in original array cannot be considered. For subarray within segment: any adjacent pair in subarray must be consecutive in original array, which holds. So if segment not contiguous with parity break? Wait if we have a sequence: 2 3 5 6 7 8 9, 3 5 6 (odd, odd, even?) width? Actually parity pattern must alternate all along. For a given subarray, subarray must have all adjacent elements alternate. This means that the intermediate pattern must satisfy parity difference across all consecutive elements, which is equivalent to the entire subarray being a contiguous portion of a maximal alternating-pair segment. Because if there is any pair inside subarray with same parity, it's invalid. So the subarray cannot pass that break.
+
+Therefore we can just split segments at each position where parity(a[i]) == parity(a[i+1]) and treat each segment individually. Since n <= 2e5, we can do segment extraction and Kadane.
+
+But consider sign: All numbers can be negative; maximum subarray sum over subarray must be at least 1 element. So we need to take max subarray sum of integer array with sum. That is Kadane's typical algorithm but handle negative perhaps: if all negative, keep maximum element (which is positive). For each segment, we compute standard Kadane but all element negative? But we can keep maximum element. However, cross between segments not allowed.
+
+Hence algorithm: For each test case:
+
+- Read n, array.
+- ans = -inf
+- For i from 0 to n-1:
+   Maintain current segment start.
+
+Simpler: iterate over elements, maintain a current segment array; when we encounter di = a[i] parity; if i > 0 and parity(a[i-1]) == parity(a[i]), then we finalize segment and compute max subarray sum over that segment and update ans; then reset segment starting at i. Also need to final segment at end.
+
+Alternatively, we can compute Kadane on the fly without storing segment: When we encounter a parity break, we reset current sum to 0? Let's think.
+
+Consider Kadane algorithm for running algorithm: Each new element a[i], we treat current segment separately: i.e., we maintain current sum and current best max for current segment. But we need to reset whenever parity with previous fails; that ensures sums of subarrays that cross break not considered. So we can maintain current cumulative sum but we also need to handle possibility of negative prefixes.
+
+Pseudo:
+
+current_sum = -inf
+current_best = -inf
+prev_parity = None
+
+for i in range(n):
+    if i==0 or parity(a[i]) != parity(a[i-1]):
+        # still same segment, update current_sum
+        if current_sum == -inf:   # no current
+            current_sum = a[i]
+        else:
+            current_sum = max(a[i], current_sum + a[i])
+        current_best = max(current_best, current_sum)
+    else:
+        # parity break, start new segment
+        current_sum = a[i]
+        current_best = a[i]
+        # but we also update ans from previous segment
+        ans = max(ans, current_best)  # but careful: after resetting, we need to consider previous segment's best
+        # Actually we need to store results. So before resetting
+        ans = max(ans, current_best_before_reset)  # algorithm: we need a variable to store best from each segment.
+    prev_parity = parity(a[i])
+
+After finishing loop maintain ans = max(ans, current_best).
+
+Simpler: use segment approach:
+
+ans = -inf
+segment_start = 0
+for i in range(n):
+    if i>0 and parity(a[i]) == parity(a[i-1]):
+        # evaluate segment; compute maximum subarray sum of a[segment_start:i]
+        ans = max(ans, best_subarray_sum(a[segment_start:i]))
+        segment_start = i
+# after loop
+ans = max(ans, best_subarray_sum(a[segment_start:n]))
+
+Return ans.
+
+Need to implement best_subarray_sum function quickly; we can call Kadane on slice chunk. Since sum of n across test cases <= 2e5, we can do this O(n). But careful about copying slice so we don't duplicate memory. We can just loop through that index range.
+
+Let's test sample.
+
+Case: [1 2 3 4 5]
+parities: 1 odd, 2 even, 3 odd, 4 even, 5 odd. No alternation break. Segment of length 5. Kadane -> sum 1+2+3+4+5 = 15. Output 15.
+
+Case 2: [9 9 8 8], parities: 9 odd, 9 odd, 8 even, 8 even. Breaks: after first pair: 9 and 9 same parity. So segment1: [9], best=9. segment2: start at index 1? Wait we break at i=1, previous segment starting at 0. So segment_start=0, idx=1 compute segment [0:1] = [9] best=9. segment_start=1. Next i=2: parity(9,8) differ? 9 odd 8 even => fine. So segment continues. i=3? parity(8,8) same -> break. Subarray from segment_start=1 to i=3? Wait segment_start=1, i=3 exclusive? Actually segment_start 1, i=3 are indices 1 and 2: elements 9 and 8. That's segment [9,8] best=9+8=17? Let's compute: dp. So best is 17. record best. Then segment_start=3. Next i=4: index 3 element 8 only (no next). Last segment [8] best=8. So ans = 17. sample output 17.
+
+Case 3: [-1 4 -1 0 5 -4], parities: 1 odd, 4 even, -1 odd, 0 even, 5 odd, -4 even. All alternate, so segment entire arr. best subarray sum? Let's compute: use Kadane algorithm. But sample output says 8. Let's compute: Sequence: -1,4,-1,0,5,-4. z from -1: +4 3, +(-1) 2, +0 2, +5 7, +(-4) 3. Max subarray sum maybe 7? Wait but sample says 8. Let's compute more systematically: maybe the best subarray is [4,-1,0,5] sum = 8? Let's list: 4 -1 0 5 = 8. Indeed that is correct. Kadane maybe gave 7 as max? Let's check: If start at 4 (sum asc) 4 -> max 4; then add -1 sum=3 => max 4; add 0 sum=3; add 5 sum=8 => max 8; add -4 sum=4 => max stays 8. So best subarray sum is 8. Good.
+
+Case 4: [-1 2 4 -3] parities: 1 odd, 2 even, 4 even, -3 odd. Break at at i=2: parity(2,4) same even. So segment1: [-1,2] best=1? Let's compute: [-1] [-1] 1 [-1+2] 1; max=1. Segment2: [4,-3] best? 4 or 4+(-3)=1, so max=4. So overall ans=4. But sample output 4. Wait but we have break at i=2; we created segment [4,-3], with best 4. Evaluate algorithm: correct.
+
+Case 5: [-1000] only one element negative. answer -1000. Good.
+
+Case 6: [101 -99 101] parities: 1 odd, -99 odd, 101 odd. There are 2 consecutive odd at same parity. So segments: -1 element [101], best start at 101; max 101. Next break at i=1; new segment [ -99] best -99; next break at i=2; new segment [101] best 101. So maximum 101. Sample output 101. Good.
+
+Case 7: 20 elements; sample output 10. We'll trust algorithm.
+
+Thus algorithm works.
+
+Edge Cases: For each test case: n=1, prefix. Works.
+
+Implementation details:
+
+For each test case, read n, list a of ints.
+
+Compute ans=-inf.
+
+Set segment_start=0
+
+For i in range(1,n):
+    if (a[i] % 2) == (a[i-1] % 2):
+        # compute segment best sum of a[segment_start:i]
+        ans = max(ans, kadane(a[segment_start:i]))
+        segment_start = i
+
+After loop, compute ans for last segment: ans = max(ans, kadane(a[segment_start:n]))
+
+Take care: a[i] may be negative, but mod 2 works fine? In Python int, negative % 2 yields 0 or 1? For negative numbers, -1 % 2 == 1, -2 % 2 == 0. Because parity of negative numbers is considered parity of absolute value? Actually parity of integer indicates parity of value when considered as integer; negative parity same as positive. So parity of -1 should be odd.
+
+So using a[i] % 2 for negative numbers works: -1 % 2 = 1, -2 % 2 = 0. Works.
+
+Now implement Kadane for subarray segment [l, r) where r exclusive.
+
+Kadane: sum=0? But we have to handle negative numbers: We need to find maximum subarray sum with at least one element. Implementation idea: best = -inf; curr = -inf; iterate j from l to r-1:
+
+- if curr <= 0: curr = a[j] else curr += a[j]? Wait typical Kadane: curr = max(a[j], curr + a[j]) while curr <= maybe negative.
+
+We'll implement:
+
+curr = -inf
+best = -inf
+for j in range(...):
+    curr = max(a[j], curr + a[j])
+    best = max(best, curr)
+
+Return best.
+
+Because starting curr is -inf ensures that first iteration uses a[j] as curr. Provide negative numbers.
+
+Test: segment [101] length 1: curr=101, best=101.
+
+Segment [4,-3]: curr=4, best=4; next j= -3: curr=max(-3,4-3)=1, best=4. Works.
+
+Segment [101,-99,101]. curr iteration: curr=101, best=101; next j=-99: curr=max(-99,100)=1; best=101; next j=101: curr= max(101, 1+101=102)=102; best=102. Wait but we earlier computed 101? But our algorithm says best=102; but how? Actually [101,-99,101] subarray alternating? The array is 101, -99, 101. But parity: 101 odd, -99 odd, 101 odd: The first two same parity, so break at i=1. So segments will be [101] only. So we won't evaluate segment [101,-99,101] because there's break; but we treat entire segment between indices 0-1? Wait we break at i=1 when parity same. So we only compute 0-1: [101] best 101. So our algorithm works.
+
+Thus algorithm correct.
+
+Edge: case [1,2] -> alternation: parity different. So subsequence entire array. Kadane: 1+2=3. Works.
+
+Complexities: O(n) per test case. Implementation fine.
+
+We need to read t test cases. Input format: first line contains an integer t. But sample input shows "Sample Input 1:" and shows 7 lines etc. But actual online judge input will have t and each subarray number then array lines. So we ignore.
+
+Let's design final code.
+
+Implement solve() with reading.
+
+Use sys.stdin.read().split() to parse ints fast. Because t up to 1e4 but total n <= 2e5.
+
+Process lines:
+
+data = list(map(int, sys.stdin.read().split()))
+downs = 0
+t = data[0]
+index = 1
+outputs = []
+
+for _ in range(t):
+    n = data[index]; index+=1
+    a = data[index:index+n]; index+=n
+    # compute ans
+    ans = -10**18
+    seg_start = 0
+    for i in range(1,n):
+        if (a[i] & 1) == (a[i-1] & 1):
+            # evaluate segment [seg_start:i]
+            ans = max(ans, kadane(a, seg_start, i))
+            seg_start = i
+    ans = max(ans, kadane(a, seg_start, n))
+    outputs.append(str(ans))
+
+print("\n".join(outputs))
+
+Define kadane(a, l, r):
+    curr = -10**18
+    best = -10**18
+    for j in range(l, r):
+        curr = max(a[j], curr + a[j])
+        if curr > best:
+            best = curr
+    return best
+
+But we must handle negative infinite using large negative maybe -10**18.
+
+Because a_i up to 1e3; n up to 2e5, sum can be up to 2e8. -10**18 big enough.
+
+Let's test sample.
+
+Let's run mentally maybe quickly.
+
+Should produce outputs.
+
+But double-check output: The sample output lines: "15\n17\n8\n4\n-1000\n101\n10" maybe. Great.
+
+Edge: Suppose we have segment of length 0 if break at i=1: seg_start=0, i=1; compute segment [0:1] length 1, good. Then seg_start=1, next i=2 etc.
+
+Edge: if n=0? Not possible. So fine.
+
+Now let's test custom.
+
+Case: [1,1,1]. n=3. Parities: 1 odd, same, 1 odd diff? Actually parity same (1). So break at i=1: len=1 compute [1]; seg_start=1; i=2: parity(1,1) same -> break at i=2: segment [1] from seg_start=1 to i=2 -> end, compute [1]; seg_start=2. After loop end compute [1] again. ans=1. Good.
+
+Edge: Sequence {0,1}: 0 even? 0 even indeed. Parities: 0 even, 1 odd, differ; segment [0,1] length 2. Kadane: 0+1=1 or [1] 1. Good.
+
+Ok.
+
+Edge: handle negative inside segment: a segment [0, -2, 0] parity alt? 0 even -> -2 even -> adjacency same parity: break at i=1. So segment [0] best 0. Next segment [ -2,0] parity difference? -2 even, 0 even -> same parity => break at i=2: segment [ -2], then [0] best 0. So overall ans=0. But 0 is allowed. But maybe 0+ -2 < 0? Actually we can subarray [0] sum 0, which is maximum. Good.
+
+Edge: All negative numbers. For each segment, Kadane will compute best negative. For n=1, ans negative; for others, ans max among them. Good.
+
+Now we thoroughly need to confirm there's no violation: The maximum subarray sum across all subarrays with alternating parity may not be contiguous segments: Wait we concluded that subarrays must reside within a maximal alternating segment. That is correct. Because if subarray crosses an even-even or odd-odd adjacency, then array segment not allowed. So subarray must be contiguous element positions that don't contain any adjacent same parity. So subarray must lie strictly inside maximal segment. So our logic is correct.
+
+Proof: Suppose a subarray [l,r] is valid; then for all i between l to r-1, parity(i)!=parity(i+1). Thus the subarray cannot contain any element character with same parity as adjacent. So the entire subarray lies inside any maximal contiguous segment where parities alternate. So indeed we only need to consider subarray inside each such segment. So algorithm stands.
+
+Complexities: O(total n) memory O(n) for list.
+
+Edge: reading bits: t __str Maximum testcases: 1e4; but sum n <= 2e5. Works.
+
+Now produce final answer code.
+
+We should also mention that parity can be computed using a[i] & 1 (bitwise). For negative numbers, -1 & 1 gives 1? In Python, -1 & 1 = 1? Let's check: -1 & 1 = 1 because -1 & 1 = 1 since -1 has all bits ones. yes. So we can use parity = a[i] & 1 to get parity. That is typical.
+
+But we must confirm for -2: -2 & 1 = 0? In Python: -2 & 1 is 0. So parity works. For negative numbers, a[i] & 1 may be 0 or 1. Good.
+
+So we use bitwise &; simpler.
+
+Now produce final Python code. Let's build.
+
+Let's also consider memory: we might use recursion? Not needed.
+
+Ok. Write function solve().
+
+Edge: t may not be read? Use sys.stdin.read.
+
+Let's code accordingly.
+
+Testing sample: We'll just replicate sample.
+
+But sample input uses lines: "Sample Input 1:" etc. But actual input will not match. We'll ignore. We'll rely on reading only numbers.
+
+Ok produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every test case we have an array `a[1 … n]`  
+`a[i]` can be negative, `|a[i]| ≤ 10³`.
+
+For a subarray the parities of two neighbouring elements must be different
+
+```
+a[i] and a[i+1]  →   parity(a[i]) ≠ parity(a[i+1])
+```
+
+The task is to output the maximum possible sum of a subarray that satisfies
+this rule.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* If two consecutive elements have the **same** parity,
+  no subarray can contain both of them.
+  Therefore they create a natural break point in the array.
+
+* All subarrays that satisfy the rule are **contiguous** inside one of the
+  maximal “alternating‑parity” segments of the whole array.
+
+  Example:  
+  `[ 2 3 5 6 7 8 9 ]`  
+  %parity% : 2, 3, 5, 6, 7, 8, 9 → (0,1,1,0,1,0,1)  
+  The single break is between **3** and **5**  
+  → two segments: `[2 3]` and `[5 6 7 8 9]`  
+
+  The answer is the maximum subarray sum inside one of these segments.
+
+
+
+--------------------------------------------------------------------
+
+#### 2.  How to compute the answer inside one segment
+
+Inside one segment the parity rule is already satisfied for the whole
+segment – any subarray of it is automatically valid.
+So we only have to find the maximum subarray sum of a normal integer array.
+The classical Kadane algorithm does it in `O(length)`:
+
+```
+x = -∞   (current best sum ending at the current position)
+best = -∞ (maximum seen so far)
+
+for every element v of the segment
+        x = max(v, x + v)
+        best = max(best, x)
+```
+
+`best` is the answer for the current segment.
+
+
+
+--------------------------------------------------------------------
+
+#### 3.  Algorithm
+
+```
+answer = -∞
+segment_start = 0
+
+for i = 1 … n-1
+        if parity(a[i]) == parity(a[i-1])        // break point
+                answer = max(answer,
+                               best_by_Kadane(a, segment_start, i))
+                segment_start = i
+
+for the last segment
+        answer = max(answer,
+                     best_by_Kadane(a, segment_start, n)
+
+output answer
+```
+
+`best_by_Kadane(a, l, r)` runs Kadane on the slice `a[l … r-1]`.
+
+The whole algorithm is `O(n)` per test case.
+The sum of all `n` over the input is at most `2·10⁵`, therefore a
+single run over all data easily fits into the limits.
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm outputs the maximum possible sum.
+
+---
+
+##### Lemma 1  
+During the algorithm every segment processed by the algorithm
+(`a[segment_start … i-1]` or the final one) is a maximal
+continuously alternating‑parity subarray of the whole array.
+
+**Proof.**
+
+* A segment is created only when new index `i` is reached.
+* If `parity(a[i]) == parity(a[i-1])`, the new segment starts at `i`.  
+  Thus the previous segment contains no equal‑parity pair inside it.
+* Because the next segment starts at `i`, the new segment also has no
+  equal‑parity pair inside it.
+* If we continue adding elements while `parity(a[i]) != parity(a[i-1])`,
+  the segment is prolonged until the next break point or the array ends.
+  Hence the segment is maximal – adding any element at its end would
+  introduce a pair of equal parities. ∎
+
+
+
+##### Lemma 2  
+For a fixed `segment_start, segment_end` of the array
+the algorithm `best_by_Kadane` returns the maximum sum over any
+subarray of that segment.
+
+**Proof.**
+
+Kadane’s algorithm is known to return the maximum subarray sum
+of a non‑empty array of integers.  
+The algorithm is applied exactly unchanged to the requested slice,
+therefore the returned value is the maximum subarray sum of that slice. ∎
+
+
+
+##### Lemma 3  
+Let `S*` be the maximum sum over all valid subarrays of the whole array.
+The algorithm outputs at least `S*`.
+
+**Proof.**
+
+Take any optimal subarray `S*`.  
+By definition of `S*` all its adjacent neighbours have different parity,
+hence it lies completely inside one of the maximal segments defined in
+Lemma&nbsp;1.  
+Let `seg` be that segment.
+
+* When the algorithm processes `seg`, it computes the maximum subarray
+  sum of `seg` using Kadane (Lemma&nbsp;2).  
+  The maximum subarray sum of `seg` is at least `S*` (because `S*` is a
+  subarray of `seg`).  
+  That value is compared with the global answer and `answer` is updated
+  to at least `S*`.
+
+Thus the final answer of the algorithm is at least `S*`. ∎
+
+
+
+##### Lemma 4  
+The algorithm outputs at most `S*`.
+
+**Proof.**
+
+During the scan the algorithm only considers sums of subarrays that
+lie completely inside one segment (Lemma&nbsp;1).  
+Every such subarray is a valid subarray of the whole array.
+Kadane proves that the value taken from each segment is the maximum
+sum inside that segment.  
+Therefore the value stored in the global answer is never larger than
+the maximum sum over all valid subarrays of the whole array, i.e. `S*`. ∎
+
+
+
+##### Theorem  
+For every test case the algorithm outputs the maximum possible sum of a
+non‑empty subarray whose adjacent elements have different parity.
+
+**Proof.**
+
+From Lemma&nbsp;3 the value printed by the algorithm is **at least** `S*`;  
+from Lemma&nbsp;4 it is **at most** `S*`.  
+Consequently it equals `S*`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+For one test case
+
+* building the segments: `O(n)`
+* Kadane on each segment: `O(n)`
+
+Total time `O(n)` per test case,  
+`O(total n)` over all test cases (`≤ 2·10⁵`).
+
+Memory usage: the array itself (`O(n)`), plus a few integers.  
+Thus `O(n)`.
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+import sys
+
+def solve() -> None:
+    data = list(map(int, sys.stdin.read().split()))
+    if not data:
+        return
+    t = data[0]
+    idx = 1
+    out_lines = []
+
+    NEG_INF = -10**18
+
+    def kadane(a, l, r):
+        """return maximum subarray sum of a[l:r] (r exclusive)"""
+        cur = NEG_INF
+        best = NEG_INF
+        for j in range(l, r):
+            cur = a[j] if cur > 0 else cur + a[j]
+            best = max(best, cur)
+        return best
+
+    for _ in range(t):
+        n = data[idx]
+        idx += 1
+        a = data[idx: idx + n]
+        idx += n
+
+        ans = NEG_INF
+        seg_start = 0
+
+        for i in range(1, n):
+            if (a[i] & 1) == (a[i - 1] & 1):          # same parity → break
+                ans = max(ans, kadane(a, seg_start, i))
+                seg_start = i
+
+        # last segment
+        ans = max(ans, kadane(a, seg_start, n))
+
+        out_lines.append(str(ans))
+
+    sys.stdout.write("\n".join(out_lines))
+
+if __name__ == "__main__":
+    solve()
+```
+
+The program follows exactly the algorithm proven correct above
+and conforms to the required input / output format.

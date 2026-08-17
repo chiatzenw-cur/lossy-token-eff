@@ -38,8 +38,14 @@ import textwrap
 from collections import defaultdict
 from typing import Any
 
-FINAL_MARKER = "<|channel|>final<|message|>"
-END_MARKER = "<|end|>"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from answer_extraction import final_segment  # noqa: E402 -- covers both Harmony (GPT-OSS) and Qwen3's </think> convention
+
+# Trailing markers that can leak into the final segment (a generation that
+# ran past its own turn-end token before the server truncated it). Harmony's
+# is "<|end|>"; Qwen3's chat template closes an assistant turn with
+# "<|im_end|>" instead -- trim whichever is present.
+END_MARKERS = ("<|end|>", "<|im_end|>")
 CODE_BLOCK = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
 
 DEFAULT_TIMEOUT_SECONDS = 10.0
@@ -82,11 +88,12 @@ def read_json(path: pathlib.Path) -> dict[str, Any]:
 
 def extract_candidate(text: str) -> tuple[str | None, str]:
     """Return (candidate_code, how). None means no gradeable candidate."""
-    if FINAL_MARKER not in text:
-        return None, "no_final_channel"
-    final = text.split(FINAL_MARKER, 1)[-1]
-    if END_MARKER in final:
-        final = final.split(END_MARKER, 1)[0]
+    final, how = final_segment(text)
+    if final is None:
+        return None, how
+    for marker in END_MARKERS:
+        if marker in final:
+            final = final.split(marker, 1)[0]
     blocks = CODE_BLOCK.findall(final)
     if not blocks:
         return None, "final_channel_without_code_block"

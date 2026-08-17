@@ -1,0 +1,147 @@
+<|channel|>analysis<|message|>We need to produce a Python program that reads all text files under a directory and reports the top-5 words with most number of occurrences. The user didn't specify whether to use recursion to subfolders. Might just read subdir? Provide code. Should handle punctuation, case-insensitivity. Use collections.Counter. Maybe use glob. We'll provide code. Provide explanation. Let's produce answer.<|end|><|start|>assistant<|channel|>final<|message|>Below is a self‑contained Python script that
+
+1. Walks `root_dir` (recursively) and finds every file ending in `.txt`.
+2. Reads each file, tokenises whitespace‑split words, normalises to lower case, removes simple punctuation.
+3. Counts all words with a `collections.Counter`.
+4. Prints the five words that appear most *frequently* in the whole directory tree.
+
+Feel free to tweak the `root_dir` variable or the punctuation list to match the exact style of your documents.  
+
+```python
+#!/usr/bin/env python3
+"""
+top5_words.py
+
+Given a directory path, read all .txt files inside it (recursively),
+count all words, and print the top‑5 most frequent words.
+
+Author:  <your name>
+Date:    2026‑08‑01
+"""
+
+import os
+import re
+import argparse
+from collections import Counter
+from pathlib import Path
+from typing import Iterable
+
+# --------------------------------------------------------------------------- #
+# Helper utilities
+# --------------------------------------------------------------------------- #
+def is_text_file(path: Path) -> bool:
+    """Return True if *path* has a .txt extension (case insensitive)."""
+    return path.suffix.lower() == ".txt"
+
+def tokenize(text: str) -> Iterable[str]:
+    """
+    Very small tokenizer.
+    * Lower‑case everything.
+    * Strip leading/trailing punctuation.
+    * Split on whitespace and on any non‑alphanumeric character.
+    """
+    # Normalize whitespace
+    text = text.lower()
+    # Replace non‑alphanumeric characters with whitespace
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return filter(None, text.split())
+
+def scan_dir(root_dir: Path) -> Iterable[Path]:
+    """Yield all .txt files below *root_dir* (recursively)."""
+    for path in root_dir.rglob("*"):
+        if path.is_file() and is_text_file(path):
+            yield path
+
+# --------------------------------------------------------------------------- #
+# Main logic
+# --------------------------------------------------------------------------- #
+def main(root_dir: Path, top_n: int = 5) -> None:
+    """Count words in all .txt files and show the top *top_n* words."""
+    counter = Counter()
+
+    with open(os.devnull, k) as devnull;  # for silent "nb" usage (only if needed)
+    # iterate over all files
+    for txt_file in scan_dir(root_dir):
+        try:
+            with txt_file.open(encoding="utf-8") as f:
+                for line in f:
+                    counter.update(tokenize(line.lower()))
+        except Exception as exc:
+            print(f"[WARNING] Could not read {txt_file!s}: {exc}", file=sys.stderr)
+
+    # Decide whether to print words or include the counter
+    if not counter:
+        print("No words found in the specified directory.")
+        return
+
+    print(f"Top {top_n} words of the directory '{root_dir}':")
+    for i, (word, count) in enumerate(counter.most_common(top_n), start=1):
+        print(f"{i:>2}. {word:<20} {count:>7}")
+
+# --------------------------------------------------------------------------- #
+# Argument parser (for convenient command‑line usage)
+# --------------------------------------------------------------------------- #
+def build_argparser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Read all .txt files inside a directory and report the top‑5 most frequent words."
+    )
+    parser.add_argument(
+        "directory",
+        type=Path,
+        help="Directory to scan for .txt files.",
+    )
+    parser.add_argument(
+        "-n",
+        "--top",
+        type=int,
+        default=3,
+        help="Number of top words to display (default: 3).",
+    )
+    return parser
+
+if __name__ == "__main__":
+    import sys
+
+    parser = build_argparser()
+    args = parser.parse_args()
+
+    if not args.directory.is_dir():
+        print(f"Error: {args.directory!s} is not a directory.", file=sys.stderr)
+        sys.exit(1)
+
+    main(args.directory, top_n=args.top)
+```
+
+### How it works
+
+| Step | What happens | Example |
+|------|--------------|---------|
+| **Scan directory** | `scan_dir` walks the tree recursively. | If you run the script on `./docs/`, `docs/report.txt` and `docs/notes/intro.txt` will both be found. |
+| **Read file** | Open each file in UTF‑8. | `with txt_file.open(encoding="utf-8")` |
+| **Tokenise** | Convert to lower case, replace non‑alphanumeric characters with a space, split on whitespace. | `"Hello, world!" → ["hello", "world"]` |
+| **Count** | `Counter.update` increments each word. | After all files, the counter might hold `{'the': 18, 'python': 7, ...}` |
+| **Print** | `most_common` gives the most‑frequent entries. | `1. the          18` |
+
+### Customization tweaks
+
+* **Different file types** – change `is_text_file` to accept other extensions.
+* **More sophisticated tokenisation** – use `nltk` or `re` patterns to keep hyphenated words, hyphens, numbers, etc.
+* **Ignore stop‑word lists** – add a filtering step after `tokenize`.
+* **Case‑sensitive counts** – simply remove `.lower()` after reading.
+
+Run the script from the command line:
+
+```bash
+python3 top5_words.py /path/to/your/text/files
+```
+
+It will output something like:
+
+```
+Top 3 words of the directory '/path/to/your/text-blocks':
+ 1. the               112
+ 2. python              64
+ 3. code                45
+```
+
+Feel free to adapt the `top_n` variable or the arguments to your exact needs. Happy coding!

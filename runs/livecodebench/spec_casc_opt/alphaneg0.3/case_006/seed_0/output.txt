@@ -1,0 +1,290 @@
+<|channel|>analysis<|message|>We need to understand problem: We have array nums, can delete at most k elements. After deletion, we want longest subarray where all elements equal. Equivalent: choose a value v, and we want to pick a subsequence containing only v, possibly deleting some indices not v. But we need subarray contiguous after deletion. Equivalent to pick two indices l,r in original array after deletion? Actually we can delete elements globally, not only outside subarray. After deletion we get shorter array. The subarray requirement: contiguous subsequence in the resulting array. That means order preserved, but we can remove any elements from anywhere, including within that subarray? Wait if we delete elements inside the subarray, they'd be removed and subarray shrinks; but we want longest equal subarray after deletions. We can also delete elements inside the subarray to make it equal. So we can choose any sequence; we can keep only v's and delete other v's? Wait we need contiguous in result, so all kept elements are contiguous originally. So we can select a window [l,r] in original array. Within that window, we delete all elements that are not v. We may also delete elements outside window. After deletion, window becomes contiguous and all values v. We need <=k deletions overall. So we can choose any value v and choose a window maximizing size such that the number of non-v elements (i.e., deletions inside that window) <= k. Because we can delete at most k elements from entire array. We don't need to delete outside. Just choose window of length L where inside window there are B elements not equal to v. Then deletions needed are B, provided B <= k. Then subarray length L-L? Wait after deletion we keep v's inside window; window length after deletion will be count of v's inside window plus maybe others? Actually we delete non-v elements inside window, indicating we keep only v's. So resulting subarray length is number of v's in window. But we had window length L. Suppose we take window [i,j] inclusive. We delete all unv elements = L - count_v. So resulting subarray length = count_v. Is that the maximum? Example 1: nums [1,3,2,3,1,3], k=3. They delete indices 2 and 4 to get [1, 3, 3, 3] then longest equal subarray 3 starting at i=1 j=3. Let's analyze: Choose v=3. Window [1,5] (positions 1,2,3,4,5). Count_v = 3 (indices 1,3,5). Non-v = 2 (indices 2,4). Deletions=2 <= k. Resulting subarray length =3. So solution as described.
+
+Thus we need to consider all values v (range 1..n). For each v, we want maximum count_v within any window where number of non-v <= k. That is equivalent to longest subarray with at most k elements not equal to v. Equivalent to longest subarray where number of "bad" elements <= k. Standard sliding window.
+
+We need to compute max  over each v. Brute force O(n^2) unacceptable. But n up to 1e5, values up to n. We can use mapping each value to list of indices positions. Then we can apply greedy.
+
+Alternatively we can use two pointers: For each value v, maintain sliding window with at most k elements not equal to v. But naive for each v still O(n^2).
+
+Observe that the optimal subarray will involve some value v that appears most frequently. Because our subarray length is number of v's after deleting at most k zeros. We can treat each v separately. Another solution: Because we have at most k deletions, we will keep up to k other elements from other values. So typical approach: For each v, we consider "good" indices where v appears. We want to find window covering a set of good indices such that number of non-good indices in window <= k. Equivalent to: We have positions of v; we want to find longest sequence of positions of v such that the distance between the first and last positions minus number of v's in that pair <= k. Because number of non-v in window = (r - l + 1) - (#v in that window). (#v in that window) = t - s+1 (# of v's in that window). So length_of_subarray = #v_in_window. We want to maximize that.
+
+Define positions array pos of v. We want to find indices i <= j such that pos[j] - pos[i] - (j - i) <= k. Because total elements between pos[i] and pos[j] inclusive is pos[j]-pos[i]+1. #v_in_window = j - i + 1. So non-w: pos[j]-pos[i]+1 - (j-i+1) = pos[j]-pos[i] - (j - i). So condition <= k. We want maximize j-i+1. This can be solved with two pointers sliding window over positions array. Since total positions for all v sum to n, overall O(n). Good.
+
+Edge case: empty subarray length 0 always possible. We can also consider k=0 maybe.
+
+Implementation: Build dictionary mapping value to list of indices. For each list, perform two-pointer with pointers l, r. While l < len(list): while condition fails, move l forward. Update best.
+
+Time complexity O(n). Memory O(n).
+
+Let's test with given examples.
+
+Let's implement. Need to handle when k >= len(nums) maybe? But algorithm still works.
+
+Edge cases: When k can delete all elements leaving empty, but we can also create subarray of length 0. But if we can delete all elements then we could choose subarray length 0? Not necessary. Example if all elements same, best length 0? Wait we can keep all elements, no deletions needed, then longest equal subarray length = n. So algorithm works.
+
+Implementation details: Use default dict list.
+
+Pseudo:
+
+def longestEqualSubarray(self, nums, k):
+    from collections import defaultdict
+    pos = defaultdict(list)
+    for idx, val in enumerate(nums):
+        pos[val].append(idx)
+    best = 0
+    for val, arr in pos.items():
+        l = 0
+        for r in range(len(arr)):
+            # ensure window [l,r] valid
+            while arr[r] - arr[l] - (r - l) > k:
+                l += 1
+            best = max(best, r - l + 1)
+    return best
+
+Test with Example1. Use python mental? positions: v=3: [1,3,5]. r=0: r-l=0, expr 1-1-0=0 <=3 -> best 1. r=1: expr 3-1-1=1 <=3 -> best 2. r=2: 5-1-2=2 <=3 -> best 3. Good. v=1: [0,4]. expr 4-0-1=3 <=3 -> size 2. best 3. Works.
+
+Example2: nums [1,1,2,2,1,1], k=2. positions: 1: [0,1,4,5]. r=0:1-l=0 size=1. r=1: 1-0-1=0 <=2 best=2. r=2: idx=4, expr 4-0-2=2 <=2 best=3. r=3: idx=5 expr 5-0-3=2 <=2 best=4. So answer 4.
+
+Edge: Suppose k=0 but nums have equal subarray of many equal elements? positions can produce largest contiguous sequence of same value that are contiguous in original. Because condition reduces to arr[r]-arr[l]-(r-l)=0 -> arr[r]-arr[l] = r-l -> positions consecutive difference 1. So best becomes longest narrowed contiguous block of same value. Yes.
+
+Thus solution appears correct.
+
+Let's provide solution code. Need to import List, typing. Provide full class.
+
+Also may note that window corresponds to deletions inside window; we do not check deletions outside window. Because we may delete arbitrary elements, which number of deletions needed may be more than k? Wait we only delete non-v inside window; total deletions count = global deletions used. We don't need to delete outside window because it doesn't affect subarray. It's allowed to delete at most k elements. We only used deletions inside chosen window. So maximum deletions used used is <=k. So yes.
+
+Edge check: Suppose we choose window [l,r] with deletion count inside <=k, but we might also need to delete extra elements outside window to keep array contiguous? No, we are deleting globally, not just inside window. After deletion, we compress array by removing deleted elements; the selected window becomes contiguous because all kept elements are consecutive in original array after deletion of elements not in window but we also might delete some elements inside window. But we are not deleting from outside; but could the removal of elements outside the window create gaps? No, because we keep all elements of window as contiguous block, but if we delete positions outside window, the subsequence of kept elements is still contiguous relative to original? Wait we need to imagine the resulting array after deletions: Suppose we keep all elements inside window that are v, maybe also some elements outside window? No, we don't keep them; they are deleted. In resulting array, we removed some elements before the window and some after the window maybe; but relative order remains same, the kept elements form a contiguous block because they correspond to a contiguous segment of original array where we removed all non-v inside. But we didn't delete any elements inside window except non-v ones. But those non-v were removed, so window becomes contiguous but with only v. That holds. Good.
+
+Hence algorithm stands.
+
+Proof of optimality: as described.
+
+So final code.
+
+Let's produce final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every value `v` we can delete at most `k` elements that are *not* equal to `v`
+and look for the longest subarray that finally contains only `v`.
+
+--------------------------------------------------------------------
+
+#### 1.   Observations
+
+* After all deletions the remaining array is a contiguous block from the
+  original array.
+* Inside that block we delete all elements that are different from the chosen
+  value `v`.  
+  The number of deletions needed (`bad` elements) must be ≤ `k`.
+* Let the block be `[l … r]` in the original array.
+  If `cnt(v)` is the number of elements equal to `v` inside the block,
+  the answer is `cnt(v)`.
+
+--------------------------------------------------------------------
+
+#### 2.   Reformulation
+
+For a fixed value `v` :
+
+```
+pos = [p0 , p1 , … , pt]   – indices in the original array where nums[i] == v
+```
+
+Take a window `pos[i … j]` (i ≤ j).  
+The subarray of the original array that starts at `pos[i]` and ends at `pos[j]`
+contains
+
+```
+window size = pos[j] – pos[i] + 1
+good        = j – i + 1                (cnt(v) inside the window)
+bad         = window size – good
+```
+
+The window is *valid* iff  
+`bad ≤ k`  ⇔  `pos[j] – pos[i] – (j – i) ≤ k`.
+
+The length of the desired equal subarray for this window is exactly `good =
+j – i + 1`.
+
+Hence for each value `v` we simply need the longest interval `[i … j]`
+on its positions array that satisfies
+
+```
+pos[j] – pos[i] – (j – i) ≤ k
+```
+
+--------------------------------------------------------------------
+
+#### 3.   Sliding window for one value
+
+The positions array is sorted increasingly.
+While moving a right pointer `r` forward,
+the left pointer `l` can only move forward as well.
+We maintain the invariant that the current window `[l … r]`
+is **valid**.  
+If it becomes invalid we increment `l` until it is valid again.
+
+During this process we keep the maximum window length
+(`r - l + 1`) and the answer is the maximum over all values.
+
+The total number of positions over all values is `n`,
+so the overall complexity is polynomial `O(n)`.
+
+--------------------------------------------------------------------
+
+#### 4.   Correctness Proof  
+
+We prove that the algorithm returns the length of the longest
+equal subarray obtainable after deleting at most `k` elements.
+
+---
+
+##### Lemma 1  
+For a fixed value `v`, a subarray of the original array can be turned into
+an equal subarray of only `v` using at most `k` deletions  
+iff the indices of all `v` that lie inside that subarray form a window
+`pos[i … j]` with  
+`pos[j] – pos[i] – (j – i) ≤ k`.
+
+**Proof.**
+
+*If:*  
+Assume the condition holds.  
+Inside the subarray `[pos[i] … pos[j]]` we delete all elements different
+from `v`.  
+Number of deletions is `bad = pos[j] – pos[i] – (j – i) ≤ k`.  
+After deletion only the `v` elements remain; the remaining
+subarray length is `j – i + 1`.
+
+*Only if:*  
+Assume we can delete at most `k` elements inside the part
+`[pos[i] … pos[j]]` such that we keep all `v`’s and no other `v`’s.
+The minority elements we delete are exactly the elements different from `v`;
+their count is `bad = pos[j] – pos[i] – (j – i)`.  
+Because the deletion budget is `k`, we must have `bad ≤ k`. ∎
+
+
+
+##### Lemma 2  
+During the sliding window procedure for a value `v`,
+the window `[l … r]` is always valid, i.e. it satisfies  
+`pos[r] – pos[l] – (r – l) ≤ k`.
+
+**Proof.**
+
+Initially `l = 0, r = 0`, so the inequality holds.  
+When `r` increases by one, the left side increases by
+`pos[r] – pos[r-1] – 1`, but `pos[r] – pos[r-1]` is at least `1`,
+so the left side may increase by at most `1`.  
+If the inequality becomes violated, the algorithm increments `l`
+until it remains valid.  
+Because `l` only moves forward, we never re‑visit a violation. ∎
+
+
+
+##### Lemma 3  
+For every value `v` the algorithm computes the maximum possible
+`cnt(v)` among all windows that satisfy the deletion budget.
+
+**Proof.**
+
+By Lemma&nbsp;2 every window considered by the algorithm is
+valid.  
+The algorithm iterates over all `r` from `0` to `len(pos)-1`,
+and for each `r` it keeps the smallest `l` such that the window
+`[l … r]` is valid.
+Any larger `l` gives a shorter window, thus shorter `cnt(v)`.  
+Therefore the maximum window length encountered for this
+value `v` is computed, which by Lemma&nbsp;1 equals the best
+possible `cnt(v)` under at most `k` deletions. ∎
+
+
+
+##### Lemma 4  
+Let `ans` be the maximum over all values `v` of the best `cnt(v)`
+computed by the algorithm.  
+There exists a sequence of at most `k` deletions that produces an
+equal subarray of length `ans`.
+
+**Proof.**
+
+Take the value `v*` that achieves `ans`.  
+By Lemma&nbsp;3 there is a window `[l … r]` in `pos[v*]` with
+`cnt(v*) = ans` and `bad ≤ k`.  
+Delete all elements different from `v*`
+inside that window – at most `k` deletions – and delete all
+elements outside the window.
+The remaining array contains a contiguous block of only `v*` of length
+`ans`. ∎
+
+
+
+##### Theorem  
+`longestEqualSubarray` returns the length of the longest possible equal
+subarray that can be obtained after deleting at most `k` elements.
+
+**Proof.**
+
+*Upper bound:*  
+Any solution must delete at most `k` elements and leave
+a block consisting solely of some value `v`.  
+By Lemma&nbsp;1 the number of remaining `v`’s is bounded by the best
+`cnt(v)` among all windows satisfying the deletion budget.
+Hence no solution can be longer than `ans`.
+
+*Achievability:*  
+Lemma&nbsp;4 shows that a solution of length `ans` exists.
+
+Therefore no longer equal subarray exists and the algorithm outputs the
+optimal length. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.   Complexity Analysis
+
+Let `n = len(nums)`.
+
+* Building the dictionary of positions: `O(n)` time, `O(n)` memory.
+* Sliding window over all position lists: each index is moved at most
+  once by the left pointer, at most once by the right pointer: `O(n)` time.
+* Constant extra space: `O(n)` for the dictionary.
+
+Overall  
+
+```
+Time   :  O(n)
+Memory :  O(n)
+```
+
+--------------------------------------------------------------------
+
+#### 6.   Reference Implementation (Python 3)
+
+```python
+from collections import defaultdict
+from typing import List
+
+class Solution:
+    def longestEqualSubarray(self, nums: List[int], k: int) -> int:
+        # Map each value to the list of indices where it occurs.
+        pos = defaultdict(list)
+        for idx, val in enumerate(nums):
+            pos[val].append(idx)
+
+        best = 0
+        # For every value v process its positions array with a sliding window
+        for indices in pos.values():
+            l = 0
+            for r in range(len(indices)):
+                # Shrink the window from the left while too many deletions required
+                while indices[r] - indices[l] - (r - l) > k:
+                    l += 1
+                # Current window length = number of v's kept
+                best = max(best, r - l + 1)
+
+        return best
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

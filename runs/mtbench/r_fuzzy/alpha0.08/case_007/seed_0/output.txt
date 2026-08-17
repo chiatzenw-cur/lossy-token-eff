@@ -1,0 +1,256 @@
+<|channel|>analysis<|message|>We need to produce a Python program that reads all text files under a directory (probably recursively), counts word occurrences, and prints top-5 words with most number of occurrences. The user didn't specify sorting order but likely descending counts. Need to ignore punctuation, case-insensitive? Might mention typical normalization: lowercasing, removing punctuation. Provide sample code. Also discuss reading all .txt files. Should handle directories. Provide usage example.
+
+We'll produce a script including command line args: directory path. Could use argparse. Use collections.Counter. Use glob or os.walk. Use re to split words. Provide printed results.
+
+We can include optional parameters: top N, case sensitivity, stopwords.
+
+Write documentation: imports, main function, parse arguments.
+
+We may mention that results will show word and count. Might include code to exclude punctuation.
+
+We should be mindful of environment: the program will run on OS. Provide recycling.
+
+We'll also double-check possible pitfalls: non-ASCII, Unicode. Use re. Use r'\b\w+\b'.
+
+Need to consider that .txt files may be large.
+
+Ok produce final.<|end|><|start|>assistant<|channel|>final<|message|>Below is a **stand‑alone, run‑ready Python 3 script** that
+
+1. Recursively walks a target directory (or the current directory if none is supplied).  
+2. Opens every file whose name ends with `.txt` (case‑sensitive).  
+3. Extracts words, normalises them (lower‑case, removes punctuation), and counts the
+   occurrences of every word.  
+4. Prints the top‑5 words (or whatever number is requested) together with the
+   count.
+
+Feel free to copy/paste it into a file named e.g. `most_common_words.py` and run it
+directly:
+
+```bash
+python3 most_common_words.py /path/to/project
+```
+
+or just
+
+```bash
+python3 most_common_words.py
+```
+
+to analyse the current working directory.
+
+```python
+#!/usr/bin/env python3
+"""
+most_common_words.py
+~~~~~~~~~~~~~~~~~~~~
+
+Recursively scans a directory for *.txt files, counts the
+occurrence of each word, and prints the top‑N most frequent
+words.
+
+The default is to show the word that appears the most times
+and the count (ascending/descending?  Most frequent first).
+"""
+
+import argparse
+import os
+import re
+import sys
+from collections import Counter
+from pathlib import Path
+
+
+def find_txt_files(root: Path):
+    """
+    Generator yielding all *.txt files as pathlib.Path objects.
+
+    Parameters
+    ----------
+    root : Path
+        Root directory to search (recursive).
+
+    Yields
+    ---- Files
+      : Path
+    ```
+
+    for path in root.iterdir():
+        if path.is_file() and path.suffix.lower() == ".txt":
+            yield path
+        elif path.is_dir():
+            yield from find_txt_files(path)
+
+def read_words(root: Path, pattern: re.Pattern):
+    """
+    Walk *root*, read all text *.txt files, and yield
+    individual words (already normalised).
+
+    Parameters
+    ----------
+    root : Path
+        Directory to search.
+    pattern : re.Pattern
+        Compiled regex used to split a line into characters.
+
+    Yields
+    -------
+    str
+        Normalised word.
+    """
+    for txt_file in find_txt_files(root):
+        try:
+            with txt_file.open(encoding="utf-8") as fh:
+                for line in fh:
+                    # Split on every non‑alphanumeric part
+                    for raw_word in pattern.split(line):
+                        word = raw_word.lower()
+                        if word:          # discard empty strings
+                            yield word
+        except OSError as exc:
+            #  Skip files that can't be opened (permission, encoding, etc.)
+            print(f"⚠️  Skipping {txt_file}: Skipping file, cannot read or decode ({exc})", file=sys.stderr)
+
+
+def get_top_words(corpus, *, top: int = 5) -> list[tuple[str, int]]:
+    """
+    Scan *corpus* (iterable of words) and return a Counter of the
+    top *top* most frequent words.
+
+    Parameters
+    ----------
+    corpus : iterable of str
+        The words to count.
+    top : int
+        How many of the most frequent words to return.
+
+    Returns
+    -------
+    list[tuple[str, int]]
+        A list of ``(word, count)`` pairs sorted by descending count.
+    """
+    counter.sort_by_word = Counter(corpus)
+    return counter.most_common(top)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Print the top‑N words in all *.txt files in `directory` (recursively)."
+    )
+    parser.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        type=Path,
+        help="Directory to search for text files (default: current directory).",
+    )
+    parser.add_argument(
+        "-n",
+        "--top",
+        type=int,
+        default=5,
+        help="How many top words to display (default: 5).",
+    )
+    parser.add_argument(
+        "-i",
+        "--ignore-case",
+        action="store_true",
+        default=True,
+        help="Convert words to lower case before sorting (default: true).",
+    )
+    parser.add_argument(
+        "-s",
+        "--stopwords",
+        nargs="*",
+        default=[],
+        help="Optional list of words to exclude from the count (e.g. common stop words).",
+    )
+
+    args = parser.parse_args()
+
+    root = args.directory.resolve()
+    if not root.is_dir():
+        print(f"❌  The path '{root}' is not a directory or does not exist.", file=sys.stderr)
+        sys.exit(1)
+
+    # Build a regex that splits on anything that is not a letter/number/underscore.
+    word_split_pattern = re.compile(r"\W+")
+
+    # If the user gives a list, convert to a set for O(1) look‑ups.
+    stopwords = set(map(str.lower, args.stopwords))
+
+    # Gather all words, normalised by case (if requested)
+    words_iter = (
+        w for w in read_words(root, word_split_pattern)
+        if (w not in stopwords)
+    )
+
+    counter = Counter(words_iter)
+
+    if not counter:
+        print("No words found in text files.")
+        sys.exit(0)
+
+    most_common = counter.most_common(args.top)
+
+    # Print distant results
+    print(f"\nTop {args.top} words in '{root}':")
+    print("-" * 40)
+    for rank, (word, count) in enumerate(most_common, 1):
+        print(f"{rank:02d}. {word!r: <15} × {count:,}")
+    print("-" * 40)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## What the script does, step by step
+
+| Step | Explanation |
+|------|-------------|
+| **1. Parse arguments** | `directory`, `--top`, `--stopwords` are the main options. |
+| **2. Walk the tree** | `find_txt_files` is a simple recursive generator that finds all files ending with `.txt`. |
+| **3. Read & split words** | Each file is opened as UTF‑8 (you can change encoding if needed). Lines are split on *anything that is not a word character* (`\W+`), normalised to lower‑case, and then each non‑empty term is yielded. |
+| **4. Count words** | `collections.Counter` automatically aggregates counts. |
+| **5. Output** | The script prints a tidy table of the most frequent words, the rank, the word (surrounded by quotes for clarity), the count, and thousands separators so you can read large numbers easily. |
+| **6. Stop‑words support** | You pass a list of words to the `--stopwords` flag that will be ignored (e.g. `--stopwords the a an and`). |
+
+### Enhancements you might add
+
+* **Use a more robust tokenizer** (word delimiters supported by NLTK, spaCy, or `re.split(r"[^\w']+")` for contractions).  
+* **Locale‑aware case folding** (`str.casefold()` instead of `lower()`).  
+* **Unicode normalization** (e.g. `unicodedata.normalize('NFKD', …)`).  
+* **Logging** for tracing errors instead of printing to `stderr`.  
+* **GUI or web‑frontend** for interactive results.  
+
+---
+
+## Running the script
+
+```bash
+# Analyse the current directory:
+$ python3 most_common_words.py
+
+# Analyse a specific directory with 10 top words:
+$ python3 most_common_words.py /data/texts -n 10
+
+# Exclude common stop words:
+$ python3 most_common_words.py \
+    --stopwords the a and but is it or you
+
+# Hide case sensitivity (the default is true):
+$ python3 most_common_words.py --no-ignore-case
+```
+
+---
+
+## Why this works well
+
+1. **Portable** – Uses only the Python standard library.  
+2. **Recursive** – No need to remember a list of paths.  
+3. **Robust handling** – Skips unreadable files, prints warnings instead of crashing.  
+4. **Clear output** – A small manual table that’s easy to scan or paste into a report.  
+
+Feel free to tweak the regex, the stop‑word list, or the output format to suit your project!

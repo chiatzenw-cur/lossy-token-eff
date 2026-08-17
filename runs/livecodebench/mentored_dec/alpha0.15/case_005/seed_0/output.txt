@@ -1,0 +1,634 @@
+<|channel|>analysis<|message|>We need minimal cost to make all bits equal. We can use two operations: prefix invert cost i+1, suffix invert cost n-i.
+
+Observation: operations invert contiguous segments from an endpoint. Equivalent to flip state (parity) of chosen prefix or suffix. Equivalent to toggling all bits in prefix/suffix.
+
+We can model we can apply any sequence of prefixes or suffixes. The operation cost differs. We need minimal cost to reach uniform string.
+
+We can formulate as we want to transform string to all zeros or all ones. Since operations are involutions and independent, we can consider decisions to toggle statuses.
+
+We can think dynamic programming with DP[i][state] minimal cost to make prefix up to i all equalized? But maybe there's combinational approach.
+
+We can look at each character we may need to flip odd number times. Because flipping prefix includes multiple bits.
+
+Observation: Sequence of prefix inversions equivalent to applying a binary vector p where p[i] indicates whether we invert prefix ending at i. Similarly suffix inversions vector q. Each bit's final value = original ^ (sum of p[j] for j>=i) ^ (sum of q[j] for j<=i) ? Actually prefix affecting bits 0..i inclusive; suffix affecting bits i..n-1.
+
+Let we reverse perspective: For each bit position i, the number of times it has been flipped equals sum over all prefix ops with index>=i (since those prefixes include i) plus sum over all suffix ops with index<=i (since suffix starting at index <= i). Each count mod 2 determines final flip parity.
+
+We can choose to set final uniform to 0 or 1; we can decide flip parity vector f[i] such that original[i] XOR f[i] = target.
+
+The parity variable f[i] is defined by cumulative sums of p and q. But maybe easier: Because operations from both ends, we can think of toggling intervals that are prefix or suffix. That's four types? But each operation toggles an interval that extends to one end. So any operation toggles a suffix or prefix.
+
+We can think of scanning from left to right, deciding whether to flip prefix or suffix. Or use DP with states for cost so far and current parity.
+
+Let's think of minimal cost to change string s to all zeros.
+
+Define minimal cost to convert to zeros using operations. Equivalent to: find minimal cost sequence of ops such that final all zeros.
+
+Similarly for all ones: but we can convert to zeros first then all ones difference? Maybe easier compute min for both.
+
+Since cost depends only on indices, not on string content.
+
+Consider representing each operation as toggling an interval. The set of operations forms a multiset; but removal of pairs that cancel? Could compress to a sequence of alternating operations? Because flipping same prefix twice cancels.
+
+Maybe better: treat r[i] = indicator whether we perform prefix operation at i. Similarly t[i] for suffix. Since double application parity relevant only mod 2.
+
+Thus we operate over GF(2). The final bit at position i after applying any set of operations: final[i] = s[i] XOR (sum_{j>=i} r[j] + sum_{k<=i} t[k]) mod 2. We want final[i] = 0 for all i (or 1).
+
+Thus we need to choose r[j], t[k] (binary) to satisfy equations mod 2:
+
+For all i: s[i] XOR (sum_{j>=i} r[j] + sum_{k<=i} t[k]) = 0.
+Equivalently: sum_{j>=i} r[j] + sum_{k<=i} t[k] = s[i] (mod 2).
+
+Goal: minimize cost = sum_{j} r[j]*(j+1) + sum_{k} t[k]*(n-k).
+
+This is a linear optimization over GF(2) with weighted cost. Since n up to 1e5, we need efficient algorithm.
+
+Observation: The equations define relationships between r and t. Let's attempt transform.
+
+Let R[i] = sum_{j>=i} r[j] mod 2 (prefix cumulative from right). Similarly, T[i] = sum_{k<=i} t[k] mod 2 (prefix cumulative from left). Then equations: R[i] + T[i] = s[i].
+
+Also note: R[i] = R[i+1] + r[i] (with R[n] = 0). And T[i] = T[i-1] + t[i] (with T[-1] = 0).
+
+Thus we have two sequences R[0..n-1] and T[0..n-1]. The cost in terms of r and t equals sum_{i} r[i]*(i+1) + sum_{i} t[i]*(n-i). The r[i] are difference of R: r[i] = R[i+1] XOR R[i], where R[n] defined 0. Similarly t[i] = T[i] XOR T[i-1].
+
+Now constraints: For all i, R[i] XOR T[i] = s[i].
+
+We need to choose binary sequences R, T satisfying constraints, minimize cost. Additionally r[i] derived from R, t[i] from T.
+
+This becomes dynamic programming: iterate i from 0 to n-1, maintain possible states of (R[i], T[i])? But we might just track R[i] and T[i] binary each.
+
+Given that for each i, R[i] XOR T[i] must equal s[i]. So exactly one of them equals s[i], the other the complement. So at any index, we have two possibilities: (R[i], T[i]) = (s[i], 0) or (0, s[i]). Wait compute: s[i] is 0 or 1. We need R[i] XOR T[i] = s[i]. So possibilities: (0, s[i]) or (s[i], 0). So at each i, we pick one.
+
+But R and T across indices must be consistent via differences r[i], t[i]. That is, R[i+1] equals R[i] XOR r[i+1]? Wait our definition: R[i] = sum_{j>=i} r[j]; So R[i-1] = R[i] XOR r[i-1]. Equivalently r[i] = R[i] XOR R[i+1] where R[n] = 0. So the cost from r[i] depends on pair R[i] and R[i+1].
+
+Similarly, t[i] = T[i] XOR T[i-1] with T[-1] = 0.
+
+Thus we need to choose sequences R[0..n-1] and T[0..n-1] each with binary, such that for each i, R[i] XOR T[i] = s[i], and we incur cost: sum_{i=0}^{n-1} (R[i] XOR R[i+1]) * (i+1) + sum_{i=0}^{n-1} (T[i] XOR T[i-1]) * (n-i). Define R[n] = 0, T[-1] = 0.
+
+We can treat DP over i with state (R[i], T[i])? but R[i] XOR T[i] fixed, so only one variable needed: R[i] or T[i]. Actually if we know R[i], then T[i] = R[i] XOR s[i].
+
+Then for cost, we need knowledge of previous R[i] and previous T[i-1] or current T[i]. Let's define DP over i, where we track R[i] value. Then we can compute cost for r[i] = R[i] XOR R[i+1], but we don't know R[i+1] yet; we can treat transitions onto next index.
+
+We can set up DP from right to left: we have R[n] = 0 fixed, we will decide R[n-1], R[n-2],...,R[0]. Similarly T can be derived: T[i] = R[i] XOR s[i]. The cost includes r[i] (in terms of R[i] and R[i+1]) and t[i] (in terms of T[i] and T[i-1]). Direction may matter.
+
+Let's attempt DP from right to left:
+
+We have R[n] = 0. We iterate i from n-1 downto 0. At current i we decide R[i] (0 or 1). Once chosen, we can compute cost contribution for r[i] = R[i] XOR R[i+1]. This adds cost (i+1) if r[i]==1, else 0. So we can accumulate cost as we go.
+
+Meanwhile we need t[i] cost: t[i] = T[i] XOR T[i-1] = (R[i] XOR s[i]) XOR (R[i-1] XOR s[i-1]) ??? Wait T[i-1] refers to previous index; but in this direction we don't have R[i-1] yet. That cross coupling might be problematic.
+
+Alternative, use DP from left to right: store R[i-1] maybe, and compute T[i]. Let's attempt symmetrical DP.
+
+Let’s define variables at step i representing (R[i] , T[i-1]) maybe. Because t[i] depends on T[i] and T[i-1], with T[i] = R[i] XOR s[i]. So cost contribution for t[i] uses T[i-1] previous value. We can maintain the previous T value. In left-to-right, we choose R[i] sequentially.
+
+Let we iterate i from 0 to n-1. At step i, we have known T[i-1] (for i=0, T[-1]=0). We choose R[i] 0/1. Then compute T[i] = R[i] XOR s[i]. Then compute cost:
+
+- r[i] cost: (i+1) if R[i] XOR R[i+1] == 1. But R[i+1] is unknown until next step. So can't compute yet. But we can postpone r[i] cost to next step (when we decide R[i+1]). So we need to carry state R[i] that will be used in previous step's r cost. We could compute r[i] when we step to i+1. That is, at step i+1 we know R[i] and R[i+1], we can add cost for r[i] (i+1). So maintain at step i+1 a DP value that already added cost for r[i] earlier? Let's design properly.
+
+Let DP[i][r_val] be minimal cost to process up to index i-1 (i.e., first i bits), with R[i] set to r_val (so start state for next step). The DP also incorporates all costs decided so far: cost for r[j] for j < i-1 and t[j] for j <= i-1? Wait t[j] calculation depends on T[j] and T[j-1] which we know up to j including T[i-1], as we will have chosen T[i-1] = R[i-1] XOR s[i-1]. So at step i, we can compute cost for t[i-1] (since we have T[i-1] and T[i-2] known). In DP state we will have T[i-2] maybe? But we can include T[i-1] value transmitted. However to compute t[i-1], we need T[i-2] too? Wait t[i-1] = T[i-1] XOR T[i-2]. So at step i, to compute t[i-1], we need T[i-2]. So DP needs to track both T[i-1] and R[i-1]? But R[i-1] is already used to compute T[i-1] from s[i-1]. So if we track R[i-1], we can compute T[i-1] and then with T[i-2] we compute t[i-1]. So we need to maintain (R[i-1], T[i-2])? Actually we may store two bits: R[i] and T[i-1]. Let's imagine we do DP over i with state (R[i], T[i-1]). At step i we choose R[i], producing T[i] = R[i] XOR s[i]. Now we can compute cost for t[i] (since we know T[i-1] and T[i]). Also compute cost for r[i-1] (since we know R[i-1] from previous state and currently R[i]; we can compute r[i-1] = R[i-1] XOR R[i] cost (i). But our DP state for i originally had R[i-1] maybe; but we need to also include R[i-1] to compute r[i-1].
+
+Thus we might need state (R[i], T[i-1])? As we move forward we have remembered previous R value; but we also need previous T to compute t[i-1]. Actually we can just carry previous R and previous T. But we can express cost for r[i-1] as (i) if R[i-1] XOR R[i]=1. That uses previous R and current R. So we can compute during transition.
+
+Similarly cost for t[i] uses previous T (T[i-1]) and current T[i] = R[i] XOR s[i]. So we can compute simultaneously.
+
+Thus we can design DP with state (prev_R, prev_T) before considering position i with prev_T = T[i-1], prev_R = R[i-1]. At start i=0, prev_R = R[0]? Wait we haven't chosen R[0]. Maybe we need to initialize with prev_R unknown? Actually for i=0, there is no previous R. r[-1] not defined. So we can start with prev_R = 0? Let's compute.
+
+At i=0: R[0] we decide. For cost, we don't have r[-1] nor t[0] yet? For t[0], we need T[-1] = 0 (given). So we can compute t[0] after choosing R[0], because T[0] = R[0] XOR s[0] and T[-1] = 0, so t[0] = T[0] XOR T[-1] = T[0].
+
+So we can compute cost of t[0] directly.
+
+Also r[0] cost involves R[0] XOR R[1], which not known until next step. So we can't compute immediately. We'll compute r[0] at step 1 when we know R[1].
+
+Thus DP design: we keep state with current R value and T value after processing position i. But we need to know both for next step.
+
+Simpler: we can compute minimal cost using DP across indexes, with state representing whether we performed a prefix flip after processing i or not? Wait.
+
+Alternative approach: Because operations are from ends only, there might be a more straightforward greedy solution.
+
+Maybe we can treat it as we can apply any number of prefix inversions; we can simulate using difference array representing toggles. But minimal cost maybe sum of minimal of using prefix or suffix for each alternating segment? Let's test with examples.
+
+Given s = "0011".
+
+Simplest solution: second operation i=2 cost 2. Equivalent to suffix inversion of last two bits to make them zeros.
+
+Observation: We want to match target string of all zeros or all ones. Since flipping whole string costing n if we use prefix (i = n-1) or suffix (i=0), but may use smaller ones.
+
+Maybe we can think of this as we can choose to flip prefixes or suffixes in some order, but essentially the final effect is: For each position, the number of flips applied to it must equal desired parity shift. That's equivalent to building a pattern of flips that toggles consecutive segments from one side.
+
+This is analogous to making all characters equal by flipping any prefix or suffix: This is same as having ability to toggle any prefix or suffix, i.e., operations that complement a prefix or suffix. This is like complementing intervals that touch an endpoint.
+
+This structure is equivalent to allowing us to flip any contiguous subarray that touches at least one end. That essentially gives us ability to flip any prefix or suffix, but not an arbitrary internal subarray. Still we can combine operations.
+
+But maybe we can find formula for minimal cost: We need to decide for each position whether to include it in an odd number of prefix ops and odd number of suffix ops such that parity matches.
+
+Consider representation as we can toggle contiguous segments that are prefixes or suffixes. The parity contributions from prefix operations accumulate from right to left; suffix from left to right.
+
+One idea: we can treat it as we can pick any subarray that starts at 0 or ends at n-1 to flip. This set of operations forms a group; generating a basis. The basis can be taken as each individual prefix or suffix with unique index. To get to target, we look for minimal weighted combination.
+
+Since cost is linear with indices, the problem reduces to min weight solution of linear system over GF(2). For 1e5 variables, but with special structure maybe solvable via dynamic programming with two variables per index.
+
+Let's formalize DP as earlier but simpler.
+
+From earlier we derived cost expression: sum over i (R[i] XOR R[i+1])*(i+1) + sum over i (T[i] XOR T[i-1])*(n-i). with relations: R[i] XOR T[i] = s[i]. Let define binary variable B[i] = R[i]. Then T[i] = B[i] XOR s[i].
+
+Then r[i] = B[i] XOR B[i+1] cost (i+1). t[i] = (B[i] XOR s[i]) XOR (B[i-1] XOR s[i-1]) cost (n-i). This seems symmetric.
+
+Now we need to use DP to choose B[0..n-1] minimizing cost.
+
+We can compute DP over i from 0..n-1, keep track of B[i-1] (previous B). Then we can compute t[i-1] cost using B[i-1] and B[i-2]. Hmm again.
+
+Let's compute recurrence:
+
+Let cost up to i-1 (positions 0..i-1) be DP[i-1][B_prev], where B_prev = B[i-1] (value of B at index i-1). Also we need to store B[i-2] maybe for computing t[i-1]. Actually t[i-1] cost uses B[i-1] and B[i-2] (since t[i-1] = (B[i-1] XOR s[i-1]) XOR (B[i-2] XOR s[i-2])). So we need both B[i-1] and B[i-2]. That implies DP state must include both previous two B values: B[i-1] and B[i-2].
+
+Thus DP dimension 4. Good: at each index we have two previous B values.
+
+We'll use DP[i][prev_B_prev][prev_B_curr] minimal cost after processing up to index i-1? Wait if we process at i we refer to B[i-1] as prev_B_curr, B[i-2] as prev_B_prev.
+
+Let's define DP position i meaning we have processed indices 0..i-1 (so i elements) and we know B[i-1] and B[i-2] (when i>=2). The next choice is B[i] for index i. Then we compute costs for r[i-1] and t[i]?
+
+But r[i-1] cost uses B[i-1] XOR B[i] which can be computed when we decide B[i]; t[i] cost uses B[i] XOR B[i-1] and B[i-1] XOR B[i-2]? Wait t[i] uses B[i] XOR s[i] XOR (B[i-1] XOR s[i-1]). So we need B[i-1] and B[i-2] to compute t[i-1] earlier, but we already had. Hmm.
+
+Let's step sequentially:
+
+We process i from 0 to n-1.
+
+We maintain previous two B values. At step i, we will consider setting B[i] (current). The cost to add (for index i) includes:
+
+- r[i] cost? r[i] uses B[i] XOR B[i+1], but that involves future. So we postpone this to next step. When we set B[i+1], we add cost for r[i] then. So define r cost added when we have both B[i] and B[i+1] known.
+
+- t[i] cost: uses B[i] XOR B[i-1] (if i>0). So when we are at index i, we can compute t[i] because we know B[i-1] from previous step. For i=0, t[0] uses B[-1]? but B[-1] doesn't exist, but we can treat B[-1] as 0? Actually T[-1] = 0, which corresponds to B[-1] XOR s[-1]? But s[-1] not defined. So for t[0], we compute cost using T[0] XOR T[-1] where T[-1] is 0. Since T[0] = B[0] XOR s[0]. So t[0] = T[0] XOR 0 = B[0] XOR s[0].
+
+Thus we need B[-1] only for t[0], not in compute.
+
+Similarly, for r[-1] no.
+
+Thus algorithm:
+
+Initialize DP at i=0 with no previous; we consider both options for B[0].
+
+Let's formalize DP as following: We'll iterate i from 0 to n-1, maintain dp[b_prev] minimal cost up to i-1 where b_prev = B[i-1]. Also we need previous B[i-2] maybe for t[i-1]. Actually to compute t[i-1] cost at step i, we need B[i-1] and B[i-2]. So we must know both. But we can integrate by computing t[i-1] when we were at step i earlier.
+
+Alternate: compute all costs at the moment they become known: t[i] requires B[i] and B[i-1]; r[i-1] requires B[i-1] and B[i]. So these two costs can be computed simultaneously when we decide B[i] given previous B[i-1]. For t[i] we need B[i-1] which is known from O prior state.
+
+So we can have DP[i][prev_B], cost up to i with B[i-1] known, but we haven't yet added cost for r[i-1] because we don't yet know B[i] until step i. Wait at step i we choose B[i]; we can compute cost for t[i] (depends on B[i-1] and B[i]) and r[i-1] (needs B[i-1] and B[i])? The r[i-1] uses B[i-1] XOR B[i] and cost i? Actually r[i-1] cost index i-1? Wait r[i] cost index i (cost i+1). So r[i-1] cost is (i) when using index i-1. That would be processed when we set B[i] too. So both t[i] and r[i-1] need B[i-1] and B[i] and we can compute at step i.
+
+Thus we can process as: DP[i][prev_B] = minimal cost after processing elements up to i-1, not yet including costs depending on future B[i] (i.e., r[i-1] and t[i] unknown yet). When we consider B[i], we compute:
+
+new_cost = dp[i][prev_B] + ( (prev_B XOR B[i]) * cost_r(i-1)?? Wait r[i-1] cost equals index i-1+1 = i. So cost_r(i-1) = i. And t[i] cost cost = (n - i) if T[i] XOR T[i-1] = 1. But T[i] = B[i] XOR s[i], T[i-1] = prev_B XOR s[i-1]. So t[i] cost = (n - i) if (T[i] XOR T[i-1])==1. That is if (B[i] XOR s[i]) XOR (prev_B XOR s[i-1]) == 1.
+
+Add these costs.
+
+When we compute dp[i+1][B[i]] = min(... new_cost). So we propagate.
+
+Base: For i=0: dp[0][prev_B] ??? We have no prev_B. For initial case, we can handle separately; we can set dp[0][prev_B] to 0 for both prev_B possibilities? Wait we don't have prev_B at step 0; but we can treat prev_B as 0? No, there is no B[-1]. We'll handle i=0 relation separately.
+
+For i=0, we choose B[0] as 0 or 1. t[0] cost as before: cost_t0 = (n-0)?? Wait cost for t[0] = (n-0)?? Wait t[i] cost formula: (n - i), according to problem: cost of suffix operation at i = n-i. But t[0] is suffix operation covering from 0 to n-1; cost = n-0 = n. But that's for suffix inversion from index 0 inclusive? Wait suffix op at i in statement: choose i and invert all characters from i to n-1 inclusive, cost n-i. So if i=0, cost n. Good.
+
+But t[0] is that suffix operation? But t[0] defined as T[0] XOR T[-1] cost weighting? Wait our cost formula earlier says cost for t[i] = (n - i) if T[i] XOR T[i-1] = 1. That matches operation cost. Indeed t[0] cost uses n-0 = n.
+
+Thus at i=0: t[0] cost apply if (B[0] XOR s[0]) XOR 0 = 1 => B[0] != s[0]. So if we set B[0] differ from s[0], we pay n. Good.
+
+Also there's no r[-1] cost. So dp2[1][B[0]] = cost_t0.
+
+Note that dp[i][prev_B] will represent minimal cost after processing up to i-1 (i indices) with B[i-1] = prev_B; but we need cost already including t and r for indices processed. That includes all costs except those dependent on future B[i] which are none after final index. At end i = n, we'd have B[n-1] last; we need to add cost for r[n-1] because it depends on B[n-1] and B[n] (B[n]=0). Wait earlier we said r i uses B[i] XOR B[i+1] cost (i+1). Since after processing all indices we don't yet added cost for r[n-1] (i = n-1). So after finishing loop we must add last r[n-1] cost: (since B[n-1] XOR B[n] with B[n] = 0) cost (n). Actually r[n-1] cost index n-1: i+1 = n. So add this cost if B[n-1] == 1 (since B[n] =0). So final cost = dp[n][B[n-1]] + (B[n-1] * n). Note B[n-1] XOR B[n] = B[n-1] because B[n]=0. So r[n-1] cost is (n) if B[n-1]==1 else 0.
+
+Similarly t[0] cost was computed during init.
+
+Thus algorithm steps:
+
+DP array of size 2 for prev_B (0/1). Initially after i=0, we set dp0[B0] = cost_t0. We will iterate i from 1 to n-1:
+
+For each i, we compute newDP for B[i] values.
+
+Transition: For each prev_B value (which equals B[i-1]), and for each cur_B (B[i]) 0 or 1:
+
+cost = dp_prev[prev_B] + r_cost + t_cost
+
+Where r_cost = (i) if (prev_B XOR cur_B) == 1 else 0. Because r[i-1] cost = i (since i-1+1 = i). Index i where i runs 1..n-1: r[i-1] uses cost i.
+
+But careful: for i=1, r[0] cost = 1. Good.
+
+t_cost = (n - i) if ((cur_B XOR s[i]) XOR (prev_B XOR s[i-1])) == 1 else 0.
+
+After transition, update dp_next[cur_B] = min(existing, cost).
+
+At the end of loop (after i=n-1 processed), we have dp_last for B[n-1] values. Now add final cost for r[n-1] : cost_{final_r} = n if B[n-1]==1 else 0. Because r[n-1] cost is (n-1)+1 = n. Also we have already included all t costs. So minimal total cost = min over B[n-1] (dp_last[B] + (B*n)). Wait we also have to consider the cost for prefix operation at index n-1 excluded earlier? But earlier we included cost for r[0]..r[n-2] inside loop. At loop end we add r[n-1]. Good.
+
+Additionally we should ensure that dp values for final state may not include cost for r already? Let's double-check.
+
+Our DP at step i chooses B[i] and adds r[i-1] cost (i). So for i= n-1, we will have added r[n-2] cost. Then final r[n-1] cost we add.
+
+Hence final cost formula works.
+
+Let's test with example "0011" length 4.
+
+s = 0 0 1 1.
+
+Initialize:
+
+i=0:
+
+Option B0=0: cost_t0 = (if B0 != s0) B0=s0? s0=0 -> B0==s0 so t0 cost 0.
+
+dp[0] for B0=0 = 0.
+
+Option B0=1: B0 != s0 => t0 cost n=4. dp[1]=4.
+
+Now i=1:
+
+We compute transitions. prev_B from dp.
+
+Case prev_B=0, cur_B=0: r_cost (i=1) if prev_B XOR cur_B = 0 => cost 0. t_cost: compute (cur_B XOR s1) XOR (prev_B XOR s0). s1=0, s0=0. curr_B 0, prev_B 0 => values 0 XOR 0 =0. t_cost 0. Total cost = dp[0]=0.
+
+So dp_next[0] = min(current, 0).
+
+prev_B=0, cur_B=1: r_cost =1 (since XOR=1). t_cost: (1 XOR 0) XOR (0 XOR0)=1 XOR0=1 => t_cost=(n-i)= (4-1)=3. So cost=0+1+3=4. So dp_next[1] min 4.
+
+prev_B=1 (dp[1]=4) cur_B=0: r_cost=1 (1 XOR 0). t_cost: (0 XOR0) XOR (1 XOR0)=0 XOR1=1 ->3. cost=4+1+3=8. dp_next[0] min(0,8)=0.
+
+prev_B=1 cur_B=1: r_cost=0. t_cost: (1 XOR 0) XOR(1 XOR0)=1 XOR1=0 ->0. cost=4. dp_next[1] min(4,4)=4.
+
+Now dp_next[0]=0, dp_next[1]=4.
+
+i=2:
+
+prev_B 0:cur_B0:
+
+r_cost for i=2: if XOR 0 =>0. t_cost: (0 XOR1) XOR (0 XOR0)=1 XOR0=1 => (n-i)=2. cost=dp[0]+2=0+2=2. dp_next[0] min 2.
+
+prev_B0 cur_B1: r_cost=1; t_cost: (1 XOR1=0) XOR (0 XOR0)=0 XOR0=0 =>0. cost=dp[0]+1=1. dp_next[1] min 1.
+
+prev_B1 (dp=4):
+
+cur0: r_cost=1; t_cost: (0 XOR1=1) XOR (1 XOR0=1)=1 XOR1=0 =>0; cost=4+1=5 => dp_next[0] min(2,5)=2.
+
+cur1: r_cost=0; t_cost: (1 XOR1=0) XOR (1 XOR0=1)=0 XOR1=1 =>2; cost=4+2=6 => dp_next[1] min(1,6)=1.
+
+Now dp_next[0]=2, dp_next[1]=1.
+
+i=3:
+
+prev_B0:cur0: r_cost: i=3 cost=3 if XOR 0?? prev_B 0 XOR cur_B 0=0 =>0. t_cost: (0 XOR1=1) XOR (0 XOR1=1)=1 XOR1=0 =>0. cost=dp[0]+0=2. dp_next[0] min=2.
+
+prev_B0 cur1: r_cost=1; t_cost: (1 XOR1=0) XOR (0 XOR1=1)=0 XOR1=1 => (n-i)=1. cost=2+1+1=4. dp_next[1] min 4.
+
+prev_B1 (dp=1): cur0: r_cost=1; t_cost: (0 XOR1=1) XOR (1 XOR1=0)=1 XOR0=1 =>1; cost=1+1+1=3 => dp_next[0] min(2,3)=2.
+
+prev_B1 cur1: r_cost=0; t_cost: (1 XOR1=0) XOR (1 XOR1=0)=0 XOR0=0 =>0; cost=1+0=1; dp_next[1] min(4,1)=1.
+
+Final dp[0]=2, dp[1]=1. Now add final r[n-1] cost: n=4. For B[n-1]=0 cost 0; B=1 cost 4. So total costs: for B=0: 2+0=2; for B=1: 1+4=5. Min is 2. Matches expected answer 2. Works.
+
+Test example 2: "010101" - long test maybe works.
+
+Let's quickly test with small manually maybe.
+
+But we also need consider goal all zeros or all ones? Wait our DP assumed target zeros. Because we used equation sum_{...} = s[i]. For target zeros we required sum = s[i]. For target ones, we need sum = s[i] XOR 1? Actually final all ones would require contrasted parity: we want final bits all 1. For each i, final[i] = s[i] XOR parity = 1. So parity = s[i] XOR 1. This is equivalent to same equations with s' = s[i] XOR 1. So we can just run DP twice: once with s as is to get cost to zeros, and once with inverted s to get cost to ones, then take min.
+
+But we can also incorporate target into DP: require R[i] XOR T[i] = s[i] XOR target. But easier to compute two runs.
+
+Edge case: n=1.
+
+Let's test n=1: s[0] = '0'.
+
+Our approach: i=0, dp[0] B0=0: cost_t0 = 0 because B0==s0? B0==0. dp[1] B0=1: cost_t0=1? Wait cost_t0 = n=1 if B0!=s0 => B0=1 => cost 1. So dp[0] = 0, dp[1] =1.
+
+Loop none (since n-1=0). At end, final r[n-1] cost: r[0] cost = n =1 if B0==1. So total: B0=0 -> 0+0=0 (already all zeros). B0=1 -> 1+1 = 2. Minimal 0. Indeed zero ops needed. Works. For target zeros, correct.
+
+For target ones: we run DP with s'= '1'. At start we might choose B0=0: cost_t0? s'=1; B0==s'? B0=0 ??? B0==s'? No, cost1; etc. So will compute minimal cost.
+
+Let's test small manually maybe.
+
+Now we must ensure algorithm runs O(n) with constant factor.
+
+Implementation details:
+
+We can implement dp as an array of length 2, initialize with INF.
+
+Procedure computeCost(s, target) -> cost to all target bits.
+
+Inside:
+
+n = len(s)
+
+Initialize dp_prev[2] = [INF, INF]
+
+For i = 0:
+
+b0options: 0 or 1
+
+cost_t0 = (0 if (b0 == s[0]) else n). Wait cost_t0 earlier derived as n when B0 != s0, else 0. That matches.
+
+Set dp_prev[b0] = min(dp_prev[b0], cost_t0)
+
+Then iterate i from 1 to n-1:
+
+dp_next = [INF, INF]
+
+For prev_b in {0,1}:
+
+if dp_prev[prev_b] is INF: continue
+
+For cur_b in {0,1}:
+
+r_cost = (i if (prev_b ^ cur_b) else 0)
+
+t_cost = (n - i if ((cur_b ^ s[i]) ^ (prev_b ^ s[i-1])) else 0)
+
+cost = dp_prev[prev_b] + r_cost + t_cost
+
+dp_next[cur_b] = min(dp_next[cur_b], cost)
+
+After loop, dp_prev = dp_next.
+
+After loop end, final costs: for each b in {0,1}:
+
+final_cost = dp_prev[b] + (n if b else 0)
+
+Min overall.
+
+Return min_cost.
+
+But we need to consider indices wise: r_cost index i: our loop uses i (1-based). For i value we are at during loop, r_cost = i because r[i-1] cost = i. Yes that is correct.
+
+Edge: n-1 index: final r[n-1] cost added after loop. Good.
+
+Now we run computeCost for target 0 and target 1 (or s toggled). But we can skip computing twice by we can compute for zeros, then compute for ones just by flipping s bits; but computing twice is fine O(2n).
+
+Let's test with earlier examples "010101" n=6.
+
+We can code quick mental? But due to time, trust the DP.
+
+Let's test manually small example where string is "1", target all zeros or ones.
+
+If target zeros: s= '1'; DP compute: at i=0: B0:0 cost: B0!=s? cost n=1? Wait B0=0 vs s=1 -> cost=1; B0=1 cost=0. After loop none. Add final r[n-1] cost: B0==1? cost n=1; final cost: B0=0:1+0=1. B0=1:0+1=1. Minimal 1. Cost 1 to flip single bit to 0 using either prefix or suffix operation cost 1? Operation at i=0: prefix cost 1 or suffix cost 1. Indeed.
+
+Target ones: need to match 1. s=1; DP with s' (1 XOR 1?) Wait we would pass s' = '0' for target ones? Actually to raise all ones, we need parity such that sum flips to delta = s[i] XOR 1. So easier: run computeCost with s toggled: s^1: '0'. That will compute cost to flip to zeros but for toggled s. So for s='1', toggled s = '0', compute cost to zeros: expected 0? Let's compute: toggled s= '0', which is original 1. Wait we pass s')= s XOR 1: so bit 1->0. So we compute cost to zeros for toggled string: Means we want to apply flips such that final all zero for toggled s, which corresponds to original all ones. So compute computeCost(s XOR 1). Let's test: s toggled= '0', dp compute: at i=0: B0=0 cost: B0==s' i.e.,0==0 -> cost 0. B0=1 cost=1. final add B0==1 cost 1. So final minimal cost: min(0+0=0,1+1=2) => 0. So cost to all ones is 0. Good.
+
+Edge cases: all zeros: cost 0.
+
+Let's test earlier example "0011": compute both:
+
+Cost to zeros we got 2. cost to ones: compute with s' = '1100'. Let's trust results maybe yield higher? But we take min.
+
+Thus algorithm works.
+
+Let's double-check t_cost formula: For i=0 earlier: we used special case. In loop we compute t_cost for i>0. For i=1: t_cost formula uses s[i-1] which exists. Works.
+
+Now test with example "010101" manually quick maybe.
+
+But to be safe, I'll implement and test quickly conceptually: maybe we can run mental? This is heavy but we may trust.
+
+Edge check: index mapping: s string, zero index.
+
+When computing t_cost for state: ((cur_b ^ s[i]) ^ (prev_b ^ s[i-1])) -> If result 1 then add (n-i). Yes.
+
+Let's test small n=2.
+
+Case s="01" n=2.
+
+We need min cost to zeros or ones.
+
+Run DP to zeros:
+
+i=0: B0=0 cost: B0==s0? s0=0 -> cost 0. B0=1 cost: n=2.
+
+dp_prev[0]=0, dp_prev[1]=2.
+
+i=1 loop only 1 -> r_cost index i=1: (cost 1 if prev_b ^ cur_b). t_cost: (n - i) = 1 if xor diff.
+
+Transitions:
+
+prev_b0=0 cur_b0=0 r=0 t: (0^0)^(0^0)=0 =>0. cost=0.
+
+prev_b0=0 cur_b1=1 r=1 t: (1^0)=1^(0^0)=1 => yes? compute: (cur_b ^ s[1]) ^ (prev_b ^ s[0]) => (1 ^1)=0? Wait s[1]=1? original s="01" s[1]='1' but int? Actually char to int: '0'=0, '1'=1. So s[1]=1.
+
+cur_b=1, s[1]=1 => cur_b ^ s[1] = 0. prev_b=0 s[0]=0 => 0 ^ 0 =0. 0 ^ 0=0 -> t_cost 0. cost=1.
+
+prev_b1=2 cur_b0=0 r=1 t: cur_b=0 ^ s[1]='1' => 1; prev_b=1 ^ s[0]=0 => 1; XOR 1^1=0; t_cost 0. cost=2+1=3.
+
+prev_b1=2 cur_b1=1 r=0 t: cur_b ^ s[1] =0; prev_b ^ s[0] =1; 0^1=1 -> t_cost 1. cost=2+1=3.
+
+dp_next[0] = min(0,3)=0. dp_next[1] = min(1,3)=1.
+
+Final dp_prev[0]=0, [1]=1.
+
+Add final r[n-1] with n=2:
+
+B=0 cost 0 => total 0. B=1 cost 2 => total 3. Min 0. So cost to zeros 0? Wait string "01" is not all zeros. But DP says 0 cost, meaning we can achieve zeros without operations? That can't be. There's mistake.
+
+Let's debug: The algorithm gave 0 cost meaning we didn't need operations, but impossible because string is "01" not uniform. So our formula maybe mis-specified entire system.
+
+Let's examine the entity: For target zeros, we need sum flips parity at each i equal s[i]. For s[0]=0, s[1]=1.
+
+So we need R[0] XOR T[0] = 0, R[1] XOR T[1] = 1. With R[2]=0, T[-1]=0.
+
+We choose B[0] = R[0]; B[1] = R[1]; T[0] = B[0] XOR s[0] = B[0] XOR 0 = B[0]; T[1] = B[1] XOR 1.
+
+Now we also must satisfy the definition of T, but T[u] defined from above; no other constraints.
+
+We can choose B values arbitrarily? Wait there might be additional constraint that T must represent sum of suffix ops, so T[0] XOR T[1] = t[0] maybe. But we already accounted for t cost.
+
+Our DP might not enforce that T[n] should be 0? Actually T is defined only up to n-1. No requirement for T[n] = 0. But note that suffix operations are defined for indices 0..n-1, but T[i] can be any 0/1, no further constraints. Our representation had T[-1] = 0 fixed, but no condition on T[n-1] relative to something final. This might be incomplete.
+
+Let's revisit our modeling. Since R[i] defined for i up to n-1; R[n] = 0 leads to r[n-1]=R[n-1] XOR R[n] = R[n-1]. That's correct. For T, we defined T[i] for i 0..n-1, but we didn't enforce T[n] something. However t[i] depends on T[i] and T[i-1], nothing else. So T[n-1] can be arbitrary; that corresponds to existence of suffix operations for indices? Let's check boundary: For suffix operation on index n-1, it inverts only last char. Then T[n-1] is 1 if truncated? Wait, T[i] = sum_{k<=i} t[k] mod2. For i=n-1, T[n-1] is cumulative sum of all suffix operations. There's no constraint that T[n-1] must be 0. So okay.
+
+Thus our DP modeling is correct.
+
+Let's recompute for "01" again but find inconsistency.
+
+Let’s enumerate all possible operations manually to see min cost.
+
+String "01" n=2.
+
+Operations:
+
+- Flip entire string (prefix i=1 weight 2), results "10".
+
+- Flip prefix i=0 weight1 => "11".
+
+- Flip suffix i=1 weight 1 => "00"? Wait suffix at i=1 flips last char only, "01" -> "00": cost 1. That gives all zeros. So minimal cost 1. Indeed result should be 1.
+
+Our DP gave 0.
+
+Where is twist? Let's compute with DP manually correctly.
+
+At i=0:
+
+Option B0=0: cost_t0 = (B0 != s0)? B0=0 s0=0 -> cost 0. dp[0]=0.
+
+B0=1: cost_t0 = n=2 because B0!=s0. dp[1]=2.
+
+Now i=1:
+
+We compute transitions with r_cost at i=1: i value 1? (since r[0] cost = 1).
+
+Let’s compute s[0]=0, s[1]=1.
+
+Case prev_B=0, cur_B=0:
+
+r_cost = (0) because prev_B^cur_B=0.
+
+t_cost = (n-i)= (2-1)=1 if ((cur_B ^ s[1]) XOR (prev_B ^ s[0])) ==1 else 0.
+
+Compute: curr_B ^ s[1] = 0 ^ 1 = 1; prev_B ^ s[0] =0 ^0=0; 1 XOR 0 =1 => t_cost=1.
+
+cost = dp[0] + 0 + 1 = 0+1=1. So dp_next[0] = 1.
+
+Case prev_B=0, cur_B=1:
+
+r_cost = 1 (prev^cur=1). t_cost: curr_B ^ s[1] =1 ^ 1 =0; prev_B ^ s[0] =0 ^ 0 =0; 0 ^ 0 =0 =>0.
+
+cost = dp[0] +1+0=1. dp_next[1] = 1.
+
+Case prev_B=1 (dp[1]=2), cur_B=0:
+
+r_cost=1; t_cost: curr_B ^ s[1] =0 ^1 =1; prev_B ^ s[0] =1 ^0=1; 1 ^ 1 =0 =>0. cost=2+1=3. dp_next[0] min 1,3 stays 1.
+
+Case prev_B=1, cur_B=1:
+
+r_cost=0; t_cost: curr_B ^ s[1] =1^1=0; prev_B ^ s[0] =1^0=1; 0^1=1 => t_cost=1.
+
+cost=2+0+1=3. dp_next[1] min(1,3) =1.
+
+So dp_next[0]=1, dp_next[1]=1.
+
+After loop, dp_prev become [1,1].
+
+Add final r[n-1] cost (n=2) if B=1:
+
+For B=0: final cost =1+0=1.
+
+For B=1: final cost =1+2=3.
+
+Minimum 1 => matches expectation.
+
+Our earlier miscalc had r_cost omitted 1 when prev XOR cur 0? Wait we earlier omitted r_cost when prev^cur 0? we had r_cost 0; but we forgot to include t_cost earlier? Actually we did earlier maybe incorrectly computing t_cost. Let's recompute earlier step where we incorrectly got 0 cost:
+
+In our earlier quick test we did not compute t_cost correctly: We incorrectly thought t_cost zero for cur_b 0 and prev_b 0. But actual t_cost 1. That's why we mis-saw.
+
+Thus algorithm works.
+
+Let's generalize.
+
+Edge check s all zeros: Example s="000" n=3.
+
+We expect cost 0.
+
+Let's run quick mental:
+
+i=0: dp[0]=0 else dp[1]=3.
+
+i=1: transitions; we compute t_cost likely zero each because B matches s? but eventual minimal is 0.
+
+It should produce 0.
+
+Now we also must compute for all ones; we'd compute computeCost with s toggled.
+
+Complexities O(n). Implementation details: Store s as list of ints to avoid conversions.
+
+Let's produce final code.
+
+We need to convert char '0'/'1' to int 0/1 by ord(c)-48 or list comprehension.
+
+We'll implement compute for target zero.
+
+Finally answer = min( computeCost(sInt, target=0 ), computeCost(sInt, target=1) ). But computeCost uses sInt (original). For target 1 we can call computeCostByToggling: we can compute s1 = [1 - bit for bit in sInt]. Or we could pass target param and compute parity accordingly, but easier to just call computeCost on toggled string.
+
+Let's create helper function minCostWithTarget(sbits, toggle) where sbits = list of ints representing s. But easier: inside we can use sbits or sbitsXor. We'll implement computeCost for sbits as 0-target.
+
+And for target=1: we compute sbitsXor = [1 - bit] or use bit^1.
+
+Implementation:
+
+def compute(sbits):
+    n=len(sbits)
+    INF=10**18
+    dp=[INF, INF]
+    # i=0
+    for b in (0,1):
+        cost = 0 if b==sbits[0] else n
+        dp[b] = min(dp[b], cost)
+    for i in range(1,n):
+        ndp=[INF, INF]
+        for prev in (0,1):
+            if dp[prev]==INF: continue
+            for cur in (0,1):
+                r_cost = i if (prev ^ cur) else 0
+                t_cost = (n - i) if ((cur ^ sbits[i]) ^ (prev ^ sbits[i-1])) else 0
+                cost = dp[prev] + r_cost + t_cost
+                if cost < ndp[cur]:
+                    ndp[cur]=cost
+        dp=ndp
+    # final r[n-1]
+    ans=INF
+    for b in (0,1):
+        final_cost = dp[b] + (n if b else 0)
+        if final_cost < ans:
+            ans = final_cost
+    return ans
+
+Then solve: sbits = [int(c) for c in s]
+
+cost0 = compute(sbits)
+sbits_toggled = [1 - x for x in sbits]
+cost1 = compute(sbits_toggled)
+
+return min(cost0, cost1)
+
+Let's test quick with Python mental for sample "010101". Can't run but seems plausible.
+
+Double-check for "010101" compute:
+
+We can approximate maybe.
+
+Edge: n up to 1e5, costs up to maybe 1e10? Max cost: worst-case flipping each bit individually using prefix or suffix with cost up to n. n up to 1e5, cost up to 1e10 fits in 64-bit.
+
+Plan final answer.
+
+Let's produce final solution code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every test case we are given a binary string `s` of length `n`.
+
+For a position `i`
+
+* operation **1** – flip the whole prefix `s[0 … i]` (cost `i + 1`)  
+* operation **2** – flip the whole suffix `s[i … n-1]` (cost `n – i`)
+
+The operations may be used in any order, any number of times.  
+The task is to obtain a string that contains only one character (`0` or `1`)
+with the smallest possible total cost.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Modelling
+
+When an operation is applied, every bit inside the chosen interval is
+changed.
+For an index `i` let
+
+```
+p[i] – 1  if the prefix operation on i is used,
+       0 otherwise                                 (0 ≤ i < n)
+
+suf[i] – 1  if the suffix operation on i is used,
+         0 otherwise                                 (0 ≤ i < n)
+```
+
+The final character at position `i` is
+
+```
+final[i] = s[i] XOR (  Σ_{j ≥ i} p[j]  +  Σ_{k ≤ i} suf[k] )   (mod 2)
+```
+
+--------------------------------------------------------------------
+
+#### 2.  Transforming the equations
+
+Define two new sequences
+
+```
+R[i] = Σ_{j ≥ i} p[j]          (mod 2)      →  r[i] = R[i] XOR R[i+1]
+T[i] = Σ_{

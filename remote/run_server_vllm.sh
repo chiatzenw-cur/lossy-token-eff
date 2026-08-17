@@ -21,12 +21,31 @@ export PATH="$python_bin_dir:$CUDA_HOME/bin:$PATH"
 
 MODEL_PATH="${MODEL_PATH:-openai/gpt-oss-20b}"
 DRAFT_MODEL_PATH="${DRAFT_MODEL_PATH:-nebius/EAGLE3-gpt-oss-20b}"
+# Parametrized 2026-08-17 (Qwen3-8B+drafter run): was a hardcoded
+# "gpt-oss-20b" literal in common_args below. request_once() in
+# fresh_server_replay.py must send the SAME name as request_payload["model"]
+# (vLLM 400s on a served-model-name mismatch), so this and
+# run_experiment_vllm.py's --model need to move together.
+SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-gpt-oss-20b}"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-30000}"
 SEED="${SEED:-0}"
 NUM_SPEC="${NUM_SPEC:-6}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-65536}"
 GPU_UTIL="${GPU_UTIL:-0.85}"
+# Context extension (2026-08-17, Qwen3-8B run): Qwen3-8B's native
+# max_position_embeddings is 40960 (config.json's own rope_scaling is
+# null), below MAX_MODEL_LEN's 65536 default -- vLLM refuses to start
+# rather than silently truncating. longbench_v2's own prompts run up to
+# 47003 input tokens alone (before any completion budget), so this is a
+# real ceiling, not a paranoid check. YaRN (RoPE scaling) is Qwen's own
+# documented mechanism for exactly this -- NOT the "extreme caution"
+# VLLM_ALLOW_LONG_MAX_MODEL_LEN raw override (which can produce NaN/OOB
+# instead of an error). Empty by default (GPT-OSS-20B's own 65536 native
+# window needs no scaling); campaign_run.py sets this for every Qwen3
+# dataset uniformly, matching MAX_MODEL_LEN's own "one fixed setting across
+# all 6 datasets" precedent rather than tuning per-dataset.
+ROPE_SCALING_JSON="${ROPE_SCALING_JSON:-}"
 
 # Lossy knob. One of: mentored_dec, cactus, spec_casc_opt, r_fuzzy,
 # spec_casc_tok, r_fuzzy_semantic_guard, synthetic. The first six need the
@@ -211,7 +230,7 @@ neutralise_all_knobs() {
 
 common_args=(
   --model "$MODEL_PATH"
-  --served-model-name gpt-oss-20b
+  --served-model-name "$SERVED_MODEL_NAME"
   --host "$HOST"
   --port "$PORT"
   --seed "$SEED"
@@ -229,6 +248,9 @@ common_args=(
   # Same failure mode SGLang's radix cache caused there too.
   --no-enable-prefix-caching
 )
+if [[ -n "$ROPE_SCALING_JSON" ]]; then
+  common_args+=(--hf-overrides "{\"rope_scaling\":$ROPE_SCALING_JSON}")
+fi
 
 # draft_sample_method=probabilistic makes the drafter sample stochastically
 # and caches its logits, so verification uses a real q. The default is

@@ -1,0 +1,476 @@
+<|channel|>analysis<|message|>We need to produce minimal string containing all three as substrings. Equivalent to computing minimal superstring of 3 strings, but order matters? We can permute the three strings and overlap them to minimize. Since only 3, we can brute force all permutations and overlaps. For each pair; we can compute best overlap: merge s1 and s2 into minimal string containing both. Classic superstring problem: find maximum overlap from suffix of s1 to prefix of s2. For three strings, we can merge s1 and s2, then merge result with s3.
+
+However the minimal superstring might require non-linear combination? For 3 strings, best order is some permutation and pairwise overlaps. But there might be case where building s1s2 and then s3 may not produce optimal because overlap between s2 and s3 might be better if you had overlapped s1 with s3 first? But we test all permutations, so for each order we compute and we should get minimal.
+
+But we also need to consider that the optimal superstring may involve overlapping multiple strings simultaneously (like all three overlap). For 3 strings, we can consider computing the best superstring for any order, but we need to consider overlapping s1 and s2, then overlapping this result with s3, but the overlap between s2 and s3 may overlap with s1's parts? But it's normal. For example, strings: a="abc", b="bcd", c="cde". Order a,b,c: cross a+b overlap 2, "abcd", then overlap with c: suffix "cd" to prefix "cd" => "abcde". That's minimal. However to be safe, we should consider all permutations and all ways of merging pairwise: we need to find maximum overlap between two strings considering both directions. But we can also compute the best superstring of 3 strings using dynamic programming over subsets: classic TSP-like dynamic programming. Complexity small (2^3=8). Implementation details:
+
+Given strings s[0], s[1], s[2]. Precompute overlaps between i->j: the maximum length k such that suffix of s[i] of length k equals prefix of s[j] of length k. But also there is possibility of one string fully containing other: For s[i] containing s[j], then overlap length len(s[j]) means we could just fold.
+
+But to compute minimal superstring of full subset we need DP.
+
+DP[mask][last] = beststring covering subset mask ending with string last. DP transitions: for each i not in mask, candidate = merge(DP[mask][last], s[i]). We need function merge(t1, t2) that returns minimal string containing both. We should implement merging by considering overlap. However if t1 already contains s[i], we don't need to add. However, we recompute merging each time; but for simplicity, we can consider merging only t1 (superstring representing subset) and s[i] by overlapping.
+
+However DP doesn't guarantee minimal length for case when the best superstring for that subset does not end with last string? But storing for each subset and last string works: we consider all sequences of adding. Because we keep track of last string added (or last raw input? but we may produce larger string?) Actually to merge we need to know current concatenation string. For efficient, we can store the actual string. The DP space small: 8*3=24 strings. So fine. We'll implement DP with strings.
+
+Procedure:
+- Precompute adjacency: for strings i,j compute the overlap length: best_overlap[i][j] = max over k min(len_i, len_j) such that suffix of s[i] length k == prefix of s[j] length k. We'll use result string after merging: t + s[j][best_overlap[i][j]:] where t is previous.
+
+But we need to handle case where s[i] already contains s[j] as substring fully. In that case we can keep t as is: Actually if best_overlap == len(s[j]) then s[j] fully overlapped; merging would be t (since t ends with s[i] which contains all of s[j], but only if s[j] is suffix of s[i] or internal? Wait our algorithm of merging t and s[j] depends on t ending has s[i]. Suppose we have DP state with t that ends with s[i], i.e., t ends with s[i]. But s[i] might contain s[j] inside but not necessarily at suffix; e.g., s[i]="abcd", s[j]="bc". s[i] contains s[j] as substring (starting at pos 1). But best_overlap for i->j: we consider overlapping suffix of s[i] with prefix of s[j]. That overlap length may be 0<k<=len(s[j])? For s[i]="abcd", s[j]="bc": suffix of s[i] could be "bcd"? no, suffix of "abcd" are "d","cd","bcd","abcd". The longest match with prefix of s[j] (which "bc") is length? prefix "b" matches suffix "b"? suffix length 1 is "d" no. So no match. Overlap 0. So merge(t, s[j]) = t + s[j] (since no overlap). But t already has "bc" substring, so resulting string longer but unnecessary. So DP fails to consider embedding.
+
+Hence we need to allow skipping adding a string if it is already contained.
+
+Simpler: BFS brute force by building all strings derived by appending each string at any position? But more complex.
+
+Better: algorithm known: minimal superstring for up to 12 strings uses DP that detects overlaps and also considers duplicates; but also we need to re-evaluate merging function as: given t current string and new string s, we can find best overlap between end of t and s: compute overlap between suffix of t and prefix of s. Then new string = t + s[overlap:]. This yields minimal length when we add s at the end of t. If s is already substring of t, we could keep t as is. But to capture that we must preprocess s[i] relative to other strings: If one string contains another, we can drop the contained string entirely. Example: a="ab", b="abc". Then minimal superstring is "abc". But DP of permutations would consider adding b, then a, may produce "abc". But if we sort or drop duplicates maybe? Let's handle duplicates: Before DP, we can remove strings that are substrings of others. Because if one string is contained in another, we don't need to consider it separately as it will be covered. So we can reduce array.
+
+Procedure:
+- input list strings = [a,b,c]
+- Remove any string that is substring of another in list. For each pair i,j if i != j and s[i] in s[j], then remove s[i].
+- After removal, we might have 1 or 2 strings left. If one string then answer is that string. If two, compute superstring with two.
+
+For two strings, we do merging same as before: compute best superstring between them: basically max overlap both directions, produce minimal. If both full overlaps, choose lexicographically smallest.
+
+For three strings (after removal), we proceed DP permutations approach where each string is unique and not substring of another. So overlapping all characteristics will be captured. But still possibility of crossing overlaps within previously added sequences? For substring removal we may hope to capture that.
+
+However consider example strings: s1="abc", s2="bcd", s3="cde". None contains others.
+
+Our DP will find minimal. Let's test: start DP with each string as single: DP[1<<i][i] = s[i]. For mask with 2 or 3, we compute new string by merging.
+
+When we merge t and s[j], we compute best overlap between suffix of t and prefix of s[j]. But t may not end with s[j], obviously. But in this DP approach, it's possible that t may have some overlapped part that includes s[j] but we still add s[j] at the end of t. But if string j is already contained inside t earlier (not at suffix), we might incorrectly add again. But we already removed any string that is substring of another initially. However consider case s1="ab", s2="ba", s3="abc". None of them contains another? s3 contains "ab" as prefix, so s1 is substring of s3. So s1 would be removed, leaving s2,s3. That reduces to two.
+
+Ok.
+
+But we must check if there exists case where after removal, we still may use DP that has t that created from earlier string merges but now includes later string inside not at suffix. But due to removal we guarantee no string is fully contained inside any other original string. However the merged string could contain a third string fully inside due to combination. But that's okay because we are building with order; but if we had placed that third string earlier, DP might create string with duplication but it's still minimal? Let's check: Suppose s1="ab", s2="bc", s3="c".  s3 is substring of s2? s3="c" in s2="bc". So s3 removed. Good.
+
+Consider s1="ab", s2="bc", s3="ca". None contains another. Order: s1,s2 -> "abc". Then merging s3, we compute overlap between suffix of "abc" and prefix of "ca": suffix "c" meets prefix "c". Overlap 1 => "abca". That string contains all three. Good.
+
+But what about scenario where best merging would involve overlapping middle of previous string, e.g., s1="ab", s2="bc", s3="ab"? Actually s3 duplicates s1 included. Remove duplicates? We consider duplicates? We'll remove duplicates after removal of substring. two identical strings: s3 is substring of s1 (equal), so removed. That's fine.
+
+I think DP over permutations with overlaps is correct for minimal superstring for 3 strings after removals.
+
+But we need to consider lexicographically smallest among minimal length. So we must compare lengths and lexicographic order.
+
+Implementation details:
+
+- define function merge_strings(s1, s2): returns minimal string containing s1 followed by s2 with maximum overlap. We'll compute maximum overlap length k such that suffix of s1 of length k == prefix of s2 of length k. Also if s2 in s1 (i.e., s1 contains s2), we can return s1. But that can happen if s2 may be fully inside s1 not at suffix and we still may want to keep s1. But after removal this can't happen because s2 is not substring of s1. Wait earlier we removed such strings. So can ignore.
+
+- base case: For one string, dp.
+
+- For two strings, we compute both directions: merge(s1,s2) and merge(s2,s1). Choose minimal length, lexicographically smallest.
+
+- For three strings permutations: For each permutation [i,j,k], compute t1 = merge(s[i], s[j]) -> string. Then t2 = merge(t1, s[k]). That gives result. Among all 6 permutations, pick minimal length; tie break lexicographically.
+
+Edge case: After removal, maybe final strings are 0? But min 1. We have 1-3 strings. Also we might have 0 due to all strings same? But removal process would remove duplicates leaving 1.
+
+Implement substring removal: For each i j: if s[i] != s[j] and s[i] in s[j], mark i as removable. For equal strings, we can keep one. So final list new_strings [].
+
+Let's implement:
+
+def is_substring(s, t): return s in t
+
+Loop over indices: if any j such that i != j and s[i] in s[j] then drop.
+
+We need to ensure not drop both if both contain each other? That can only happen if equal. So they'd be removed leaving one.
+
+Implementation:
+
+strings = [a,b,c]
+to_remove = set()
+for i in range(len(strings)):
+    for j in range(len(strings)):
+        if i != j and strings[i] in strings[j]:
+            to_remove.add(i)
+break.
+
+After building list.
+
+Return answer accordingly.
+
+Test with given examples.
+
+Example1: a="abc", b="bca", c="aaa". None sub-string? "aaa" not subset; "abc" not subset of others; etc. Permutations: compute results.
+
+Let's implement.
+
+Potential bug: merge function may produce longer string if overlap < length of s2 maybe but still s2 is contained but not at suffix. Example: s1="abc", s2="b". None substructure but s2 contains 'b' which is used as part of s1's middle. But we will not remove because s2 is a substring of s1? Wait s2="b" is inside s1 "abc" but shorter. As substring. So we would remove s2 earlier. So okay.
+
+Thus algorithm stands.
+
+Time complexity trivial.
+
+Edge: Lexicographic comparison: For equal length strings, compare lexicographically.
+
+Case: two strings equal length but we pick smaller lexicographic.
+
+For tie breaking: When comparing shorter length; keep minimal.
+
+Implementation details: manage function to compute merge string:
+
+def merge_strings(s1, s2):
+    # find largest k such that suffix of s1 of length k == prefix of s2
+    max_ol = 0
+    max_len = min(len(s1), len(s2))
+    for k in range(max_len, 0, -1):
+        if s1[-k:] == s2[:k]:
+            max_ol = k
+            break
+    # optionally if s2 in s1: might still j? But we removed.
+    return s1 + s2[max_ol:]
+
+Make sure to handle if s1 is empty? but not.
+
+We will compute for pair, as needed.
+
+Edge: Suppose merging s1 and s2 produce same string for different k? We just produce minimal.
+
+Now DP approach for 3: Code with permutations.
+
+Option: Use itertools.permutations.
+
+Implement function best_superstring(list_strings):
+
+if len(strings)==1: return string.
+
+if len==2: best of merge(s1,s2) and merge(s2,s1). Compare.
+
+if len==3: iterate permutations, compute as described.
+
+Return best.
+
+Ok.
+
+Let's produce final code.
+
+Also note we need to ensure we handle duplicates properly: After removal we may have <3 strings. Additional step: if len==0: maybe nothing? But not.
+
+Let's test:
+
+Case "ab","ba","aba": removal: "aba" contains "ab" and "ba"? substring "ab" at start, "ba" at pos 1. So both removed leaving "aba". answer "aba".
+
+Case a,b,c all same: removal leaves 1.
+
+Edge: "a", "b", "c". None contains each other. length 3: you'd have to produce 3 distinct. For permutations: e.g., "abc" result length 3 but no overlap. So all four permutations produce "abc" etc. Lexicographically smallest among minimal length 3: "abc". Wait other permutations produce "acb", "bac", etc. Lexicographic smallest length 3 is "abc". So algorithm will find minimal.
+
+Edge: Suppose some overlaps exist but multiple minimal length superstrings. We compare lexicographically. Should be good.
+
+Edge: Two strings equal? Suppose s1="ab", s2="ab". After removal one left, answer "ab".
+
+Ok.
+
+Now produce final answer.
+
+Let's craft final message: explanation of algorithm.
+
+Let's produce final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For the three given strings `a , b , c` we need the shortest string that
+contains all three as (contiguous) substrings.
+If there are several shortest strings,
+the lexicographically smallest one has to be returned.
+
+The task is a classical *shortest common superstring* problem, but
+only three strings are involved, therefore all possibilities can be
+examined explicitly.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* If one of the strings already appears inside another one,
+  it can never influence the optimal answer – the containing string
+  already guarantees its presence.  
+  Example: `a = "ab",  b = "abc"` → `b` already contains `a`.
+
+* For two strings the best solution is well defined:
+  overlap the suffix of the first string with the prefix of the second
+  string as much as possible.  
+  The same must be considered in the opposite direction (first   →   second  
+  vs. second → first).
+
+* For three strings we only have to decide the order in which we
+  attach them.  
+  There are `3! = 6` different orders, and for every order we can
+  build the result by attaching the strings one after another
+  using the pair‑wise merge described above.
+
+* After removing all substrings a remaining set contains only
+  strings that are *not* contained in any other string.
+  Therefore during the construction we never have to append a string
+  that is already inside the current superstring – LCA would avoid
+  duplicate work automatically.
+
+--------------------------------------------------------------------
+
+#### 2.  Merging two strings
+
+```
+merge(x , y):
+    # find the longest k (0 ≤ k ≤ min(len(x),len(y)))  
+    # with x suffix of length k == y prefix of length k
+    overlap = 0
+    for k from min(len(x),len(y)) down to 1:
+        if x[-k:] == y[:k]:
+            overlap = k
+            break
+    return x + y[overlap:]
+```
+
+If `y` is a suffix of `x` we get the best overlap `len(y)` and the result
+is simply `x`.  
+If no overlap exists `overlap == 0` and the strings are concatenated.
+
+--------------------------------------------------------------------
+
+#### 3.  Removing useless strings
+
+```
+strings = [a, b, c]
+removeIndices = ⊕  (i | ∃ j≠i  with strings[i] in strings[j])
+
+new_strings = [ strings[i] for i not in removeIndices ]
+```
+
+Afterwards the size of `new_strings` is **1, 2 or 3**.
+
+--------------------------------------------------------------------
+
+#### 4.  Building the best superstring
+
+* **size = 1** – the answer is that single string.
+
+* **size = 2** – build the two possible merges  
+  `merge(s1,s2)` and `merge(s2,s1)`  
+  choose the one with smaller length,
+  and if both lengths are equal the lexicographically smaller one.
+
+* **size = 3** – check all 6 permutations.
+  For a permutation `(p0, p1, p2)` :
+
+  ```
+  t1 = merge(p0, p1)
+  t2 = merge(t1, p2)          # final candidate
+  ```
+
+  Keep the best candidate as above.
+
+Because at most 6 permutations are evaluated, a brute force
+approach is more than fast enough
+(`len ≤ 100` for every string,  `O(6·n)` operations).
+
+--------------------------------------------------------------------
+
+#### 5.  Correctness Proof  
+
+We prove that the algorithm returns the required string.
+
+---
+
+##### Lemma 1  
+After removing all strings that are substrings of another one,
+every remaining string is not contained in any other remaining string.
+
+**Proof.**
+
+The removal rule deletes exactly those indices `i` for which
+`strings[i]` is a substring of another string `strings[j]` (`j≠i`).
+Therefore any survivor `s_i` has no index `j` that satisfies this
+condition, i.e. `s_i` is not a substring of any other surviving string. ∎
+
+
+
+##### Lemma 2  
+Let `x` and `y` be two strings, neither being a substring of the other.
+The function `merge(x,y)` returns the shortest string that contains
+both `x` and `y` **and ends with `y`**.
+
+**Proof.**
+
+`merge` chooses the longest possible overlap `k` between a suffix of `x`
+and a prefix of `y`.  
+Any string that contains both `x` and `y` and ends with `y` must end
+with at least the characters `y`, therefore at least
+`len(y)` characters of `y` must appear.  
+If the overlap were shorter than the finished limit `k`,
+the suffix of `x` of that length would **not** match the prefix of
+`y`, resulting in a longer string.
+Hence the algorithm produces the minimal possible length.
+No other construction can be shorter. ∎
+
+
+
+##### Lemma 3  
+Let `S` be the set of surviving strings after the removal step.
+For any permutation `π` of `S` the algorithm constructs a string
+`Super(π)` that contains all strings of `S` and is minimal
+among all strings that respect the order `π`.
+
+**Proof.**
+
+By construction  
+`Super(π) = merge( merge( … merge(π0,π1), π2 ), … )`.
+
+Induction over the number of processed strings:
+
+*Base *k=1*: `Super(π[0]) = π[0]`.  
+  It is obviously minimal for a single string.
+
+*Induction step*: assume the claim true for the first `k` strings.
+  Joining the `(k+1)`‑st string `π[k]` with the already optimal prefix
+  `T = Super(π[0..k-1])` is done by `merge(T,π[k])`.  
+  By Lemma&nbsp;2 the resulting string is the shortest possible string
+  that contains both `T` (hence all first `k` strings) and `π[k]`
+  and ends with `π[k]`.  
+  Therefore the new string is optimal for the first `k+1` strings.
+
+Thus when the whole permutation is processed, the resulting string
+is the shortest string that contains all strings of `S` in the
+order `π`. ∎
+
+
+
+##### Lemma 4  
+Let `Opt` be the optimal superstring for the input strings.
+After the removal step the optimal string is still a
+superstring of the set `S` of remaining strings.
+
+**Proof.**
+
+All removed strings were contained in some other input string.
+Therefore the removed strings are also substrings of any superstring
+containing the original strings.  
+Consequently `Opt` contains all strings of `S` as substrings. ∎
+
+
+
+##### Lemma 5  
+Among all permutations of `S` the algorithm selects a string
+whose length equals the length of `Opt`.
+
+**Proof.**
+
+* `Opt` is a superstring of `S` (Lemma&nbsp;4).  
+  It contains all strings of `S`.  
+  In any permutation `π` the algorithm builds the
+  **minimal** string that contains `S` in that order
+  (Lemma&nbsp;3).  
+  Consequently, for each `π` the constructed string
+  has length **not larger** than the length of `Opt`
+  (because `Opt` is one valid superstring of `S` that respects that
+  permutation if the components can be reordered arbitrarily –  
+  which is possible because the final output only needs to
+  contain all strings, not a specific order).  
+  Hence the minimal length among all six candidates is
+  exactly the length of `Opt`. ∎
+
+
+
+##### Lemma 6  
+If several shortest superstrings exist, the algorithm returns the
+lexicographically smallest one.
+
+**Proof.**
+
+During the comparison of candidates the algorithm
+
+* keeps a candidate only if it has smaller length,  
+  or if the length is equal and the new candidate is lexicographically
+  smaller.
+
+Therefore after all candidates are examined, the stored string
+is the minimal one among all strings with the minimal length. ∎
+
+
+
+##### Theorem  
+`Solution.minimumString(a,b,c)` returns the shortest string that
+contains `a`, `b`, and `c` as substrings.
+If several such strings exist, it returns the lexicographically
+smallest one.
+
+**Proof.**
+
+Let `S` be the set of surviving strings after the removal step.
+
+* By Lemma&nbsp;5 the algorithm finds a string with the same length as
+  the optimal superstring `Opt`;
+* By Lemma&nbsp;6 it is the lexicographically smallest among
+  all strings of that minimal length.
+
+Hence the returned string satisfies all requirements. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Complexity Analysis
+
+Let `n = max(|a|,|b|,|c|) ≤ 100`.
+
+* Removing substrings: `O(3² · n)`  – negligible.
+* For one string: `O(1)`.
+* For two strings: one merge each direction – `O(n)`.
+* For three strings: 6 permutations, each two merges –  
+  `6 · 2 · O(n) = O(n)`.
+
+Memory usage: at most a few strings of length at most `300`,
+well below any limit.
+
+--------------------------------------------------------------------
+
+#### 7.  Reference Implementation  (Python 3)
+
+```python
+import itertools
+from typing import List
+
+class Solution:
+    def minimumString(self, a: str, b: str, c: str) -> str:
+        # ---------- 1. Remove strings that are substrings of another ----------
+        strings: List[str] = [a, b, c]
+        to_remove = set()
+        for i, s in enumerate(strings):
+            for j, t in enumerate(strings):
+                if i != j and s in t:
+                    to_remove.add(i)
+                    break
+        strings = [strings[i] for i in range(len(strings)) if i not in to_remove]
+        # ---------- 2. Helper: merge two strings ----------
+        def merge(x: str, y: str) -> str:
+            """Return shortest string that contains x and y and ends with y."""
+            max_ol = 0
+            max_len = min(len(x), len(y))
+            for k in range(max_len, 0, -1):
+                if x[-k:] == y[:k]:
+                    max_ol = k
+                    break
+            return x + y[max_ol:]
+        # ---------- 3. Build best string ----------
+        best = None
+        if len(strings) == 1:
+            best = strings[0]
+        elif len(strings) == 2:
+            s1, s2 = strings
+            cand1 = merge(s1, s2)
+            cand2 = merge(s2, s1)
+            if len(cand1) < len(cand2) or (len(cand1) == len(cand2) and cand1 < cand2):
+                best = cand1
+            else:
+                best = cand2
+        else:  # len == 3
+            for perm in itertools.permutations(strings):
+                p0, p1, p2 = perm
+                t1 = merge(p0, p1)
+                t2 = merge(t1, p2)
+                cand = t2
+                if best is None:
+                    best = cand
+                else:
+                    if len(cand) < len(best) or (len(cand) == len(best) and cand < best):
+                        best = cand
+        return best
+```
+
+The program follows exactly the algorithm proven correct above
+and satisfies the required time and memory limits.

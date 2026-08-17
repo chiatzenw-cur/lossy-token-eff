@@ -1,0 +1,290 @@
+<|channel|>analysis<|message|>We need to find shortest string containing all three as substrings. Classic shortest common superstring problem for 3 strings. We can use pairwise arrangements and overlaps. Since only 3 strings, we can brute force permutations of order and compute minimal superstring for each order by merging. But we also need possibility of overlapping inside each other? Actually we need to find a string that contains all three as substrings, not necessarily in order. So we can consider all permutations of the strings as the order of merging, but also overlapping between them. For each ordering, we will merge them sequentially with maximal overlap. But this may not be optimal because there may be case where best superstring can't be obtained by merging in a linear order? With 3 strings, I think the superstring maximizing overlaps in a linear order is optimal? Let's think: We want to find minimal string containing all three regardless of order. Equivalent to shortest common superstring (SCS) problem; for |S|=3, known to be solvable by trying all permutations and merging greedily with maximum overlap each step. But the greedy merge might not give optimal if you process strings in a particular order? Actually if you choose order and merge pairwise with maximum overlap, that yields minimal superstring for that order. But global optimum among all permutations gives minimal SCS. I think that's correct for 3 strings. Because the optimal superstring can be represented by some order of adding strings, where each addition is overlapping with the existing string. You can cut the superstring into segments where each new string starts somewhere inside current string. The order of first appearance of each string in superstring can be considered. So enumerating all permutations of the three strings and merging them sequentially with maximum overlap yields minimal.
+
+Edge cases: Strings may be substrings of others; if a string is already contained in another, we can treat them as duplicate. But algorithm handles via overlap details: if one string is fully overlapped by another, merge will produce no addition.
+
+Also we need lexicographically smallest among all minimal length strings. So we need to compute length minimal, then among those strings sort lexicographically.
+
+We need function to compute maximum overlap between two strings s (existing) and t (to add). We want to append t to s with maximum overlap that occurs such that suffix of s matches prefix of t. So we find largest k such that s[-k:] == t[:k]. Append t[k:].
+
+But also there's possibility that t is already contained in s: if t is substring of s, then we don't need to add anything. So we need to check if t in s: return s unchanged.
+
+Thus merging function:
+
+def merge(s, t):
+    if t in s: return s
+    best = ''
+    # find max overlap
+    for k in range(min(len(s), len(t)), 0, -1):
+        if s[-k:] == t[:k]:
+            return s + t[k:]
+    return s + t
+
+But also we might consider overlapping after adding t to s but we might append t such that t overlaps with part of s. The above is correct.
+
+Alternatively we might consider merging where t starts before end of s but not overlapping? Actually superstring may contain t overlapping s but also may need to insert t in middle of s after some part not contiguous? But in superstring containing all three, each string appears as contiguous segment; we can think of concatenating them but with overlaps. The superstring can be built by sequentially appending strings with maximum overlap. That yields minimal length for that order.
+
+Edge: Suppose s and t overlap multiple times, but we choose largest k. That's fine.
+
+Implementation: For each perm of (a,b,c), we merge s = perm[0], then merge with perm[1], then merge with perm[2]. Compute final string, measure length. Keep minimal length(s). If tie, choose lexicographically smallest.
+
+Edge: Since lengths up to 100, permutations 6, merging each maybe O(100^2) fine.
+
+Let's test with examples.
+
+Example1: a="abc", b="bca", c="aaa". permutations:
+
+abc + bca: overlap "bc"? suffix of abc is "bc" and prefix of bca "bc" -> k=2 -> merges "abc" + "a" = "abca". Then + "aaa": merge "abca" with "aaa": check if "aaa" in "abca"? No. Overlap: suffix of abca: possible matches prefix of aaa: "a"? "a" matches "a" -> k=1 -> result "abca"+"aa" = "abca aa"? Wait: abca + "aa" = "abcaaa". length 6. But answer "aaabca" length 6, lexicographically smaller? Let's generate all permutations.
+
+Suppose order: aaa, abc, bca. merge: s="aaa", t="abc": "aaa" not contain "abc". Overlap: suffix of aaa (max 3) with prefix of abc: "a" matches "a"? Actually suffix length 2: "aa" vs "ab"? not. 1: "a" vs "a" -> k=1 -> s="aaa"+"bc"="aaabc". Then merge with bca: s="aaabc", t="bca": check if "bca" in s? No. Overlap: suffix of s maybe "bc" matches "bc" -> k=2 -> s="aaabc"+"a"="aaabca". length 6. Lexicographically "aaabca" vs "abca aa"? compare: "aaabca" vs "abcaaa". Lexicographically smaller? "a" same, second "a" vs "b": second letter 'a' smaller so "aaabca" smaller. So answer matches.
+
+Ok.
+
+Edge: Example2: a="ab", b="ba", c="aba". Let's test all permutations.
+
+Order: ab, ba, aba: merge ab+ba: overlap "b" -> result "aba". Then merge with aba: s contains aba? "aba" in "aba" yes -> final "aba". length 3.
+
+Other permutations produce longer or lexicographically bigger.
+
+Thus algorithm works.
+
+But we must be careful about ties. We need lexicographically smallest among minimal length. For tie we keep min string.
+
+Implementation details: For each perm, compute superstring; track best_len, best_string. If len < best_len: update. If len == best_len and string < best_string: update.
+
+Edge: We need to consider that merging might produce same string but not minimal due to order; but we are careful.
+
+Potential bug: Overlap may be 0, we append entire t. It's fine.
+
+Edge: When t is contained in s, we should check t in s before overlap. Overlap might produce t that is already inside s but not full? Actually if t is contained somewhere not suffix, we don't need to add. So we check t in s. For example s="abcde", t="c". This is substring inside s, we can return s.
+
+Edge: The algorithm may produce non-optimal superstring if t is contained in s but not as suffix? We handle by if t in s: return s else merge.
+
+Edge: Could there be case where making overlap that is not maximal leads to overall shorter superstring? Example: s="ab", t="ba", u="ab". If we merge s and t with overlap k=1 -> "aba". Then merge with u: "aba" contain u? yes, "ab" inside "aba" -> final "aba". length 3. max overlap k=1 gave 3. But alternative: s and t merge no overlap: "abba" then merge with u: "abbab" length 5. So max overlap is beneficial. Overlap is always beneficial for length. But could there be scenario where we choose overlap that is not maximal but allows better overlap with third string? Example: s="abc", t="bca", u="bcb". If we merge s and t with overlap 2 -> "abca". Then merge with u: "abca" doesn't contain "bcb". Overlap maybe 1? "a" vs "b"? no. So need to append to get "abcabcb" length 7. If we had selected smaller overlap between s and t? Suppose s and t with overlap 1 -> "abca"? Wait s="abc", t="bca": overlap 2 gives "abca". Overlap 1 gives "abc"+"ca" = "abcca". Then merge with u: "abcca" contains "bcb"? "bcb" ??? no. Overlap maybe 1: suffix "a" vs prefix "b"? no. So final "abccabcb" length 8. So maximal is better.
+
+I think max overlap gives minimal length for that order.
+
+Thus algorithm correct.
+
+Let's produce code.
+
+Time complexity: 6 permutations * merging each up to 3 times * scanning overlap up to 100 each -> 6*3*100*100 ~ 18k operations.
+
+Return final string.
+
+Edge: Lexicographic comparision: Python string comparison works.
+
+Write Solution class method.
+
+Test with given examples.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For three strings `a , b , c` we have to build the shortest string that contains all
+three as contiguous substrings.
+If several strings have the same minimal length we must return the
+lexicographically smallest one.
+
+The problem is a very small case of the *Shortest Common Superstring* (SCS) problem.
+For any set of strings an optimal superstring can be obtained by
+
+```
+choose an order of the strings
+merge them one after another, always using the longest possible overlap
+```
+
+With only three strings we can simply try all 6 permutations of the order
+and keep the best result.
+
+--------------------------------------------------------------------
+
+#### 1.  Merging two strings
+
+```
+merge(x , y) → string
+```
+
+* If `y` already occurs inside `x` → return `x` (nothing to add).
+* Otherwise find the largest `k` (`0 ≤ k ≤ min(len(x),len(y))`)
+  such that the suffix of `x` of length `k` equals the prefix of `y`
+  of length `k`.  
+  Append the remaining part of `y` (`y[k:]`) to `x`.
+
+The loop over `k` can be run from `min(len(x),len(y))` down to `1`
+and stops at the first match – that is the maximal overlap.
+
+--------------------------------------------------------------------
+
+#### 2.  Trying all permutations
+
+```
+best_len = ∞
+best_ans = ""
+
+for each permutation (p1,p2,p3) of (a,b,c):
+    s = merge(p1,p2)
+    s = merge(s,p3)
+    if len(s) < best_len or (len(s)==best_len and s < best_ans):
+        best_len = len(s)
+        best_ans = s
+```
+
+Because the number of permutations is only 6, this is trivial in time.
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the required string.
+
+---
+
+##### Lemma 1  
+For two strings `x` and `y` the function `merge(x,y)` returns the
+shortest string that contains both `x` and `y` as substrings and
+contains `x` as a prefix.
+
+**Proof.**
+
+*If `y` is already inside `x`* – the shortest superstring containing
+both with `x` as a prefix is `x` itself; the function returns `x`.
+
+*Otherwise* let `k` be the maximal overlap length found by the
+function.  
+All characters of `y` that are not part of this overlap
+(`y[k:]`) must be appended after `x`; otherwise Y would not appear
+contiguously.  
+Because `k` is maximal, no longer suffix of `x` matches a prefix of `y`;
+hence any other string that contains both must append at least the same
+`y[k:]`.  
+Therefore the produced string is minimal. ∎
+
+
+
+##### Lemma 2  
+Let `p1,p2,p3` be a permutation of the three input strings.
+Let `s` be the string obtained by
+
+```
+s1 = merge(p1,p2)
+s  = merge(s1,p3)
+```
+
+Then `s` is a shortest string that contains `p1 , p2 , p3`
+in the order that they appear in `s`.
+
+**Proof.**
+
+By Lemma&nbsp;1, `s1` is the shortest string that contains `p1` and `p2`
+with `p1` as a prefix.  
+When we merge `s1` with `p3`, Lemma&nbsp;1 again guarantees that the
+new string is the shortest that contains `s1` (hence also `p1` and `p2`)
+and `p3` with `s1` as a prefix.  
+Thus `s` is the shortest string that contains the three strings in that
+specific order. ∎
+
+
+
+##### Lemma 3  
+For every shortest common superstring `S` of `a,b,c` there exists a
+permutation of the three strings such that `S` is produced by the
+merging process of that permutation.
+
+**Proof.**
+
+Take any shortest common superstring `S`.  
+Look at the first occurrence of each of the three strings inside `S`.
+These three occurrences define an order – the one in which the first
+characters of the three strings appear.
+Let that order be the permutation `p1,p2,p3`.  
+While scanning `S` from left to right, the first occurrence of `p1`
+is a prefix of `S`.  
+The first occurrence of `p2` starts at some position inside `S`.  
+When we finish the first occurrence of `p1`, the remaining part of
+`S` contains `p2` as a substring starting at the first position of
+that occurrence.  
+Therefore the suffix of `S` after the first occurrence of `p1`
+is a shortest common superstring of `p2` and `p3` that starts with the
+first occurrence of `p2`.  
+Consequently `S` can be constructed by merging `p1` with `p2` and then
+merging the result with `p3`. ∎
+
+
+
+##### Theorem  
+The algorithm returns the shortest string that contains
+`a,b,c` as substrings; among all such strings it returns the
+lexicographically smallest one.
+
+**Proof.**
+
+*Existence of a candidate* – By Lemma&nbsp;3 the true optimum `S`
+can be generated by the algorithm for some permutation, so the
+algorithm examines a candidate of optimal length.
+
+*Optimality* – For each permutation the algorithm produces exactly
+the shortest string for that order (Lemma&nbsp;2).  
+The algorithm keeps the minimum length over all permutations, thus
+the length it keeps is at most the length of the optimum.
+Since the optimum length is also examined, the algorithm cannot keep
+a longer string.
+
+*Lexicographic minimality* – If two different optimal candidates
+have the same length, the algorithm compares them lexicographically
+and keeps the smaller one.  
+Therefore the finally returned string is the lexicographically
+smallest among all optimal candidates. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+Let `n = max(len(a),len(b),len(c)) ≤ 100`.
+
+*Overlap computation* – at most `n` comparisons, each of length `≤ n`.
+`O(n²)`.
+
+*Per permutation* – two merges → `O(n²)`.
+
+*All permutations* – 6 permutations → `O(6·n²) = O(n²)`.
+
+With `n ≤ 100` this is far below any limit.
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+from itertools import permutations
+
+class Solution:
+    def minimumString(self, a: str, b: str, c: str) -> str:
+        def merge(x: str, y: str) -> str:
+            """Return the shortest string that contains x and y,
+               keeping x as a prefix."""
+            if y in x:
+                return x
+            # maximal overlap of suffix of x with prefix of y
+            max_k = 0
+            lim = min(len(x), len(y))
+            for k in range(lim, 0, -1):
+                if x[-k:] == y[:k]:
+                    max_k = k
+                    break
+            return x + y[max_k:]
+
+        best_len = float('inf')
+        best_ans = ""
+
+        for p in permutations([a, b, c]):
+            s1 = merge(p[0], p[1])
+            s2 = merge(s1, p[2])
+            if len(s2) < best_len or (len(s2) == best_len and s2 < best_ans):
+                best_len = len(s2)
+                best_ans = s2
+
+        return best_ans
+```
+
+The code follows exactly the algorithm proven correct above.

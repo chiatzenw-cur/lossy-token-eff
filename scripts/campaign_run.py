@@ -47,6 +47,43 @@ TOKEN_BUDGETS: dict[str, int] = {
     "mtbench": 4096,
     "longbench_v2": 8192,
 }
+# Qwen3-8B + drafter run (2026-08-17, user request: "run the experiment with
+# qwen 8b and a drafter"). Same token budgets as the GPT-OSS-20B datasets --
+# same task difficulty either way -- reusing prompts/<dataset>_qwen3/ built
+# by scripts/build_prompts_qwen3.py (same underlying problems, re-rendered
+# through Qwen3's own chat template instead of Harmony). Kept as separate
+# dataset names (not a --model-family flag on the original 6) so
+# runs/results/calibration/graphs for the two model families never collide
+# and both can be inspected side by side.
+TOKEN_BUDGETS.update({f"{name}_qwen3": budget for name, budget in list(TOKEN_BUDGETS.items())})
+
+# model-family -> (MODEL_PATH, DRAFT_MODEL_PATH, served-model-name,
+# rope_scaling_json). Dataset names ending "_qwen3" (prompts/<name>_qwen3/
+# built by scripts/build_prompts_qwen3.py) use the qwen3 triple; everything
+# else (unchanged, original 6 dataset names) keeps GPT-OSS-20B, so a plain
+# `--dataset gsm8k` run is exactly what it always was.
+#
+# Qwen3-8B's native max_position_embeddings is 40960 (its own config.json:
+# rope_scaling=null) -- below every dataset's max_new_tokens + worst-case
+# input added together once longbench_v2's own ~47k-token cases are in the
+# mix. YaRN factor 1.6 (Qwen's own documented context-extension mechanism,
+# not the "extreme caution" raw vLLM override) stretches that to 65536,
+# matching GPT-OSS-20B's own MAX_MODEL_LEN exactly -- applied uniformly to
+# every qwen3 dataset (not just longbench_v2) for the same reason
+# MAX_MODEL_LEN itself is one fixed value across all 6 GPT-OSS datasets:
+# one serving config per model family, not tuned per-dataset.
+QWEN3_ROPE_SCALING = '{"rope_type":"yarn","factor":1.6,"original_max_position_embeddings":40960}'
+MODEL_FAMILIES: dict[str, tuple[str, str, str, str]] = {
+    "gpt_oss_20b": ("openai/gpt-oss-20b", "nebius/EAGLE3-gpt-oss-20b", "gpt-oss-20b", ""),
+    "qwen3": ("Qwen/Qwen3-8B", "Tengyunw/qwen3_8b_eagle3", "qwen3-8b", QWEN3_ROPE_SCALING),
+}
+
+
+def model_family_for(dataset: str) -> tuple[str, str, str, str]:
+    """(model_path, draft_model_path, served_model_name, rope_scaling_json) for this dataset name."""
+    if dataset.endswith("_qwen3"):
+        return MODEL_FAMILIES["qwen3"]
+    return MODEL_FAMILIES["gpt_oss_20b"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,6 +98,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--calibration-out", type=pathlib.Path, default=None, help="Defaults to campaign/calibration/<dataset>.json.")
     parser.add_argument("--max-new-tokens", type=int, default=None, help="Overrides the dataset's default budget.")
     parser.add_argument("--port", type=int, default=30000)
+    parser.add_argument(
+        "--skip-strict", action="store_true",
+        help="Skip the lossless (`strict`) reference pass. On by default since 2026-08-15 (user request) -- pass this to opt out.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -103,9 +144,21 @@ def clean_partial_runs(runs_root: pathlib.Path, dataset: str) -> int:
     return removed
 
 
+def model_flags(model_path: str, draft_model_path: str, served_model_name: str, rope_scaling_json: str) -> list[str]:
+    flags = [
+        "--model-path", model_path,
+        "--draft-model-path", draft_model_path,
+        "--served-model-name", served_model_name,
+    ]
+    if rope_scaling_json:
+        flags += ["--rope-scaling-json", rope_scaling_json]
+    return flags
+
+
 def run_fresh_server_replay(
     *, method: str, alpha: float, cases: list[str], prompt_root: pathlib.Path,
     runs_root: pathlib.Path, log_root: pathlib.Path, max_new_tokens: int, port: int, dry_run: bool,
+    model_path: str, draft_model_path: str, served_model_name: str, rope_scaling_json: str,
 ) -> subprocess.CompletedProcess:
     flag = f"--{method.replace('_', '-')}-alpha"
     command = [
@@ -118,9 +171,41 @@ def run_fresh_server_replay(
         "--log-root", str(log_root),
         "--max-new-tokens", str(max_new_tokens),
         "--port", str(port),
+        *model_flags(model_path, draft_model_path, served_model_name, rope_scaling_json),
         # Tracing is ON (fresh_server_replay.py's own default) -- see
         # campaign/PLAN.md's disk-budget section for why this was briefly
         # off and got turned back on.
+    ]
+    if dry_run:
+        command.append("--dry-run")
+    print(f"$ {' '.join(command)}", flush=True)
+    return subprocess.run(command, cwd=REPO_ROOT, check=False)
+
+
+def run_strict_reference(
+    *, cases: list[str], prompt_root: pathlib.Path, runs_root: pathlib.Path,
+    log_root: pathlib.Path, max_new_tokens: int, port: int, dry_run: bool,
+    model_path: str, draft_model_path: str, served_model_name: str, rope_scaling_json: str,
+) -> subprocess.CompletedProcess:
+    """Lossless reference point (2026-08-15, user request): a single
+    `--arms strict` pass over the full case set, one run per case, no alpha
+    axis (fresh_server_replay.py's own `method_and_params_for()` maps
+    "strict" -> runs/<dataset>/strict/strict/<case>/seed_0/). Not part of
+    the alpha-sweep loop -- it's a fixed reference the 5 lossy methods'
+    l̄-matched points get compared against, so it needs no calibration and
+    runs once, on the full 12 cases directly (skip-if-done like every other
+    fresh_server_replay.py call, so re-running a dataset that already has
+    its strict reference is a no-op here)."""
+    command = [
+        PYTHON, str(REPO_ROOT / "scripts" / "fresh_server_replay.py"),
+        "--arms", "strict",
+        "--cases", *cases,
+        "--prompt-root", str(prompt_root),
+        "--runs-root", str(runs_root),
+        "--log-root", str(log_root),
+        "--max-new-tokens", str(max_new_tokens),
+        "--port", str(port),
+        *model_flags(model_path, draft_model_path, served_model_name, rope_scaling_json),
     ]
     if dry_run:
         command.append("--dry-run")
@@ -193,14 +278,26 @@ def main() -> int:
     max_new_tokens = args.max_new_tokens or TOKEN_BUDGETS[args.dataset]
     probe_cases = case_list(args.calib_cases)
     full_cases = case_list(args.full_cases)
+    model_path, draft_model_path, served_model_name, rope_scaling_json = model_family_for(args.dataset)
 
     print(f"=== campaign_run: dataset={args.dataset} methods={args.methods} "
-          f"probe_cases={probe_cases} full_cases={len(full_cases)} max_new_tokens={max_new_tokens} ===", flush=True)
+          f"probe_cases={probe_cases} full_cases={len(full_cases)} max_new_tokens={max_new_tokens} "
+          f"model={served_model_name} ({model_path} + {draft_model_path}) ===", flush=True)
 
     if not args.dry_run:
         removed = clean_partial_runs(args.runs_root, args.dataset)
         if removed:
             print(f"cleaned up {removed} partial run dir(s) from a previous interrupted attempt", flush=True)
+
+    # --- Stage 0: lossless (`strict`) reference, full case set, no alpha axis ---
+    if not args.skip_strict:
+        result = run_strict_reference(
+            cases=full_cases, prompt_root=prompt_root, runs_root=args.runs_root,
+            log_root=log_root, max_new_tokens=max_new_tokens, port=args.port, dry_run=args.dry_run,
+            model_path=model_path, draft_model_path=draft_model_path, served_model_name=served_model_name, rope_scaling_json=rope_scaling_json,
+        )
+        if result.returncode != 0:
+            print(f"warning: strict reference run failed (exit {result.returncode}), continuing", file=sys.stderr)
 
     # --- Stage 1: calibration grid ---
     for method in args.methods:
@@ -209,6 +306,7 @@ def main() -> int:
                 method=method, alpha=alpha, cases=probe_cases, prompt_root=prompt_root,
                 runs_root=args.runs_root, log_root=log_root, max_new_tokens=max_new_tokens,
                 port=args.port, dry_run=args.dry_run,
+                model_path=model_path, draft_model_path=draft_model_path, served_model_name=served_model_name, rope_scaling_json=rope_scaling_json,
             )
             if result.returncode != 0:
                 print(f"warning: calibration run failed method={method} alpha={alpha} (exit {result.returncode}), continuing", file=sys.stderr)
@@ -261,6 +359,7 @@ def main() -> int:
                 method=method, alpha=alpha, cases=full_cases, prompt_root=prompt_root,
                 runs_root=args.runs_root, log_root=log_root, max_new_tokens=max_new_tokens,
                 port=args.port, dry_run=args.dry_run,
+                model_path=model_path, draft_model_path=draft_model_path, served_model_name=served_model_name, rope_scaling_json=rope_scaling_json,
             )
             if result.returncode != 0:
                 print(f"warning: full-sweep run failed method={method} alpha={alpha} (exit {result.returncode}), continuing", file=sys.stderr)

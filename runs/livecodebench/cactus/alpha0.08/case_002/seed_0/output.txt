@@ -1,0 +1,546 @@
+<|channel|>analysis<|message|>We need to analyze problem: We have array. We need maximum sum of subarray such that adjacent elements have alternating parity. Equivalent to subarray of consecutive elements has parity alternating. It's like we can't include adjacent elements of same parity. We can choose any subarray length 1 or more. Equivalent to: For each contiguous pair, we can only test if parity alternates, thus segments like "alternating" indeed.
+
+We need maximum sum of all such subarrays.
+
+Question: The sum may exceed typical 64-bit? n up to 2e5, ai within [-1000,1000], sum magnitude up to 2e8 small). 64-bit fine.
+
+We need efficient solution. Observations: The subsequence: we can pick any subarray overlapping positions; we just need maximum sum of subarray where parities alternate.
+
+We can try dynamic programming: For each i, we decide whether we allow subarray ending at i with alternating parity. We can maintain DP: best ending at i that satisfies rule. We can compute DP[i] = maximum sum of valid subarray ending at i. Then answer max over all i.
+
+We need to consider the consecutive parity constraints: dp[i] is same as pref[i]? Actually consider b[i] parity = a[i] % 2. For each i; let dp[i] be max sum of a subarray ending at i & having alternating parity. Then use recurrence:
+
+If i==1: dp[1] = a[1].
+
+Else, if parity of i and i-1 differ, we can extend the best subarray ending at i-1 (dp[i-1]) because adjacency condition holds: had previous last
+But we must ensure extending dp[i-1] is valid: dp[i-1] already satisfies alternating. So we can concatenate i: dp[i] = dp[i-1] + a[i] (since parity of last item is alternating with previous). Actually we need arr i-border parity. But we also need to consider possibility that cross parity: If not the case (parity equal), one cannot extend. So we may need to start new DP; but if parity equal, we can only start new subarray at i that just equals a[i], or start after there may be j of parts? But we can't because handling parity equality.
+
+We also need to consider that for subarray ending allowed, we need to ensure subsequence that no neighbors equal parity. That but we can directly compute using DP:
+
+dp[i] = a[i]
+
+If parity[i] != parity[i-1], then dp[i] = max(dp[i-1] + a[i], a[i])? But to sum with dp[i-1] we may keep dp[i-1] if dp[i-1] can be extended (not only if parity adjacency match). Since parity doesn't differ and dp[i-1] conflicts, we should consider new = a[i]. Maybe also we could start new subarray from i: sum = a[i] alone. That's allowed.
+
+Alternatively we might need to consider possibility that we skip partially overlapping segments that satisfy rule but not contiguous? But dp defined as best subarray ending at i can't skip occasional elements; contiguous with rule.
+
+Thus algorithm:
+
+Let dp[i] = max sum ending at i. If parity = 0? We'll treat alphabetically.
+
+Pseudo:
+
+dp[0] = a[0]
+ans = dp[0]
+for i in 1..n-1:
+    if (a[i] % 2 != a[i-1] % 2):
+        dp[i] = max(dp[i-1] + a[i], a[i])? Wait it's wrong: Suppose dp[i-1] increases negative. But we might want to extend dp[i-1] if that yields better. But dp[i-1] may have negative number of sum. But if dp[i-1] is adjusted but we can't skip negative or include the previous element? Actually we check if dp[i-1] + a[i] > a[i], we can consider dp[i] = dp[i-1] + a[i). But we must guarantee that dp[i-1] subarray ended at i-1 had alternating parity; which since it has alternation between neighbors, and we have that parity difference so good. So we can extend. But we also should consider that maybe using dp[i-1] or starting new dp at i might produce bigger sum; but we compute max.
+
+But contract if parity is same or not, we cannot extend? Actually if parity equal, we cannot extend; dp[i] = a[i] (starting new block). But we should also consider c contamination: cannot extend as condition doesn't hold.
+
+So final:
+
+dp[i] = a[i] if (a[i] % 2 == a[i-1] % 2)
+else dp[i] = max(dp[i-1] + a[i], a[i])? Wait but we check: is it possible that dp[i] may start new at i, or extend if it's beneficial. But in this case, if we extend dp[i-1] + a[i], we could also skip the previous element but still maintain alternating parity; but that would also be allowed subarray starting later; but we have only min start of a contiguous segment. But our DP ensures we have minimal subarray of contiguous block that ends at i. Actually DP recurrence also includes dp[i] = max(dp[i-1]+a[i], a[i]) when parity alternate. That ensures that if dp[i-1] is negative, we may start new at i. Great.
+
+But let's test with example: sample: 1 2 3 4 5. Odd E Sequence: 1 (odd), 2(even), 3(odd), 4(even). All adjacent alternate. So longest subarray is entire array. The algorithm:
+
+i=0: dp[0] = 1
+i=1: a[1]=2, parity even differs from odd => dp[1] = max(dp[0]+2, 2) = 3
+i=2: parity odd vs even differ => dp[2] = max(3+3=6, 3) = 6
+i=3: parity even vs odd selects diff => dp[3] = max(6+4=10,4)=10
+i=4: parity odd vs diff => dp[4] = max(10+5=15,5)=15. answer = 15.
+
+Matches sample.
+
+Second sample: 9 9 8 8: [9,9,8,8]
+Odd, odd, even -> Wait pair: 9%2=1, 9%2=1 same => progress: assignment: aj
+find loop: i0: dp[0]=9
+i1: 9 same parity => dp[1] =9
+i2: parity 8 even (0) diff vs 9 odd? Wait last==9 parity 9 previous? Actually we compare index to previous: a[2] currently 8, parity 0 vs a[1] parity 1 diff => deficit extends dp[1]=9? but <= So dp[2] = max(dp[1]+8=17,8)=17. If we start new at3: dp[3] for last 8 even with a[2] parity 0 => same => dp[3] =8
+
+But we also need to ensure there's no violation earlier: for dp[2], we used prefix upto i1 [9,9] product? However dp[1] is 9 which is just a[1] because not allowed 9,9. Wait dp[1] after i 1 considered just a[1] but we considered dp[2] depends on difference between a[2] and a[1]. That may override adjacency with a[1] but we may not have accounted that earlier a[1] was part of dp[1] by swapping distant boundaries. Let's design algorithm carefully.
+
+Let's analyze constraints of DS.
+
+Suppose we have array [9, 9, 8] positions:
+Indices: 0,1,2.
+
+Suppose we want subarray [1,2]: 9 8.
+
+But 9 (index 1) and 8 (index 2) parity diff. So best subarray [1,2] = 17. Since indices 0 and 1, but i=1 same parity. So we cannot extend by building dp[2] with dp[1] (which uses a[1].) Wait dp[1] is length 1 index 1. But dp[1] is 9. Implementation: dp[1] = 9. But we considered parity diff p[2] vs p[1], not both. Good.
+
+But is the subsequence [1,2] valid? but re using dp[1] we use subarray [1,2] length 2 with parity alternating ok. So produce us 17. But dp[2] computed as max(nums[2]+dp[1] if parity differs). But dp[1] includes just a[1] which is part of subarray, could include [1] old, all good.
+
+But we need to confirm that we didn't include l value earlier. Are we getting subarray [1,2] considered? Yes.
+
+We need to test scenario 3: [1, 1, 3], indices 0 1 2.
+
+Let's test quickly: a: [1,1,3]; i0:dp0=1. i1: same parity -> dp1=1. i2: diff with a[1] (1 != 3? Wait parity of 3 is 1 mod 2, so ai parity is 1? Actually 3 odd. par[1] is 1 as well. So same. So condition same can't. So dp2=3. ans=3.
+
+But is there a subarray [0,1,2] of sum 5? That's 1+1+3=5 but parity violates requirement because 1 and 1 are consecutive? They don't have parity. So not allowed. Actually but subarray [0,1,2] is invalid because a[0] pos0 and a[1] pos1 same parity. So not allowed. So maximum sum 3? But subarray [0,2] not valid because consecutive same parity (1->3 includes 1->1 obviously). So we need to find subarray 4? Let's compute best: subarray [3] alone is 3, or [1,3], contiguous [1,3] cannot skip because need contiguous: start at index 1 to 2: difference 1-1 same parity. So cannot be contiguous. So maximum sum 3. That's correct.
+
+Hence DP works.
+
+Edge Cases: when there is j? dp[1] can be 9 but we extended dp[1] we appended 8 to get 17. Works.
+
+- Suppose there is [10, 20, 1] where parities are even even odd. mv.
+
+But alt must be adjacent pair diff. Actually 10 even, 20 even same -> break. dp[0] = 10 at i0. i1 may set best sum=0? Actually algorithm: i1 parity difference 10 even -> 20 even same => dp[1] = 20. Wait but a[1] alone. Ok.
+
+i2: parity diff 1 odd vs 20 even? Wait parity earlier 20 even -> q=2. So dp[2] sees difference and comp: max(dp[1] + 1 = 21, 1). So dp[2] =21. It obtains subarray [1 2]?? Actually that would be [20,1] but we need 10? Wait it can't have 10 included as 10 as a "two" before e 21 due to ignoring 10? No. dp[2] is 21 (from index 1 to 2), valid even->odd. But dp[2] used 20 length 1. So sum 21. Option 3: Could we get valid subarray [10, 20] which is even+b? Wait pass, can't pass, same parity? Actually consecutive 10,18 same parity, so can't. So our dp results 21. That's maximum sum.
+
+Edge Cases: all negative numbers. Example: [-10, -5, -2]? Start each a[i]. The DP chooses max optimal: each yields negative number asc. But we need max output maybe negative but digits ascending. Example: -1 10 -1: compute: dp[0] = -1. i1 diff (since odd) so dp[1] = max(-1+10=9,10) = 10. i2 diff? parity 10 even vs -1 odd -> diff. So dp[2] = max(10-1=9, -1) = 9. ans=10. So it's best.
+
+But check alternative: Suppose we want subarray [0] array [-1, 10 -1].
+
+But also we could choose [0,2] maybe not allowed? Because no consecutive pair diff as between index0 and 1 both diff? Actually 10 even and -1 odd fine. But 10 and -1 are adjacent pair diff is ok. So subarray [0,2] includes distribute: [-1,10,-1] consecutive diff good. So we can produce sum 8. Our DP picks 10? Wait dp[2] with extension dp[1] + a[2] = 10+(-1) = 9. Height 9 but bigger: 10. So best still 10.
+
+Hence choosing to start new at center gives maximize.
+
+Now "b" and "c" but there may be other solutions where we might commit incorrectly: What about pattern where dp could at a position create a subarray that contains earlier elements that violate alternation? Let's test with array [1,4,1] with odd-even-odd. Indeed:
+
+i0: dp0 =1
+i1: diff => dp1= max(1+4=5,4)=5
+i2: diff => dp2 = max(5+1=6,1)=6
+
+Valid subarray [1,4,1] sum 6. It's allowed.
+
+Correct.
+
+Now best to test DP with actual sample: we had many tests.
+
+But the case where starting subsequence not permitted (like if earlier array had two equal parity and following array diff at some point). This DP will still work because it only extends when one even left and other odd, etc.
+
+Edge Cases: When difference to previous part: Suppose target subarray: [1,2,3,1] where parity: odd, even, odd, odd. Starting dp approach: i0: dp0=1; i1: diff => dp1=1+2=3; i2: diff => dp2=3+3=6; i3: same parity (odd vs odd) => dp3=1; sum 1. ans=6. But we might have subarray [2,3,1] sum 6? Because 2 even; 3 odd; 1 odd; but 3-1 same parity adjacent? Wait 3 and 1 are consecutive adjacent but index 2 and 3; 3 odd and 1 odd => same parity not allowed; cannot. So best subarray is [1,2,3] sum 6; correct.
+
+Hence DP works.
+
+But our DP only considers parity between i and i-1. What about dist more 2 indices? No, condition only needed consecutive difference; thus no parity between i and j>i.
+
+Now underlying DP might not fully consider subsequence selected earlier but not contiguous when repeated parity equality occurs. The dp obtains subarray that ends at i, either with start at i or where start before i, but then do we break after second same parity? Let's test scenario where previous consecutive element: [1,12,9,9,5], where parity: 1 odd, 12 even, 9 odd, 9 odd, 5 odd. Now compute:
+
+i0: dp0=1
+i1: diff => dp1=max(1+12=13,12)=13
+i2: diff => dp2=13+9=22 >9 -> 22. (so subarray [1,12,9])
+i3: same parity; dp3=9 (cannot use dp2). (value 9; but subarray [9] starting at i3 base? Indeed previous element 9 was consecutive same parity; can't include 9 after 9. So dp3=9)
+i4: same parity; dp4=5 (since 5 odd? Actually ri). Wait adjacent to previous (i3) parity odd. dp4=5? Actually parity 5 odd; same as i3, so dp4=5. So 5 alone. So best is 22.
+
+But our subarray [1,12,9,9,5] differences break after step 2: but we might attempt [1,12,9,5] we cannot because technology: indices 0..4, but 9 at index2 and 9 at index3 same parity; not allowed. So 22 is valid.
+
+Because dp has broken when distance adjacency fails.
+
+So algorithm stands.
+
+Implementation details:
+
+Need to output maximum sum over all subarrays that satisfy rules. We'll iterate t test cases.
+
+Implementation:
+
+Read t env.
+
+Processing each test case.
+
+Time complexity O(total n). Each test: O(n).
+
+Now produce final code. We'll compute dp arrays using variable.
+
+Important: When using dp[i] for start i, we should not compute dp with negative numbers anyway.
+
+We define best sum as variable.
+
+Test on sample:
+
+Input 1 has a many test cases 7? Actually sample input mismatched: sample input given 1 line 7 then 5 etc. Wait first line not 1; maybe 7 test cases. Usually input contains t then test cases. Provided sample seems to contain 7 test cases: t=7? Let's analyze:
+
+Sample Input 1:
+7
+
+5
+
+1 2 3 4 5
+
+4
+
+9 9 8 8
+
+6
+
+-1 4 -1 0 5 -4
+
+4
+
+-1 2 4 -3
+
+1
+
+-1000
+
+3
+
+101 -99 101
+
+20
+
+-10 5 -8 10 6 -10 7 9 -2 -6 7 2 -4 6 -1 7 -6 -7 4 1
+
+So yep t=7. So our program should read them. Let's test quick: python takes command? But we output.
+
+Edge Cases: Might there be input violation of blank lines? We'll handle by reading entire input via sys.stdin.read().split() into list of strings.
+
+Now code:
+
+- tokens = iter(map(int, input.split())) ?
+
+Return.
+
+We'll build function: def solve().
+
+We parse t.
+
+For each test: read n, array a... lengths of n.
+
+Compute subarray: then check left.
+
+Add state variable by using last parity: For i.
+
+Implementation:
+
+def solve():
+    import sys
+    data = map(int, sys.stdin.read().strip().split())
+    it = iter(data)
+    t = next(it)
+    results = []
+    for _ in range(t):
+        n = next(it)
+        a = [next(it) for _ in range(n)]
+        total = max(a[0], etc)?? compute.
+
+```
+ans = a[0]
+prev = a[0]
+pos_prev = a[0] % 2
+```
+
+We will keep dp_prev = a[0]
+dp_prev = a[0]
+for i in range(1, n):
+    if ord = a[i] % 2 != pos_prev:
+        dp_cur = max(dp_prev + a[i], a[i])
+    else:
+        dp_cur = a[i]
+    dp_prev = dp_cur
+    ans = max(ans, dp_cur)
+    pos_prev = a[i] % 2
+```
+
+But careful: Option of dp_cur computed by resetting but dp_prev for next iteration must maintain dp[i] used as the onending i. That we used.
+
+Edge Cases: When we start a new subarray at i, we claim it is dp[i] = a[i]. However, if same parity fails, dp_cur = a[i] works.
+
+Now test for worst-case that algorithm may produce Code incorrectly (when cost negative). Let's test with small window.
+
+Also we may trust that parity of each element: after each process step does this pair-check only with immediate previous element with maybe not part of the subarray being considered? No, we are computing dp_prev = dp[i-1] (max sum of subarray ending at i-1). But might be negative values? yes.
+But of context:
+
+Consider arr: 1 & 1 & -1? Actually start with [1,1], same parity with 1; there dp[1] = 1. Another: add -1 -> new: same parity. dp[2] = -1. But we can start subarray at index2 only? But we might also consider edge of subarray [1,1,-1]? But you cannot because 1 and 1 adjacent same. After one invalid we cannot have parent. So our DP seems correct.
+
+But what if we skip over earlier element? For example starting subarray at index 2 but diff only with neighboring outside? But it is just dp[2] computed. Accept.
+
+It appears typical solution for CF problem: DP a.k.a. "Alternating Parities" variation. Actually final output: "maximum subarray sum of any subarray with odd-even odd-even" etc. Implementation works.
+
+Edge Cases: Suppose n=1. Then ans=a[0], and done.
+
+But is there possibility more complex subarray that returns but using dp[prev] might produce bigger sum but not allowed due to some parity between i and i? Wait we ensure we only extend if parity differs, but if dp[prev] not valid only due to subarray length earlier? If dp[prev] subarray returned by dp[prev] but not using previous value but it includes previous element, but not relevant. The adjacency property holds: if parity diff between i and i-1, then we extend dp[prev] + a[i], thus valid; i's relation to i-1 <= 1 is satisfied. But we need to ensure subarray prev[j..i-1] may have length with multiple; but maybe inside that subarray of earlier elements j-s etc had any two consecutive parities? Absolutely they alternate due to dp[prev] ensures at each step we have domino. Because one step when we extend dp[prev] with a[i], we only guarantee adjacency between i-1 and i diff; but the parity difference between earlier i-1 and earlier i-2 etc also satisfied from dp[prev] property. Good.
+
+Thus DP stands.
+
+Now we need to implement to t.
+
+Potential overflow: For each test case, maximum sum over entire array is n*1000=2e5*1000=2e8 fits in int. Python int fine.
+
+Hence final answer - multiple testcases.
+
+Let's write solve() to produce that.
+
+Potential extra: The problem states "non-empty subarray" "the subarray he chooses must have alternating parities for adjacent elements." So we need at least length 1.
+
+Now include helper.
+
+Test with input:
+
+7
+5
+1 2 3 4 5
+4
+9 9 8 8
+6
+-1 4 -1 0 5 -4
+4
+-1 2 4 -3
+1
+-1000
+3
+101 -99 101
+20
+-10 5 -8 10 6 -10 7 9 -2 -6 7 2 -4 6 -1 7 -6 -7 4 1
+
+Let's produce.
+
+Edge case: further second words: "aaa"? Not.
+
+Plan: 4.
+
+Time complexity per test: O(n). Memory 1 variable.
+
+Complexity overall: sum n <= 2e5.
+
+Hence code ready.
+
+Let's test with sample:
+
+Implement calculations manually.
+
+We'll show code after evaluation.
+
+But there may be nuance: The algorithm only uses dp[i] only if parity differs. But there is also possibility to extend dp[i-1] from earlier pair if not consecutive same parity but maybe previous value used at i-1 may have mismatched earlier parity with a[1] but we skip.
+
+But also displayed: if two consecutive elements have same parity, check:
+
+Suppose no neighbor parity difference, but character can still be bigger by skipping n-2. But we only consider adjacent elements. So nothing else.
+
+Ok. Implementation stands.
+
+Potential solution: Just compute max sum of subarray with alternating parity using DP described. It's typical.
+
+Let's produce final code.
+
+Edge sample left "" fine.
+
+Will mention "Graph".
+
+Ok.
+
+Let's produce final solution code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every test case we are given
+
+* `n` – length of the array  
+* `a[0 … n-1]` – the array ( `-1000 ≤ a[i] ≤ 1000` )
+
+We have to choose a **non‑empty, contiguous subsequence** (a subarray)
+whose neighbouring elements have opposite parity  
+(`even ↔ odd` for all neighbours).  
+Among all such subarrays we have to output the maximum possible sum.
+
+--------------------------------------------------------------------
+
+#### 1.   Observations
+
+* The prime condition concerns only **adjacent** elements.
+* A subarray `[l … r]` is valid **iff**
+
+```
+for every i with l ≤ i < r    ( a[i] % 2 != a[i+1] % 2 )
+```
+
+* No information about elements farther apart is needed.
+* If we know the maximum sum of a valid subarray that ends at position `i-1`,
+  then for position `i` we have only two possibilities
+
+| parity adjacency | result |
+|-------------------|--------|
+| `a[i]` and `a[i-1]` have opposite parity | we can extend the best subarray that ended at `i-1` |
+| same parity | we cannot extend – we must start a new subarray from `i` |
+
+The best that ends at `i` may either
+
+* extend the best ending at `i-1` (if allowed)
+* or start anew at `i`.
+
+That leads to a simple dynamic programming recurrence.
+
+
+
+--------------------------------------------------------------------
+
+#### 2.   Dynamic Programming
+
+```
+choose i                          // 0‑based index
+
+dp[i]  –  maximum sum of a *valid* subarray that ends exactly at i
+ans    –  the maximum value seen so far (multiplied by some subarray)
+
+initially
+    dp[0] = a[0]
+    ans   = a[0]
+
+for i = 1 … n-1
+        if parities of a[i] and a[i-1] differ
+                dp[i] = max( dp[i-1] + a[i] , a[i] )   // extend or start new
+        else
+                dp[i] = a[i]                           // cannot extend
+        ans = max(ans , dp[i])
+```
+
+The two values `dp[i]` and `ans` are the only things that hold  
+how we compute the answer, **no loop over all subarrays is necessary**.
+
+All operations are `O(1)` per position, therefore the whole algorithm runs
+in `O(n)` time per test case.  
+The sum of all `n` values over all test cases ≤ `2·10^5`,
+therefore the program easily fits into the limits.
+
+
+
+--------------------------------------------------------------------
+
+#### 3.   Correctness Proof  
+
+We prove that the algorithm outputs the maximum possible sum.
+
+---
+
+##### Lemma 1  
+For every `i (0 ≤ i < n)`, `dp[i]` computed by the algorithm equals  
+the maximum sum of any (valid) subarray that ends at element `i`.
+
+**Proof.**
+
+We proceed by induction over `i`.
+
+*Base – `i = 0`*  
+Only the subarray `[0]` ends at position `0`.  
+`dp[0] = a[0]` is the sum of the only candidate, therefore optimal.
+
+*Induction step*  
+Assume the statement holds for all indices `< i`.  
+Consider position `i`.
+
+*Case 1 – `a[i]` and `a[i-1]` have different parities.*  
+For any valid subarray that ends at `i` there are two possibilities:
+
+1. It consists of the single element `i`,
+   sum equals `a[i]`.
+2. It ends at `i-1` and then extends to `i`.  
+   By induction hypothesis the maximum possible sum of
+   a subarray ending at `i-1` is `dp[i-1]`.
+   Adding `a[i]` expands the subarray and keeps it valid,
+   therefore the sum is `dp[i-1] + a[i]`.
+
+The smaller of the two decompositions are the only possible values,
+hence `dp[i] = max( dp[i-1] + a[i] , a[i] ) =` optimum sum.
+
+*Case 2 – `a[i]` and `a[i-1]` have the same parity.*  
+In this case a subarray ending at position `i` cannot include `i-1`:
+otherwise two neighbours would now share the same parity.
+Therefore the only possible valid subarray is the one-element
+subarray `[i]`.  
+The algorithm sets `dp[i] = a[i]`, correctly giving the optimal sum.
+
+Thus in both cases the recurrence gives the optimum for index `i`;  
+the induction holds for all indices. ∎
+
+
+
+##### Lemma 2  
+`ans` after processing all positions equals the maximum sum of
+any valid subarray of the whole array.
+
+**Proof.**
+
+During the loop, after computing `dp[i]` we update
+
+```
+ans := max(ans , dp[i])
+```
+
+Therefore after processing all indices, `ans` is `max(dp[0], dp[1], … , dp[n-1])`.  
+By Lemma&nbsp;1 each `dp[i]` is the optimum sum among subarrays ending at `i`.  
+Thus `ans` is the maximum sum over all ending positions,
+i.e. over all possible valid subarrays. ∎
+
+
+
+##### Theorem  
+For every test case the algorithm outputs the maximum possible sum of
+any non‑empty, parity‑alternating subarray.
+
+**Proof.**
+
+By Lemma&nbsp;2, after the loop finishes `ans` equals the maximum sum
+over all valid subarrays.  
+The algorithm outputs exactly this value, therefore it is correct. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.   Complexity Analysis
+
+For a test case with array length `n`
+
+* **Time** : `O(n)`  
+  (`O(1)` work per element,
+  a single linear scan).
+
+* **Memory** : `O(1)`  
+  Only a few integers are stored; the array itself is read once.
+
+The total running time for all test cases is
+`O( Σ n ) ≤ 2·10^5` operations, and the memory consumption stays
+constant.
+
+
+
+--------------------------------------------------------------------
+
+#### 5.   Reference Implementation  (Python 3)
+
+```python
+import sys
+
+def solve() -> None:
+    data = list(map(int, sys.stdin.buffer.read().split()))
+    it = iter(data)
+    t = next(it)
+    out_lines = []
+
+    for _ in range(t):
+        n = next(it)
+        a = [next(it) for _ in range(n)]
+
+        # maximum sum of a valid subarray that ends at position i
+        dp_prev = a[0]
+        ans = a[0]
+        prev_parity = a[0] & 1          # 0 for even, 1 for odd
+
+        for i in range(1, n):
+            cur = a[i]
+            cur_parity = cur & 1
+            if cur_parity != prev_parity:
+                # can extend the previous best subarray
+                dp_cur = dp_prev + cur
+                if cur > dp_cur:          # maximal better to start new
+                    dp_cur = cur
+            else:
+                dp_cur = cur                            # same parity – new
+
+            # update and prepare for next iteration
+            dp_prev = dp_cur
+            prev_parity = cur_parity
+            if dp_cur > ans:
+                ans = dp_cur
+
+        out_lines.append(str(ans))
+
+    sys.stdout.write("\n".join(out_lines))
+
+if __name__ == "__main__":
+    solve()
+```
+
+The program follows exactly the algorithm proven correct above
+and conforms to the required input / output format.

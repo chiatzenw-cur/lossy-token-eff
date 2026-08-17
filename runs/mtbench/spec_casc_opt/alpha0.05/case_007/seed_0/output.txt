@@ -1,0 +1,216 @@
+<|channel|>analysis<|message|>We need to produce a Python program that reads all text files under a directory and reverses? Actually says "reprompt top-5 words with the most number of occurrences" maybe means "report top-5 words with the most number of occurrences". Yes likely a typo: "report top-5 words with the most number of occurrences". So produce program that reads all text files under a directory and reports top-5 words. Provide code with explanation. Should handle word tokenization, case-insensitive, strip punctuation. Use os.walk to count words per file. Use collections.Counter. Provide ability to specify directory via command line argument or input. Could also handle echo. Provide full script. Also mention optional: use argparse. Provide results. Provide example. Avoid file reading errors.
+
+We produce final answer with code and description.<|end|><|start|>assistant<|channel|>final<|message|>Below is a **single‑file, ready‑to‑run** Python script that
+
+* walks through any directory you give it,
+* reads every file with a `.txt` extension (plain‑text only),
+* counts how many times each word appears (case‑insensitive, punctuation removed),
+* and then prints the five most frequent words with their counts.
+
+The script uses only the standard library (`os`, `collections`, `Counter`, `argparse`, `argparse`) so you can add it to any project or run it from the command line.
+
+```python
+#!/usr/bin/env python3
+"""
+Word‑frequency counter for all `.txt` files in a directory.
+
+Usage:
+    python wordfreq.py /path/to/directory  # prints 5 most frequent words
+    python wordfreq.py -i file.txt -t 10    # prints 10 most frequent words in a single file
+
+Author:  (your name)
+"""
+
+import argparse
+import os
+import re
+from collections import Counter
+from typing import Dict, Iterable, List, Tuple
+
+# --------------------------------------------------------------------------- #
+# Utility functions
+# --------------------------------------------------------------------------- #
+
+def words_from_text(text: str) -> List[str]:
+    """
+    Split a text string into a list of words, stripped of punctuation and
+    normalised to lower‑case.
+
+    Parameters
+    ----------
+    text : str
+        The raw text.
+
+    Returns
+    -------
+    List[str]
+        A list of cleaned words.
+    """
+    # Replace any non‑alphabetic characters with a space
+    # (digits are not counted as words here; adjust if you want them)
+    cleaned = re.sub(r"[^\w\s]", " ", text)
+    # Split on whitespace and convert to lower‑case
+    return [w.lower() for w in cleaned.split() if w]
+
+def count_words_in_file(filepath: str) -> Counter:
+    """
+    Count words in a single text file.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the file.
+
+    Returns
+    -------
+    collections.Counter
+        Counter of word frequencies.
+    """
+    with open(filepath, 'r', encoding='utf-8') as f:
+        text = f.read()
+    return Counter(words_from_text(text))
+
+def main_directory(directory: str, top_n: int = 5) -> None:
+    """
+    Walk through the directory, find all .txt files, count words,
+    and yield the top‑n most frequent words.
+
+    Parameters
+    ----------
+    directory : str
+        Directory to search for.
+    top_n : int
+        Number of top words to display.
+    """
+    overall_totals = Counter()
+    # os.walk yields dir, subdirs, filenames
+    for root, _dirs, files in os.walk(directory):
+        txt_files = [f for f in files if f.lower().endswith('.txt')]
+        for fname in txt_files:
+            full_path = os.path.join(root, fname)
+            try:
+                file_counts = count_words_in_file(full_path)
+                overall_totals.update(file_counts)
+            except Exception as exc:
+                # If a file can't be read we cleanly skip it
+                print(f"WARNING: Could not read {full_path!r}: {exc}")
+
+    # Display the top‑n words
+    print(f"\nTop {top_n} words in {directory!r}:\n")
+    for rank, (word, count) in enumerate(overall_totals.most_common(top_n), start=1):
+        print(f"{rank:>2}. {word:<15} : {count}")
+
+def main_generator(files: Iterable[str], top_n: int = 5) -> None:
+    """
+    Count words in a single file or a list of files.
+    """
+    overall_totals = Counter()
+    for file in files:
+        try:
+            overall_totals.update(file_counts)
+        except Exception as exc:
+            print(f"WARNING: Could not read {file!r}: {exc}")
+
+    print(f"\nTop {top_n} words in {file!r}:\n")
+    for rank, (word, count) in enumerate(overall_totals.most_common(top_n), start=1):
+        print(f"{rank:>2}. {word:<15} : {count}")
+
+# --------------------------------------------------------------------------- #
+# Command line interface
+# --------------------------------------------------------------------------- #
+
+def parse_args() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Count words in .txt files and report the most frequent words."
+    )
+    parser.add_argument(
+        "-i",
+        "--input",
+        nargs="*",
+        help="File paths to read. If omitted, just a directory exists.",
+    )
+    parser.add_argument(
+        "-d",
+        "--top",
+        type=int,
+        default=5,
+        help="Number of top words to display (default: 5)",
+    )
+    parser.add_argument(
+        "-dir",
+        "--dir",
+        default=".",
+        help="Directory to search for .txt files (default: current directory)",
+    )
+    return parser
+
+def main() -> None:
+    args = parse_args().parse_args()
+
+    # If the user provides a single file or list of files think of it as a single file chunk
+    if args.input:
+        # treat all files as a single file stream
+        all_texts = []
+        for src in args.input:
+            try:
+                with open(src, 'r', encoding='utf-8') as f:
+                    all_texts.append(f.read())
+            except Exception as exc:
+                print(f"WARNING: Could not read {src!r}: {exc}")
+        dfs = Counter(all_texts)
+        # join all texts to single string? Actually for counts we want just monolithic
+        # simplest: just use Counter of each
+        # but we can just run the same logic as directory
+        big_counter = Counter()
+        for src in args.input:
+            try:
+                big_counter.update(count_words_in_file(src))
+            except Exception as exc:
+                print(f"WARNING: Could not read {src!r}: {exc}")
+        print(f"\nTop {top_n} words in {args.input}:\n")
+        for rank, (word, count) in enumerate(
+            big_counter.most_common(top_n), start=1
+        ):
+            print(f"{rank:>2}. {word:<15} : {count}")
+    else:
+        # process directory
+        main_directory(directory=args.dir, top_n=args.top)
+
+if __name__ == "__main__":
+    main()
+```
+
+### How it works
+
+| Step | What happens |
+|------|--------------|
+| **Argument parsing** | `argparse` lets you specify a directory (`-dir`) or a list of files (`-i`), and how many words to show (`-top`). |
+| **Walking the directory** | `os.walk` walks the directory tree, collecting every file that ends with `.txt`. |
+| **Counting words** | `count_words_in_file` reads a file, counts words with a `Counter`, and normalises punctuation and case using a regular expression. |
+| **Aggregating** | The `Counter` objects from all files are combined with `update()`. |
+| **Reporting** | `most_common` pulls the top‑`n` words from the combined counter and prints them. |
+
+### Running the script
+
+```bash
+# 1. List all files in the current directory
+python wordfreq.py
+
+# 2. List all .txt files in a specific directory
+python wordfreq.py -dir /path/to/your/docs
+
+# 3. Show the most frequent words across a *specific* file
+python wordfreq.py -i myfile.txt -t 10
+
+# 4. Count words in several files at once
+python wordfreq.py -i all_files.txt -t 5
+```
+
+### Possible extensions
+
+* **Support for other text types** – add `"csv"`, `"md"`, etc. to `endswith` checks.
+* **Unicode support** – currently works for UTF‑8, but you can add a more robust detection if needed.
+* **Stop‑word removal** – the list can be extended for filtering common words.
+* **Parallelisation** – use `concurrent.futures` to parallelise reading many files.
+
+Happy coding!

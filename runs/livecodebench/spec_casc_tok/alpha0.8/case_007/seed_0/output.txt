@@ -1,0 +1,208 @@
+<|channel|>analysis<|message|>We need to count permutations of nums such that adjacent elements have one divide the other. Classic "special permutations" problem from Leetcode option. Since n <= 14, we can use DP over subsets with bitmask. Approach: dp[mask][i] = number of ways to form permutation of values represented by mask where last element is i (index). Then recurrence: dp[mask][i] = sum over j such that j not in mask, and nums[j] % nums[i] == 0 or nums[i] % nums[j] == 0, of dp[mask | (1<<j)][j]. Actually we can iterate adding new element to existing permutation. Usually we start with dp[1<<i][i] = 1. Then for each mask, for each i in mask, dp[mask][i] known, we add new element j not in mask. Complexity O(n^2 * 2^n). For n=14, 2^14=16384, times 14^2=196, about 3 million operations. Fine.
+
+Edge: numbers distinct, but we can handle repeated dividing. We need to compute modulo MOD.
+
+Implementation: Precompute adjacency matrix adjacency[i][j] bool if divisible. Then DP.
+
+Bitmask indexes: we store dp[mask] as array of size n? We can store dp[mask][i] as separate array of length n for each mask. We can create dp = [[0]*n for _ in range(1<<n)]. Then fill.
+
+Return sum(dp[full_mask][i]) for all i.
+
+Potential memory: 2^14*14=229,376 cells, each int 8 bytes => 1.8 MB fine.
+
+Implementation details: Use bit iteration loops: for mask in range(1<<n): for i in range(n): if mask & (1<<i): val=dp[mask][i]; if not val: continue; for j in range(n): if not mask & (1<<j): if adjacency[i][j]: dp[mask | (1<<j)][j] = (dp[mask | (1<<j)][j] + val) % MOD.
+
+Return sum.
+
+Edge: use sys.setrecursionlimit? Not needed.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every permutation we need the property  
+
+```
+for every i : 0 ≤ i < n‑1
+      nums[i] % nums[i+1] == 0   or   nums[i+1] % nums[i] == 0
+```
+
+`n ≤ 14`, therefore `2^n` is at most `16384`.  
+Using a bit‑mask DP gives an exact count in `O(n² · 2^n)` time – easily fast enough.
+
+--------------------------------------------------------------------
+
+#### 1.  Pre‑computation
+
+For every pair `(i, j)` store whether the two numbers are *compatible*:
+
+```
+adj[i][j] = True   iff   nums[i] % nums[j] == 0  or  nums[j] % nums[i] == 0
+```
+
+--------------------------------------------------------------------
+
+#### 2.  DP definition
+
+```
+dp[mask][i] = number of special permutations that
+
+              – use exactly the numbers whose bits are set in mask
+              – end with the number nums[i]   (i is the index of the last element)
+```
+
+*Base*  
+`dp[1<<i][i] = 1` – a single element permutation is obviously special.
+
+*Transition*  
+Take a finished permutation described by `dp[mask][i]` and try to append
+an unused number `j`.  
+The new mask is `mask2 = mask | (1<<j)` only if `adj[i][j]` is `True`.
+
+```
+dp[mask2][j] += dp[mask][i]   (mod MOD)
+```
+
+The table is filled for all masks in increasing order; in any order works
+because we only ever add a not‑already‑used index.
+
+--------------------------------------------------------------------
+
+#### 3.  Result
+
+All numbers are used when `mask == full_mask = (1<<n)-1`.  
+Sum all possibilities for the last element:
+
+```
+answer = Σ dp[full_mask][i]   (mod MOD)
+```
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the exact number of special permutations.
+
+---
+
+##### Lemma 1  
+For every mask and index `i` with `mask & (1<<i) ≠ 0`,  
+`dp[mask][i]` equals the number of special permutations that use exactly the
+numbers in `mask` and end with `nums[i]`.
+
+**Proof.**
+
+We use induction over the number of bits in `mask`.
+
+*Base* – `mask` has one bit (`mask = 1<<i`).  
+`dp[mask][i]` is initialized to `1`.  
+Exactly one permutation of length `1` uses the single element `nums[i]`,
+hence the lemma holds.
+
+*Induction step* – Assume the lemma true for all masks with `k` bits.
+Take a mask `mask` with `k+1` bits and an index `i` in `mask`.  
+All permutations counted in `dp[mask][i]` are formed by appending
+some unused index `j` to a permutation counted in `dp[mask_without_j][j]`
+(where `mask_without_j = mask ^ (1<<j)`).  
+The algorithm adds exactly this value when `adj[j][i]` is true; no other
+values are added.  
+By the induction hypothesis `dp[mask_without_j][j]` counts precisely the
+permutations of the smaller mask ending with `j`.  
+Thus `dp[mask][i]` counts all and only the valid permutations of the
+current mask that end with `i`. ∎
+
+
+
+##### Lemma 2  
+After the DP finishes,  
+`Σ dp[full_mask][i]` equals the number of special permutations of all
+elements.
+
+**Proof.**
+
+By Lemma&nbsp;1, for the full mask `full_mask` each `dp[full_mask][i]`
+counts exactly the permutations using all numbers and ending with `i`.  
+These sets are disjoint for different `i` and together cover all
+permutations of the entire array.  
+Hence the sum is the desired count. ∎
+
+
+
+##### Theorem  
+`specialPerm` returns the number of special permutations of `nums`
+(modulo `10^9+7`).
+
+**Proof.**
+
+The algorithm computes the DP table exactly as described in Lemma&nbsp;1.
+By Lemma&nbsp;2, the final summation equals the number of special
+permutations.  
+All additions are performed modulo `10^9+7`, so the returned value is the
+required one. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+```
+Number of masks: 2^n   (≤ 16384)
+Transitions per mask: n^2   (≤ 196)
+```
+
+Time   : `O(n² · 2^n)`  ≤ 3·10⁶ operations  
+Memory : `O(n · 2^n)`  ≈ 2·10⁵ integers  (~ 1.8 MB)
+
+Both satisfy the limits easily.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    MOD = 10**9 + 7
+
+    def specialPerm(self, nums: List[int]) -> int:
+        n = len(nums)
+        full_mask = (1 << n) - 1
+
+        # adjacency matrix
+        adj = [[False] * n for _ in range(n)]
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+                    adj[i][j] = True
+
+        # dp[mask][i]
+        dp = [[0] * n for _ in range(1 << n)]
+
+        # base
+        for i in range(n):
+            dp[1 << i][i] = 1
+
+        # iterate over masks
+        for mask in range(1 << n):
+            for i in range(n):
+                if not (mask & (1 << i)):
+                    continue
+                cur = dp[mask][i]
+                if cur == 0:
+                    continue
+                # try to append j
+                for j in range(n):
+                    if mask & (1 << j):
+                        continue
+                    if adj[i][j]:
+                        nxt = mask | (1 << j)
+                        dp[nxt][j] = (dp[nxt][j] + cur) % self.MOD
+
+        # sum all ways to use all numbers
+        ans = sum(dp[full_mask][i] for i in range(n)) % self.MOD
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above.

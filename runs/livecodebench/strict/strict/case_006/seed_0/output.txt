@@ -1,0 +1,398 @@
+<|channel|>analysis<|message|>We need longest subarray after deletions up to k (anywhere). Equivalent: pick a value v, and we can delete up to k elements that are not v within a window to make it all v. We want window length where count(not v) <= k. So for each value v, consider positions where nums[i]==v. The longest contiguous subarray in original array after at most k deletions is the maximum length window such that number of non-v in that window <= k. We need overall max over values.
+
+But naive for each value scanning with two pointers: O(n^2) worst-case. Since nums[i] up to n, we can iterate values that appear. For each value, we can slide window using indices of that value? Approach: For each value, we can use two pointers over array with count of non-v. That's O(n * number_of_distinct). Could be n^2 worst-case if all numbers distinct. But constraints n up to 1e5, we need efficient.
+
+Better: For each value, use positions list and sliding window using indices of occurrences. Approach: We need longest window where between first and last occurrence of v we can delete <=k other elements. Suppose we have positions of v: p0<p1<...<pm-1. For a window that covers positions from pi to pj inclusive as the left boundary at pi and right boundary at pj, we need to delete all elements in that subarray that are not v. The count of ones between pi and pj indicating non-v is distance length of subarray minus number of v positions inside it. The subarray length is pj - pi + 1. Number of v inside is j - i + 1. So non-v count = (pj - pi + 1) - (j - i + 1) = (pj - pi) - (j - i) = (pj - pi) - (j - i). That simplifies to (pj - pi) - (j - i). We need <= k. Also we can delete outside subarray? we can choose subarray after deletion anywhere. The subarray is contiguous after deletion. We can delete elements inside the chosen window that are not v, up to k, plus we could delete some elements outside window? But those outside don't affect the subarray. So we only need to ensure count inside <=k.
+
+Also we could have subarray where the chosen window start might be before first v occurrence? Suppose we choose subarray that contains only v but some non-v among them; we can delete them. The window boundaries can be adjusted. The optimal subarray for a given v is basically choose two indices i<=j (positions in original array) such that count of non-v between them <=k and maximize length. That length can be computed by sliding window over entire array for each v. But we can process using two pointers over all indices, but that per v.
+
+Observation: Since nums[i] <= n, maybe number of distinct values up to n. worst-case n. We need O(n log n) or O(n sqrt n).
+
+We might use frequency array and for each v maintain sliding window over positions list. Complexity: Sum over v of (#positions of v) for building array. For each v, sliding window O(#positions of v). But we need to compute longest subarray length by considering windows that might start before first element. However we can expand using positions list.
+
+Let's try algorithm:
+
+For each value v:
+    positions = list of indices
+    left=0
+    For right in range(len(positions)):
+        While (positions[right] - positions[left] - (right-left) > k):
+            left +=1
+        # compute length of subarray considering we can include elements outside v at ends.
+        # The subarray starts at positions[left] and ends at positions[right].
+        # Numbers inside between them not v total deletions = positions[right]-positions[left] - (right-left)
+        # This <=k by guard.
+        # size of subarray including all numbers between positions[left] and positions[right] is positions[right]-positions[left]+1
+        # But we can also extend the window to left of positions[left] or right of positions[right] by including some non-v but we deleted them? Wait we cannot delete more than k in total. If we want to extend beyond these boundaries, we need to count additional not v.
+
+But we might get longer subarray that includes some v's at ends but extends beyond first/last occurrences? Suppose v appears at positions 2 and 5, k=2. The subarray from index 1 to 6 includes v at 2,5 and there are other non-v at 1,3,4,6. That's 4 non-v, >k. So can't. So boundaries must satisfy.
+
+But if we take subarray from index 0 to 4 when v occurs at 2 only, we need to delete 3 non-v.
+
+Essentially the optimal subarray boundaries may not align with v positions; but if we consider left boundary at any index l, right boundary at r. Count not v in [l,r] <=k. Goal maximize r-l+1. This is analogous to for each v, we find maximum window with constraint. This is like 'longest subarray with at most k non-v elements'.
+
+We can solve by sliding window over entire array per v. Complexity O(n * #distinct). Not good.
+
+But there is a trick: Since nums[i] <= n, we can store positions and use two-pointer over positions. For a window over positions, the number of non-v between first and last positions is determined. But we can also extend the window further to include preceding/following indices that are non-v, but that might increase length. However we can always change window boundaries to include any preceding or following indices as long as they are non-v and we have capacity k - (current deletions). This suggests optimal subarray boundaries align with either original array start or end? Wait we can choose to start at some index l and include some leading non-v before first v we include. But those non-v may be deleted. But the length will increase by number of such leading indices. Similarly right side.
+
+Observation: If we consider a subsequence of values where we keep only v's and delete at most k others inside a window, then the resulting subarray will include all indices between leftmost and rightmost chosen v plus possibly some non-v at edges if we extended. But to maximize length given fixed first and last v we chosen within window, it's optimal to extend the window as far left as possible while maintaining total deleted <=k. Starting at leftmost index = positions[left] - remaining_k_left? where remaining_k_left is the remaining number of deletions after deleting non-v between first and last v. Since we can delete at most k, we can include extraneous non-v to left or right up to remaining_k.
+
+But extending to left means we are adding indices l to positions[left]-1. Those are presumably all not v? Not necessarily: there might be v before positions[left] but we haven't included them. If we include them, then number of v increases, which may reduce required deletions? Actually if there are v before positions[left], then leftmost v may shift. but if we extended left but we skip some v? We are including indices that are not before positions[left], but any v before would be included automatically. So we may be able to extend to left until we hit another v? Let's think more.
+
+Suppose we have positions list. Between two consecutive v's, we have some not v elements. If we delete them, we can merge adjacent v's into same subarray. So the condition non-v between chosen first and last v should be <=k. The length of resulting subarray will be number of indices between first and last v inclusive, which equals (positions[last]-positions[first]+1). Now if we extend to left but after positions[first]-1 we might encounter another v? That would extend first v index to that new position and reduce deletions required etc. But that is captured by expanding left pointer in positions array. Similarly extend to right.
+
+Thus the optimal subarray boundaries will align with the first and last v considered (positions[left] and positions[right]) because extending further would either increase number of v included (shift boundaries in positions array) or include only non-v which can be absorbed by the remaining deletion budget. But we can potentially extend to include many non-v beyond last v, increasing window size but not increasing deletions because we already used some deletions inside; we could use remaining deletions to add edges. But does including non-v beyond last v always beneficial? Yes if we have remaining deletions left. Eg positions[right] = 10, positions[previous] = 2, deletions needed inside = some amount <=k. If we have remaining budget, we can extend to rightmost index up to positions[right] + remaining_k. That increases length by remaining_k. But does that produce a longer subarray that might further include another v beyond? That would shift right boundary to that v, but we can then consider that window.
+
+Thus the maximum length for a given v should be max over windows of positions array of (positions[right] - positions[left] + 1 + remaining_k_after), where remaining_k_after = k - deletions_inside. But remaining_k_after <=k. But we can extend by that amount. However the remaining_k_after could allow us to include many non-v on either side. But the maximum possible extension to either side is limited by array boundaries.
+
+But we can just treat the length as positions[right] - positions[left] + 1 + min(k - deletions_inside, some max). But deletions_inside computed from positions[right]-positions[left]-(right-left). So remaining_k = k - (positions[right]-positions[left]-(right-left)). The max extension to left is limited by positions[left] indices before that: positions[left] - 0? But if there are v earlier, we would consider them. So to incorporate extension, we might just ignore because we can potentially shift left boundary leftwards using a left pointer to earlier v. But that would change window. So maybe it's optimal to consider windows that are maximal number of v's with deletions <=k; the length of subarray then is positions[right] - positions[left] + 1 + remaining_k? Wait but we cannot exceed array boundaries. The left extension: we could extend leftwards by some amount of non-v at most remaining_k, but if we extend beyond array start, to index 0. So length increase = min(remaining_k, positions[left] - 0). Similarly right extension: min(remaining_k, n-1 - positions[right]). Combined extension may exceed remaining_k if we extend both sides? Actually we have total remaining deletions for extension across both sides, but we cannot exceed k total for entire subarray. The deletions inside are counted already. For extension, we must use deletions for each extra non-v included. So total deletions including inside and used for extension <= k. The inside + extension <= k. So we cannot use too many for extension. But we already computed remaining_k = k - inside deletions. So we can use up to remaining_k extra deletions. We can choose to use them leftwards and/or rightwards. Extending leftwards can add at most min(remaining_k, positions[left]). Extending rightwards can add at most min(remaining_k, n-1-positions[right]). But we cannot exceed remaining_k total, so if we extend both sides, sum of added indices <= remaining_k. To maximize length, we should extend as much as possible to one side only because resources limited. So the maximum extra we can add is remaining_k. So the final length = (positions[right] - positions[left] + 1) + remaining_k. But cannot exceed n obviously. So we can compute min(length + remaining_k, n).
+
+Thus answer for v = max over all left,right of (positions[right]-positions[left]+1 + (k - deletions_inside)). Where deletions_inside = positions[right] - positions[left] - (right-left). Simplify: length_inside = positions[right]-positions[left]+1; remaining = k - (positions[right]-positions[left] - (right-left)). Then candidate_length = length_inside + min(remaining, n - length_inside). Actually we can't exceed n. But remaining may exceed n-len inside? But remaining <= k <= n. If length_inside + remaining > n, clamp to n. That is fine.
+
+But we derived remaining = k - (positions[right]-positions[left] - (right-left)). Equivalent: k - (length_inside - (right-left+1)) i.e., k - (length_inside - cnt_v_inside) = k - deletions_inside. But deletions_inside = length_inside - cnt_v_inside. So candidate = length_inside + min(remaining, n - length_inside). However n - length_inside is number of indices outside window.
+
+Thus candidate <= min(length_inside + remaining, n). But remaining <= n. So we take min(length_inside + remaining, n). So algorithm: for each v, use two pointers over its positions list. For each right index j: while deletions_inside > k: move left++. Keep track of answer candidate. For each window, compute length_inside = positions[j]-positions[left]+1. remaining = k - deletions_inside. cand = min(length_inside + remaining, n). Keep max.
+
+Edge case: if v occurs less than further, window only includes v's. Also consider empty array deletion: returns 0? But with deletions we could get empty subarray. Anyway the algorithm returns at least 0.
+
+Complexity: for each value, O(m) where m = occurrences count. Sum over values = n. So O(n). Good.
+
+Let's test with examples.
+
+Example1: nums [1,3,2,3,1,3], k=3. n=6.
+
+Positions for 1: [0,4]
+Process window left=0 right=0: positions[0]=0; length_inside=1; deletions_inside=0; remaining=3; candidate=min(1+3,6)=4? Wait compute: deletions_inside=0 because length_inside=1, cnt_v_inside=1. remaining=3. candidate = min(4,6)=4. But actual answer 3. But we might overcount because we assumed we can delete 3 non-v outside. But we cannot delete those extra indices because they are outside all v's? Wait we can delete up to k elements anywhere. If we take subarray consisting only of first 1 at index0 and keep it, we can delete 3 other elements anywhere else, but that does not affect subarray length. The subarray itself is contiguous. To get subarray of length 4, we need to have indices [0,3] or something. But if we choose subarray indices 0..3, we have elements [1,3,2,3] length 4. Deletions inside: non-v count (not 1) are indices 1,2,3 ->3 <=k. After deleting them, subarray collapses to [1]? Actually we delete those elements not v inside the subarray, but we keep the v's. Only v's remain contiguous? In subarray, only v=1 at index0 remains; the others removed, but resulting subarray would be [1] length1. Wait misunderstood: The definition expects that after deletions, the array becomes equal subarray contiguous with all elements equal. We are allowed to delete k elements from original array overall, then look at resulting array. The resulting equal subarray must be contiguous in the modified array. Not necessarily contiguous in original. For our example, we deleted indices 2 and 4. Final array: [1,3,3,3]. Longest equal subarray is [3,3,3] length3. So we cannot just delete outside subarray.
+
+Thus our model is wrong. We must choose a subarray from original array that after deleting some of its elements (up to k), the remaining subarray is equal. That means we pick a subarray where number of distinct values other than the target value <=k. But after deleting them, the subarray becomes all the target value, but the resulting subarray length equals count of target values inside window. Because we delete elements inside, not outside. Wait in example 1, subarray [1,3,2,3] (indices 0-3). Count of v=3=2? Actually target value 3: inside 0-3, we have v=3 at indices 1 and 3. So number of v=2. Deleting other elements 0 and 2 (which are 1 and 2) leaves [3,3] length 2. But answer 3 longer due to other subarray 1..3 indices 1-3: [3,2,3,? no]. Let's analyze answer: they deleted indices 2 and 4. After deletion array becomes [1,3,3,3]. The longest equal subarray is indices 1-3 in final array: [3,3,3] length3. In original array, that corresponds to indices [1,3] (1 to 3). After eliminating index 2 (value 2) before. But index 4 (value 1) is deleted but outside chosen subarray. Since we can delete up to k elements anywhere, the subarray of equal elements after deletion is contiguous in final array, but may correspond to a subarray in original array after removing some elements inside and maybe some outside? Let's think: In original, indices 1-3 are [3,2,3]. After deletion of index 2, they become [3,3]. But we need length3 final subarray; where does third 3 come? The final array has [1,3,3,3] after deletion of index 4. The three 3s come from original indices 1,3 and 5. After deletion of index 2 and 4, reorder? Wait index 5 is original 3 at index5. In final array, after deleting 2 and 4, the array becomes indices 0,1,3,5? Index mapping: original[0]=1, [1]=3, [2] deleted, [3]=3, [4] deleted, [5]=3 => final array [1,3,3,3]. The subarray of length3 is final indices 1-3 (positions of 3s). These correspond to original indices 1,3,5. They are not contiguous in original array, but after deletion, indices 2 and 4 removed, we get them contiguous. So subarray in final array corresponds to original indices with removed elements between them. So our problem is: we can delete up to k elements arbitrarily, and we want to find a contiguous subsequence of the modified array that is equal. This contiguous subsequence corresponds to some subsequence of original array where we delete certain elements possibly between them. We can delete at most k elements anywhere. Equivalent: find two indices l,r in original array such that after deleting up to k elements among those whose indices are between l and r inclusive that are not equal to some value v, the subsequence of indices with value v's between l and r forms a contiguous block in the modified array. But we also might need to delete some elements outside l,r? Those deletions don't affect the subarray. So essentially we need to find a subsequence value v where we delete at most k elements not equal to v between selected v's. Additionally we can delete some v's outside? Deleting v's inside would reduce length, worthless.
+
+Thus the problem reduces to: find longest subsequence of identical elements such that the number of other elements between its first and last occurrence (in original) is <= k (since we can delete them). Wait but consider example1: selected subsequence of 3's positions {1,3,5}. Between 1 and 5 inclusive original array indexes: 1..5 contains indices 1:3, 2:2, 3:3, 4:1, 5:3. Count of non-3 in 1..5 = 3 (indices 2,4). This is <=k=3. So we can delete those 3 elements to make the 3 positions contiguous. Resulting subarray length is number of 3's =3. Good.
+
+Thus the answer is: for each value v, find maximum number of occurrences of v within some interval [l,r] such that number of non-v in [l,r] <=k. Then answer is maximum number of v's across all v. But we want length of the subarray after deletion, which equals count of v's (since we delete non-v). So we just need maximum count_ among all v.
+
+Edge case: we can also delete k elements outside the picked interval, doesn't affect count. So yes.
+
+Thus solve: For each v, sliding window over positions of v: we need to find maximum count of v within [l,r] subject to deletions (non-v) <=k. Equivalent to earlier formula but counts only v's in window. Let's compute: For positions list positions of v. For each right pointer j, we find left pointer such that deletions_inside <=k. Deletions_inside: positions[j] - positions[left] + 1 - (j-left+1). So same formula. Then cur_count = j-left+1. We keep max of cur_count. That gives answer number of v's.
+
+But we also may consider scenario where we delete fewer than k elements leaving some other elements (non-v) inside but we don't delete them? They would remain, breaking equal subarray. So we must delete all non-v inside the interval we keep. Since we are deleting at most k, we cannot exceed k. So are we forced to delete all non-v inside? yes because if any non-v remain inside subarray after deletion, subarray not equal. So we need to delete all non-v in interval. So interval must have deletions count <=k.
+
+Thus algorithm: For each value v, sliding window over its positions list to maximize count of v inside interval where deletions <=k. That answer is length of longest equal subarray after deletions.
+
+Let's test with Example1: v=3 positions [1,3,5]. For right=0 (pos1), left=0: deletions 0, count1=1. ans=1. right=1 pos3: left=0: deletions = 3-1+1 - 2=3 -? Wait 3-1+1=3; minus 2=1 <=k. count=2. ans=2. right=2 pos5: left=0: deletions = 5-1+1 -3 =5-? 5-1+1=5; minus3=2 <=3. count=3. ans=3. So final ans=3 matches.
+
+Example2: nums [1,1,2,2,1,1], k=2. positions of 1: [0,1,4,5]. Sliding. right=0 ans1. right=1 left0: deletions=1-0+1-2=0 <=2 count=2 ans=2. right=2 pos4 left0: deletions=4-0+1-3=2 <=2 count=3 ans=3. right=3 pos5 left0: deletions=5-0+1-4=2 <=2 count=4 ans=4. Good. positions of 2: [2,3]. Will yield count 2.
+
+Edge case: If k large enough to delete all non-v in entire array, we can keep all v's. The window covers whole array, deletions inside = n - m_count <=k, answer = m_count. That's fine.
+
+Complexity: Build dict mapping value->list. Iterate each list with two pointers.
+
+Edge: k may exceed n, but else fine.
+
+Return max over all values. Minimum 0? Even if k=0, subarray can be any equal contiguous subarray of original. Our algorithm will find longest subarray of equal elements because we will require deletions inside <=0 meaning deletions must be 0 i.e., window must have no non-v between chosen v's, meaning positions must be consecutive indices in array. But sliding window reduces left after encountering non-v. Works.
+
+Implementation details: Use dictionary of lists. Iterate over items. For each positions list (list of idx). Use two pointers l=0. For r in range(len(positions)):
+    while (positions[r] - positions[l] +1 - (r-l+1)) > k:
+        l+=1
+    max_count = max(max_count, r-l+1)
+
+Edge: if list size <=1, handle appropriately.
+
+Also need to handle possibility that no value appears? At least one element.
+
+Return global max.
+
+Let's test with simple case: nums=[1,2,3], k=1. positions 1: [0] -> max 1. 2:[1]->1. 3:[2]->1. Answer 1.
+
+Check scenario where we might benefit from deleting 0 non-v but extend window to cover multiple v's separated by non-v but affordable k: yes.
+
+Edge case: Suppose k=0. positions [1,4,5]; we need contiguous v indices. windows until deletions>0. So when r=1 pos4, l=0 deletions=4-1+1-2=2>0, l moves to 1: deletions = 0. count=1. So max remains 1.
+
+Ok.
+
+Complexities fine.
+
+Let's test additional: nums=[1,1,1,1], k=10. All 1s positions [0,1,2,3]. Deletions inside is always 0, count = 4. answer 4.
+
+Edge: big k but less than non-v count? Example: 5 unique values, k=1. For any value, you can only delete at most 1 non-v inside window, so you could find 2 identical values separated by one other value. Good.
+
+Now write solution. Use defaultdict(list). compute max_len = 0.
+
+Time O(n). Memory O(n).
+
+Let's test our algorithm with example 1, 2 to confirm.
+
+Implementation in Python.
+
+Potential micro optimization: Because nums[i] <= n, we can store in dict or list of lists.
+
+Return max_len.
+
+Edge: ... Should we consider that we can delete elements outside interval to lower deletions inside? No because deletions outside do not affect deletions count inside. But they use up budget though. We want to delete up to k elements inside interval; using them outside reduces available inside? Wait description: We can delete at most k elements from array. We are allowed to delete any elements including those inside interval. To make interval all equal, we need to delete all non-v inside. So if we also delete some inside elements but not all non-v, subarray not equal. If we delete additional elements inside that are v's it's pointless. Deleting elements outside does not help subarray but also consumes part of budget. So to maximize subarray length, we would not delete extra outside unless necessary for some other objective. But deletions outside don't help subarray. So we can assume we only delete inside.
+
+Thus algorithm stands.
+
+Edge: using all k to delete non-v inside interval, we might exceed k, but we need <=k. So fine.
+
+Return result.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a fixed value `v` we look for the longest subarray of the original array
+that can become an *equal* subarray (all elements are `v`)
+after deleting at most `k` elements.
+
+--------------------------------------------------------------------
+
+#### 1.  Reformulation
+
+Take a subarray `[l … r]`.  
+Inside this interval the elements are of two kinds
+
+```
+   – elements equal to v       (good)
+   – other elements            (must be deleted)
+```
+
+Every other element inside `[l … r]` has to be deleted, otherwise the subarray is
+not “equal”.  
+Therefore the number of deleted elements inside the interval is
+
+```
+deletions_inside = (#elements in [l … r]) –
+                   (# occurrences of v in [l … r])
+```
+
+The subarray can be turned into an equal subarray iff  
+
+```
+deletions_inside ≤ k
+```
+
+If it is possible, the length of the resulting equal subarray is simply
+
+```
+count_v =  (# occurrences of v in [l … r])
+```
+
+So for a fixed value `v` we have to maximise the count of `v`
+inside an interval whose number of other elements does not exceed `k`.
+
+--------------------------------------------------------------------
+
+#### 2.  Sliding window on the positions of `v`
+
+Let
+
+```
+pos[0] < pos[1] < … < pos[m-1]
+```
+
+be the list of indices where `v` occurs in the original array (`m` may be large
+or small – altogether all lists together contain exactly `n` indices).
+
+Consider a window of consecutive indices in this list:
+
+```
+window = pos[left] … pos[right]      (left ≤ right)
+```
+
+The interval in the original array that covers this window is
+
+```
+[l , r] = [ pos[left] , pos[right] ]
+```
+
+Inside this interval
+
+```
+length_inside          = pos[right] – pos[left] + 1
+number_of_v_inside     = right – left + 1
+deletions_inside       = length_inside – number_of_v_inside
+```
+
+Sliding the window with two pointers keeps the window
+small enough – move `left` until  
+`deletions_inside ≤ k`.  
+For every position of `right` we know the maximum possible `left`
+and therefore obtain a candidate value
+
+```
+cand = right – left + 1            # number of v’s in the current window
+```
+
+The maximum `cand` over all windows gives the longest equal subarray
+that can be obtained for the value `v`.
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm described above returns the correct answer.
+
+---
+
+##### Lemma 1  
+For a fixed value `v` and any interval `[l … r]`
+(`0 ≤ l ≤ r < n`) the following are equivalent
+
+1. `deletions_inside = (r‑l+1) – (# of indices i∈[l…r] with nums[i]==v)
+   ≤ k`
+2. There exists a subarray of the final array (after at most `k` deletions)
+   consisting only of `v` and containing exactly all occurrences of `v`
+   between indices `l` and `r`.
+
+**Proof.**
+
+*If 1 holds*  
+All other elements inside `[l … r]` can be deleted – that uses at most `k`
+deletions. The remaining elements are all `v`, situated in the same order
+as in the original array. After no more deletions inside the interval,
+these `v` form a contiguous subarray of the resulting array.
+
+*If 2 holds*  
+All occurrences of `v` between `l` and `r` belong to a contiguous subarray
+in the final array, hence all other elements of `[l … r]` must have been deleted.
+The number of such deletions equals `deletions_inside`; because the subarray
+is equal, it cannot exceed `k`. ∎
+
+
+
+##### Lemma 2  
+For a fixed value `v` the algorithm examines **all**
+windows of consecutive indices in the list `pos` for which
+`deletions_inside ≤ k`.
+
+**Proof.**
+
+The algorithm uses a classic two‑pointer technique:
+
+```
+left   over 0 … m-1          (moving only forward)
+right  over 0 … m-1          (also only forward)
+```
+
+When `right` is increased one step, `deletions_inside` may grow.
+While it would become larger than `k`, the algorithm increments `left`
+until the condition holds again.
+Thus for every `right` the smallest `left` satisfying the condition
+is found, and every larger `left` would violate it.
+Consequently every feasible window `[left … right]`
+(`deletions_inside ≤ k`) is seen by the algorithm exactly once. ∎
+
+
+
+##### Lemma 3  
+For a fixed value `v` the maximum number of `v`’s inside a feasible
+interval `[l … r]` equals the maximum `cand` produced by the algorithm.
+
+**Proof.**
+
+*Soundness* –  
+Each candidate `cand` corresponds to a window
+`[left … right]` on the indices list.
+By construction
+`deletions_inside ≤ k` (see Lemma&nbsp;2),
+hence by Lemma&nbsp;1 the interval
+`[pos[left] … pos[right]]` can be turned into an equal subarray
+containing exactly those `right-left+1 = cand` occurrences of `v`.  
+So `cand` is attainable.
+
+*Completeness* –  
+Take any feasible interval `[l … r]` for the value `v`,
+and let the positions of `v` inside it be
+`pos[idx1], …, pos[idx2]` (`idx1 ≤ idx2`).
+These indices form a window of consecutive indices in `pos`.
+By Lemma&nbsp;2 this window is examined by the algorithm.
+Its `cand` is exactly `idx2-idx1+1`,
+the number of `v` inside the original interval,
+which is the desired value. ∎
+
+
+
+##### Lemma 4  
+Let `best_v` be the maximum length over all values `v`
+returned by the algorithm.  
+`best_v` is the length of the longest equal subarray achievable
+after deleting at most `k` elements.
+
+**Proof.**
+
+For any value `v` Lemma&nbsp;3 tells us that the algorithm
+produces the maximum number of `v`’s that can be inside
+a feasible interval.  
+Taking the maximum over all values therefore yields the overall
+maximum possible equal subarray length. ∎
+
+
+
+##### Theorem  
+`longestEqualSubarray(nums, k)` returns the maximum possible length of an
+equal subarray that can be obtained from `nums` after deleting at most `k`
+elements.
+
+**Proof.**
+
+The algorithm processes every distinct value in `nums`.
+For each of them it obtains exactly the best achievable length
+by Lemma&nbsp;3.  
+Applying Lemma&nbsp;4, the final maximum over all values is the desired
+optimal length. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+Let `n = len(nums)`.
+
+* Building the dictionary of position lists : `O(n)`
+* For each value we run the two‑pointer scan over its list.
+  The total number of indices visited over all values is exactly `n`.  
+  Therefore the total time is `O(n)`.
+* The dictionary and the lists together store `n` integers → `O(n)` memory.
+
+`k` can be up to `n`; the algorithm works for all permitted inputs.
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+from collections import defaultdict
+from typing import List
+
+class Solution:
+    def longestEqualSubarray(self, nums: List[int], k: int) -> int:
+        # map value -> list of indices where it occurs
+        pos = defaultdict(list)
+        for i, v in enumerate(nums):
+            pos[v].append(i)
+
+        n = len(nums)
+        answer = 0
+
+        # iterate over every value that occurs
+        for indices in pos.values():
+            m = len(indices)
+            left = 0
+            for right in range(m):
+                # shrink window if deletions exceed k
+                while left <= right:
+                    deletions_inside = (
+                        indices[right] - indices[left] + 1   # length of interval
+                        - (right - left + 1)                # number of v inside
+                    )
+                    if deletions_inside <= k:
+                        break
+                    left += 1
+
+                # all other indices inside the interval are deleted,
+                # number of v's kept is window size
+                cand = right - left + 1
+                if cand > answer:
+                    answer = cand
+
+        return answer
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

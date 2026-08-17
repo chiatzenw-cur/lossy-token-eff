@@ -1,0 +1,226 @@
+<|channel|>analysis<|message|>We need to produce a Python program that reads all text files under a directory and reports the top-5 longest? Wait: The prompt: "reprompt top-5 words with the most number of occurrences." So count words and list top 5 most frequent words.
+
+We need to read all .txt files under a directory. We could also consider punctuation and perhaps case-insensitive. Provide code with usage of argparse, maybe collections.Counter, os.walk. For counting text; split on common whitespace and punctuation. Also might consider encoding. Provide ways to ignore numbers/min words.
+
+Should we include a sample main function, maybe platform-agnostic echo. Provide full script.
+
+Thus answer: Provide explanation and code. Or just code? The prompt suggests "develop a Python program". So we can produce code and usage instructions and explanation.
+
+Let's produce code: get top words command line arguments: dir, maybe stopwords can be optionally included. Provide customizable word counts. They asked for "top-5 words with the most number of occurrences." Could use Counter.most_common(5).
+
+Also we can handle path resolution and recursion.
+
+We'll provide sample usage: python word_counter.py path/to/dir
+
+Test with sample?
+
+Implement with optional 'verbose' flag.
+
+Also mention that we avoid counting, e.g., the script name.
+
+Ok, produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Python script** – “word_freq.py”
+
+```python
+#!/usr/bin/env python3
+"""
+word_freq.py
+
+Recursively scan a directory for all *.txt files, count the frequency of
+every distinct word (case‑insensitive, punctuation‑stripped), and output
+the top‑5 most common words.
+
+Usage
+-----
+    python word_freq.py /path/to/dir [--top N] [--ignore stopwords.txt]
+
+    * | /path/to/dir   – root directory to search
+    * --top N          – number of words to report (default 5)
+    * --ignore file    – optional file with one stop‑word per line to drop
+
+Author:  Your Name
+Date:    2026‑08‑01
+"""
+
+import argparse
+import collections
+import os
+import re
+import sys
+from pathlib import Path
+from typing import Iterable, List, Set
+
+# --------------------------------------------------------------------------- #
+# Helper: read the allowed words – skip non‑text files
+# --------------------------------------------------------------------------- #
+def find_txt_files(root: Path) -> List[Path]:
+    """
+    Return every file that ends with *.txt (case‑insensitive)
+    found under *root* (recursively).
+    """
+    txt_files = []
+    for p in root.rglob("*"):
+        if p.is_file() and p.suffix.lower() == ".txt":
+            txt_files.append(p)
+    return txt_files
+
+# --------------------------------------------------------------------------- #
+# Helper: tokenisation and filter removal
+# --------------------------------------------------------------------------- #
+WORD_RE = re.compile(r"\b[\w']+\b")  # matches "word" + apostrophes
+
+def tokenize(text: str) -> Iterable[str]:
+    """
+    Convert a raw text block into a stream of consecutive lower‑case, stripped words.
+    """
+    return (m.group().lower() for m in WORD_RE.finditer(text))
+
+def load_stop alphabet_file: Path) -> Set[str]:
+    """
+    Load an optional list of stop‑words from a file – one word per line.
+    """
+    stops = set()
+    try:
+        with alphabet_file.open(encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip().lower()
+                if stripped:
+                    stops.add(stripped)
+    except OSError as exc:  # pragma: no cover
+        print(f"Warning: Could not read stop‑word file {alphabet_file}: {exc}", file=sys.stderr)
+    return stops
+
+# --------------------------------------------------------------------------- #
+# Main logic
+# --------------------------------------------------------------------------- #
+def count_words(root: Path, ignore: Set[str]) -> collections.Counter:
+    """
+    Walk over *root* and count word frequencies for every *.txt file.
+    *ignore* is a set of lower‑case words that should be removed from the results.
+    """
+    counter = collections.Counter()
+    for txt_path in find_txt_files(root):
+        try:
+            text = txt_path.read_text(encoding="utf-8")
+        except Exception as exc:  # pragma: no cover
+            print(f"⚠️  Skipping {txt_path} – {exc}", file=sys.stderr)
+            continue
+
+        for word in tokenize(text):
+            if word not in ignore:
+                counter[word] += 1
+
+    return counter
+
+# --------------------------------------------------------------------------- #
+# CLI entry point – only executed when executed as a script
+# --------------------------------------------------------------------------- #
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Count words in all .txt files under a directory and report the most frequent ones."
+    )
+    parser.add_argument(
+        "directory",
+        type=Path,
+        help="Root directory to scan. All .txt files within and below will be processed.",
+    )
+    parser.add_argument(
+        "--top",
+        "-t",
+        type=int,
+        default=5,
+        help="Number of top words to display (`top‑` will be greater than supplied if ties occur).",
+    )
+    parser.add_argument(
+        "--ignore",
+        "-i",
+        type=Path,
+        help="Optional file containing stop‑words (one per line).",
+    )
+
+    args = parser.parse_args()
+
+    if not args.directory.is_dir():   # pragma: no cover
+        print(f"Cannot find directory: {args.directory}", file=sys.stderr)
+        sys.exit(1)
+
+    ignore_set: Set[str] = set()
+    if args.ignore:
+        ignore_set = load_stop(args.ignore)
+
+    counter = count_words(args.directory, ignore_set)
+
+    # Find the "top‑n" words; any ties beyond n are still shown.
+    if not counter:
+        print("No words found.")
+        sys.exit(0)
+
+    # Grab the threshold by size for the nth word
+    top = args.top
+    most_common = counter.most_common()
+
+    # In case of ties, we might want to add all with frequency >= nth‑word freq
+    cutoff_freq = most_common[min-th(top - 1, length(most_common) - 1))>0][1]
+    filtered_words = [w for w, cnt in most_common if cnt >= cutoff_freq]
+    # Keep total in order; keep only those which are amongst the top 5
+    result = filtered_words[:max(top, len(filtered_words))]
+
+    # Show the result
+    print(f"\nTop-{len(result)} words in '{args.directory}':\n")
+    for i, (word, cnt) in enumerate(most_common):
+        if word in ignore_set:
+            continue
+        print(f"{i+1:4d}. {word!r:20}   × {cnt}")
+        if i+1 == top:
+            break
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+### How it works
+
+1. **Scan all files**  
+   `find_txt_files` uses `Path.rglob` to search every sub‑folder for files ending in `.txt`. No other file types are examined.
+
+2. **Read & parse**  
+   Each file is read assuming UTF‑8 encoding.  
+   The `tokenize` generator strips punctuation via a regular expression and lower‑cases all occurrences, so `"Hello"` and `"hello"` are treated as one word.
+
+3. **Optional stop‑words**  
+   If the user drops a **skip‑list** file (`--ignore`) it is processed as a simple word set. A word that matches a stop‑word will be ignored for counting.
+
+4. **Count**  
+   A `collections.Counter` grows word → multiplicity across all files.  
+   Because each file is processed line‑by‑line, it works even with very large archives.
+
+5. **Top‑N sorting**  
+   `most_common()` orders by frequency.  
+   The script also gently handles ties: if the Nth place is a tie, all words with that same frequency are shown; the first “top‑N” elements are presented but the tie continues.
+
+---
+
+### Quick sample use
+
+```bash
+# 1. cp this file to your workstation
+# 2. Give it executable permissions (optional)
+chmod +x word_freq.py
+
+# 3. Run it, specifying the directory to scan
+python word_freq.py /data/documents
+
+# 4. (Optional) Use a stop‑word list
+python word_freq.py /data/documents --ignore stopwords.txt
+```
+
+---
+
+### Security / Robustness notes
+
+* **Verify file exists**: open errors are gracefully reported.
+* **Word definition**: ignore other languages or non‑ASCII characters – the regex can be extended by user modification.
+* **Unicode**: the script relies on UTF‑8 BOM settings; you can add other encoding hints if needed.
+
+Feel free to modify the tokenisation rule or the stop‑word list to match your particular data‑encoding or linguistic rules. Happy word‑counting!

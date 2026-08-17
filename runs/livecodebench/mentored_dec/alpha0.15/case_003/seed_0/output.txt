@@ -1,0 +1,307 @@
+<|channel|>analysis<|message|>We need to count number of integers between two numbers inclusive such that digit sum is between min_sum and max_sum. Numbers up to 10^22 => up to 22 digits. We can use DP via digit DP. Count f(str) = number of integers <= str with sum between min_sum and max_sum. Result = f(num2) - f(num1-1). Need to compute f for string up to 22 digits. We need to handle leading zeros: But since range includes zeros? For numbers lower bound min num1 >=1. We can pad? Approach: use DP state: position index, tight (is prefix equal to prefix of bound), sumSoFar, leadingZeroFlag? However sum requirements should consider the number itself. For leading zeros, they are not part of number; but we just want all numbers <= bound, with value >=0. But we want exclude 0? Since min_sum >=1, zero won't be counted anyway. So we can allow leading zeros; they will contribute sum zero and still counted if sum within range. But we don't want numbers with fewer digits but leading zeros not actual digits? Eg. number 5 in bound up to 12: digits with leading zeros "0005" sum 5; that's valid. Leading zeros considered correctly. So DP without leadingZero flag is fine, because 0-digit sum contributions 0. But careful: For numbers like 01 and 1 same representation but we will count once; leading zeros produce same integer. Counting all numbers from 0 to bound inclusive; numbers < bound* but with leading zeros produce duplicates? In DP counting each 22-digit representation yields one distinct integer. Each integer < bound will correspond to many leading zero strings? Wait we consider positions from most significant to least. Suppose bound has 2 digits "12". When we process DP with 2-digit positions (n=2). For integer 5: we consider representation "05" (since we process exactly 2 positions). But we cannot produce 5 as "5" vs "05" because we have fixed length. So each integer between 0 and 12 inclusive is represented by exactly one 2-digit vector, with leading zero for single-digit numbers. Good. So we can just DP over length of bound string, no leadingZero flag. Good.
+
+But we need to consider that count for bound string earlier: we need numbers from 0 to bound inclusive. Then result subtract. But min_sum >=1 so zero not counted.
+
+Implementation:
+
+dp[pos][tight][sum] returning count of numbers from pos to end.
+
+Use memoization: recursion index pos with tight and sum; N length <=22, max sum <=400. Complexity O(length * sum * 10). 22*401*10 ~ 88k.
+
+Memoization with dictionary.
+
+Define function count_le(number_str):
+
+n=len(number_str). Rec(pos, sum, tight). If pos==n: return 1 if min_sum <= sum <= max_sum else 0.
+
+Else: max_digit = int(number_str[pos]) if tight else 9. Loop d 0..max_digit: new_tight = tight and d==max_digit. new_sum = sum + d. If new_sum > max_sum: continue maybe skip due to pruning but not necessary; with large sum we can prune to keep dp dimension small but min sum up to 400. Use dp state dictionary: (pos, sum, tight). With tight dimension 2 and sum 0..max_sum maybe but we also need sum<min_sum but we store all sums up to max_sum because beyond sum too big, we may skip. But what about sum > max_sum? we could stop exploring when >max_sum because cannot reduce later digits. If new_sum > max_sum: continue. So store dp in dictionary.
+
+Return sum of rec calls mod mod.
+
+Now for subtracting: need f(num1-1) but num1 may be huge. Better to compute count_less_than(num1): count numbers < num1 with sum in range. Then answer = f(num2) - count_less_than(num1). We can compute f(num1-1) by building string of num1-1. But easier: compute count_le(num1_minus_one) using subtract one in string.
+
+We will need function dec_str(s). Implementation: convert to list, subtract 1 with borrow. If result negative? but num1>=1 so fine.
+
+Return modulo.
+
+Edgecases: need to handle min_sum <= sum. If min_sum > max_sum? but constraints say min_sum <= max_sum.
+
+Test provided.
+
+Time complexity fine.
+
+Let's code.
+
+We'll use lru_cache from functools recursively.
+
+But Python recursion may exceed frames? depth 22 fine.
+
+We need mod = 10**9+7.
+
+We must prevent large sum dimension: but we need sum upto max_sum. Use lru_cache with key (pos, sum, tight). Use default none. Python recursion plus lru_cache. Because max_sum <=400, pos <=22, 22*2*(401) ~ 17644 states.
+
+Let's implement.
+
+Implementation steps:
+
+def count_le(num_str): use nested function rec(pos, sum, tight). Use int list digits.
+
+Ok.
+
+final answer = (cnt_le(num2) - cnt_le(num1_minus_one)) % mod.
+
+Make sure modulo addition works.
+
+Write code accordingly.
+
+Let's produce final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every integer `x`
+
+```
+num1 ≤ x ≤ num2
+min_sum ≤ digit_sum(x) ≤ max_sum
+```
+
+we have to count how many such `x` exist.
+`num1 , num2` can have up to 22 decimal digits, therefore a direct
+iteration is impossible.
+
+--------------------------------------------------------------------
+
+#### 1.  Digit DP
+
+For a decimal string `S = s1 s2 … sn`  
+let
+
+```
+pos      – current position (0 … n)
+tight    – 1 iff the current prefix equals S[0:pos]
+sum_so   – sum of the digits chosen so far
+```
+
+When `pos == n` the whole number is chosen,  
+we accept it only if `min_sum ≤ sum_so ≤ max_sum`.
+
+The transition:
+
+```
+max_digit = si  if tight = 1
+           9  if tight = 0
+
+for d in 0 … max_digit:
+        new_tight = tight and d == max_digit
+        new_sum   = sum_so + d
+        if new_sum > max_sum:  # no hope, skip
+                continue
+        answer += rec(pos+1 , new_sum , new_tight)
+```
+
+The number of states is
+
+```
+pos  : 0 … 22            (≤ 23)
+tight: 0 or 1
+sum  : 0 … max_sum (≤ 401)
+```
+
+≈ 23 · 2 · 401  ≈ 18 000 – absolutely tiny.  
+`lru_cache` gives us a memoised recursion in O(number_of_states).
+
+--------------------------------------------------------------------
+
+#### 2.  “≤” helper
+
+`count_le(S)`  – number of integers `x` with
+
+```
+0 ≤ x ≤ S        and        min_sum ≤ digit_sum(x) ≤ max_sum
+```
+
+The digits of `S` are processed exactly as described in the DP.
+The result is taken modulo `P = 1 000 000 007`.
+
+--------------------------------------------------------------------
+
+#### 3.  “<” helper
+
+We need the count of numbers strictly smaller than `num1`.  
+That is `count_le(num1‑1)`.  
+Because `num1 ≤ 10^22` we can safely decrement it as a decimal string:
+
+```
+decimal_sub_one(s):
+        take digits from the end, borrow when needed
+        return the resulting string (without leading zeros unless the
+        number is zero)
+```
+
+( `num1 ≥ 1`, thus the result is always valid.)
+
+--------------------------------------------------------------------
+
+#### 4.  Final answer
+
+```
+good = count_le(num2) – count_le(num1-1)
+good = (good % P + P) % P        # keep positive
+```
+
+--------------------------------------------------------------------
+
+#### 5.  Correctness Proof  
+
+We prove that the algorithm returns the number of integers `x`
+satisfying the conditions.
+
+---
+
+##### Lemma 1  
+`count_le(S)` counts exactly the integers `x` with  
+`0 ≤ x ≤ S` and `min_sum ≤ digit_sum(x) ≤ max_sum`.
+
+**Proof.**
+
+The DP examines all digit strings of length `|S|` that do not exceed `S`.
+Every such string represents a unique integer `x` in the desired range.
+Conversely, every integer `x` in that range has a decimal representation
+of length `|S|` (with leading zeros if necessary) that is explored by
+the DP.
+The recursion accepts a digit string iff the accumulated sum is within
+`[min_sum, max_sum]`.  
+Thus the return value equals the desired quantity. ∎
+
+
+
+##### Lemma 2  
+For any two integers `a ≤ b`  
+`count_le(b) – count_le(a-1)` equals the number of integers
+`x` with `a ≤ x ≤ b` and `min_sum ≤ digit_sum(x) ≤ max_sum`.
+
+**Proof.**
+
+By Lemma&nbsp;1, `count_le(b)` counts all integers in ` [0, b]`
+with the required digit‑sum bounds,
+and `count_le(a-1)` counts all integers in ` [0, a-1]`
+with the same bounds.
+Both ranges are disjoint and their union is exactly ` [0, b]`.
+Subtracting removes all integers `< a` and keeps precisely those
+in ` [a, b]`. ∎
+
+
+
+##### Lemma 3  
+`num1_minus_one` computed by `decimal_sub_one(num1)` equals `num1-1`.
+
+**Proof.**
+
+`decimal_sub_one` copies the usual decimal subtraction algorithm:
+starting from the least significant digit,
+it subtracts one, borrowing when a digit becomes `-1`.  
+All other digits remain unchanged.
+Because the input is a valid decimal representation of an integer
+≥ 1, the algorithm never underflows, and the resulting string
+represents exactly the value `num1-1`. ∎
+
+
+
+##### Theorem  
+`Solution.count` returns the number of integers `x` satisfying  
+
+```
+num1 ≤ x ≤ num2
+min_sum ≤ digit_sum(x) ≤ max_sum
+```
+
+**Proof.**
+
+Let `a = num1`, `b = num2`.  
+By Lemma&nbsp;3 the algorithm obtains `a-1` correctly.  
+By Lemma&nbsp;1 it computes
+
+```
+A = count_le(b)   = | {x : 0 ≤ x ≤ b , min_sum ≤ sum(x) ≤ max_sum} |
+C = count_le(a-1) = | {x : 0 ≤ x ≤ a-1 , min_sum ≤ sum(x) ≤ max_sum} |
+```
+
+Lemma&nbsp;2 shows that `A - C` equals the number of integers in
+`[a, b]` satisfying the digit‑sum condition.
+The algorithm returns this difference modulo `P`, preserving the value
+of the count in the required residue field. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Complexity Analysis
+
+Let `L = len(num2)` (≤ 22), `M = max_sum` (≤ 400).
+
+Number of DP states: `O(L · M · 2)` ≈ 18 000.  
+Each state iterates over at most 10 digits.
+
+```
+Time   :  O(L · M · 10)  ≤ 2 · 10^5   operations
+Memory :  O(L · M · 2)   ≈ 18 000 integers
+```
+
+Both are easily within the limits.
+
+--------------------------------------------------------------------
+
+#### 7.  Reference Implementation  (Python 3)
+
+```python
+from functools import lru_cache
+from typing import Tuple
+
+MOD = 10 ** 9 + 7
+
+class Solution:
+    def count(self, num1: str, num2: str, min_sum: int, max_sum: int) -> int:
+        # ---------- helper: count numbers <= bound ----------
+        def count_le(bound: str) -> int:
+            digits = [int(c) for c in bound]
+            n = len(digits)
+
+            @lru_cache(maxsize=None)
+            def dfs(pos: int, tight: int, cur_sum: int) -> int:
+                if pos == n:
+                    return 1 if min_sum <= cur_sum <= max_sum else 0
+                limit = digits[pos] if tight else 9
+                total = 0
+                for d in range(limit + 1):
+                    new_sum = cur_sum + d
+                    if new_sum > max_sum:
+                        continue          # remaining digits can only increase the sum
+                    new_tight = tight and d == limit
+                    total += dfs(pos + 1, new_tight, new_sum)
+                return total % MOD
+
+            return dfs(0, 1, 0)
+
+        # ---------- helper: subtract one from a decimal string ----------
+        def dec_str(s: str) -> str:
+            # we know s represents an integer ≥ 1
+            digits = list(map(int, s))
+            idx = len(digits) - 1
+            while idx >= 0 and digits[idx] == 0:
+                digits[idx] = 9
+                idx -= 1
+            digits[idx] -= 1
+            # remove leading zeros
+            i = 0
+            while i < len(digits) - 1 and digits[i] == 0:
+                i += 1
+            return ''.join(map(str, digits[i:]))
+
+        # ---------- main ----------
+        total_up_to_b = count_le(num2)
+        num1_minus_one = dec_str(num1)
+        total_up_to_a_minus1 = count_le(num1_minus_one)
+
+        ans = (total_up_to_b - total_up_to_a_minus1) % MOD
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above.

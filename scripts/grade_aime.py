@@ -28,7 +28,9 @@ import sys
 from collections import defaultdict
 from typing import Any
 
-FINAL_MARKER = "<|channel|>final<|message|>"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from answer_extraction import final_segment  # noqa: E402 -- covers both Harmony (GPT-OSS) and Qwen3's </think> convention
+
 BOXED = re.compile(r"\\boxed\{\s*([0-9]{1,3})\s*\}")
 INTEGER = re.compile(r"\b([0-9]{1,3})\b")
 
@@ -52,9 +54,9 @@ def read_json(path: pathlib.Path) -> dict[str, Any]:
 
 def extract_answer(text: str) -> tuple[str | None, str]:
     """Return (answer, how). None means the run produced no final answer."""
-    if FINAL_MARKER not in text:
-        return None, "no_final_channel"
-    final = text.split(FINAL_MARKER)[-1]
+    final, how = final_segment(text)
+    if final is None:
+        return None, how
     boxed = BOXED.findall(final)
     if boxed:
         return str(int(boxed[-1])), "boxed"

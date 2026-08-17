@@ -1,0 +1,283 @@
+<|channel|>analysis<|message|>We need to compute total number of permutations of nums such that adjacent numbers have divisibility relation. n <= 14, so we can use DP over subsets. Classic problem: "Count number of special permutations" same as LeetCode 1562. Approach: dp[mask][i] = number of ways to form permutation represented by the bitmask mask and ending at index i (i included). For each i where mask bit set. Transition transitions from previous mask' = mask ^ (1<<i). For each j in mask' where nums[j] and nums[i] divisible, dp[mask][i] += dp[mask'][j-1]. Base case: mask with only one bit: dp[1<<i][i] = 1. Final answer sum over dp[(1<<n)-1][i] for all n.
+
+Complexities: O(n^2 * 2^n). With n=14, ~ 14 * 14 * 16384 = 3^? ~ 14^2 * 16384 = < 3 million.
+
+Implementation details: Python: list of lists int, code.
+
+Edgecases: perfect.
+
+Return func modulo 10^9+7.
+
+We should also use faster method: count pre adjacency list for all indices if divisible. Precompute adjacency matrix: adj[i][j] = 1 if nums[i] % nums[j]==0 or nums[j] % nums[i]==0 else 0. But within loops.
+
+Also handle normal DP.
+
+Implement:
+
+def specialPerm(self, nums):
+
+    n = len(nums)
+    adj = [[False]*n for _ in range(n)]
+    for i in range(n):
+        for j in range(n):
+            if i!=j:
+                if nums[i] % nums[j] == 0 or nums[j] % nums[i]==0:
+                    adj[i][j] = True
+
+    size = (1<<n)
+    dp = [[]]*(size)
+    # more efficient to use list of lists and fill.
+    but we'll use iterative loops: for mask in range(size):
+        dp[mask] = [[] for _ in range(n)] maybe.
+
+But we need large list. We'll implement dp as list of lists, for each mask a list of ints length n. For memory 2^14 * 14 arrays ~ 229k ints; okay.
+
+Implementation:
+
+MOD = 10**9+7
+
+dp = [ [0]*n for _ in range(1<<n) ]
+
+for i in range(n): dp[1<<i][i]=1
+
+for mask in range(1<<n):
+    for i in range(n):
+        if not (mask & (1<<i)):
+            continue
+        cur = dp[mask][i]
+        # if cur==0 continue
+        for j in range(n):
+            if mask & (1<<j):
+                continue
+            if adj[i][j]:
+                dp[mask | (1<<j)][j] = (dp[mask | (1<<j)][j] + cur) % MOD
+
+Wait this approach is adding j we go forward only one step, but may not produce all permutations orientation? Actually with base ensures we start at each i with mask having only that element. Then we expand by adding new element j at end of current permutation, consistent with building order. Because the property must hold for adjacent pair (prev element i, new element j). We need to assign j at end. Yes.
+
+Thus final mask = full. Sum all dp[full][i].
+
+We also need to account that our transition uses dp[mask][i] where i not last element? Wait the DP orientation: dp[mask][i] denotes number of ways to reach set mask with last element i. That means that the current sequence ends with i. We then add an adjacent element j. Condition: i and j must be divisible. So we add j after i. So dp[mask | (1<<j)][j] += dp[mask][i].
+
+Make sure for cur>0 else skip if 0.
+
+Better: loop for mask in range(1<<n): For i in range(n): if mask & (1<<i): cur = dp[mask][i] ; if cur==0: continue ; for j in range(n): if not (mask & (1<<j)) and adj[i][j]: dp[mask | (1<<j)][j] = (dp[mask | (1<<j)][j] + cur) % MOD
+
+Answer = sum(dp[full][i]) % MOD.
+
+Edgecases: n up to 14. Works.
+
+Testing with custom examples.
+
+We also might allow optimization: if n=14, loops fine.
+
+We might also perform adjacency as adjacency list for each i, speeds up loops.
+
+Examples: [2,3,6] -> result matches 2.
+
+But let's double-check: adjacency: 2-6, 6-3, 2-3? 2%3 not 6%2. 3%2 not 2%3. 2 and 3 not divisible. So only edges: 2-6, 6-3.
+
+Ok.
+
+Now produce code. Should import typing List.
+
+Now produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every element of `nums` we can only put it in a position that is
+compatible with the element that will border it.
+For a pair of neighbours we need
+
+```
+either a % b == 0          (a is divisible by b)
+or   b % a == 0            (b is divisible by a)
+```
+
+The array contains at most 14 distinct positive integers –  
+`14!` operations are impossible – but a dynamic programming over all
+subsets of indices (`2ⁿ ≤ 2¹⁴ = 16384`) satisfies the constraints.
+
+--------------------------------------------------------------------
+
+#### 1.  Graph view
+
+Treat the numbers as vertices of an undirected graph.
+Connect vertices `i` and `j` if the divisibility condition holds.
+
+```
+i -- j   ⇔   nums[i] % nums[j] == 0   or   nums[j] % nums[i] == 0
+```
+
+A *special permutation* is an ordering of all vertices where every
+neighbouring pair is connected – i.e. a Hamiltonian path in this
+graph.
+
+--------------------------------------------------------------------
+
+#### 2.  DP over subsets
+
+`dp[mask][i]`  
+= number of ways to visit exactly the set of indices whose bits set in
+`mask` and end at index `i`.  
+`Transitions`
+
+```
+last vertex = i          (mask contains i)
+next vertex  = ai (ai not in mask)
+i and ai   must be connected
+```
+
+```
+dp[mask | (1<<ai)][ai] += dp[mask][i]        (mod M)
+```
+
+Initial states: a single vertex
+
+```
+dp[1<<i][i] = 1      (shuffle length i only)
+```
+
+Final answer: sum over all ends of the full mask.
+
+```
+full = (1<<n) – 1
+answer = Σ dp[full][i]
+```
+
+Complexity: `P = 2ⁿ`, `N = n`  
+
+```
+time   :  O(N² · P)   ≤ 2⁴·14²   ≈ 3·10⁶ iterations
+memory :  O(N · P)    ≤ 14 · 16384 ≈ 230k integers
+```
+
+Both are easily inside the required limits.
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the number of special permutations
+of `nums`.
+
+---
+
+##### Lemma 1  
+For every mask and index `i` such that `i` is in `mask`,
+`dp[mask][i]` equals the number of *valid* sequences  
+that use exactly the elements in `mask` and append `nums[i]` last
+(meaning the last element of the sequence is it).
+
+**Proof.**
+
+*Base.*  
+If `mask == 1<<i`, the only path is the singleton containing `i`.  
+`dp[mask][i] = 1` – correct.
+
+*Induction step.*  
+Assume the claim true.  
+Consider `dp[mask][i]` where `mask` contains at least one element other
+than `i`.  
+All valid sequences ending with `i` are obtained by taking a shorter
+valid sequence that ends with some `j` (`j ∈ mask` , `i ≠ j`)  
+and appending `i`.  
+By induction hypothesis `dp[mask ^ (1<<i)][j]` counts the shorter
+sequences.  
+`i` can be appended **iff** `i` and `j` edge in the graph (divisibility)
+which is exactly the condition used in the transition.
+Therefore the transition counts all valid sequences ending at `i`
+and no others, completing the induction.
+
+During the transition we add all such possibilities from each `j`, so
+`dp[mask][i]` is correctly updated. ∎
+
+
+
+##### Lemma 2  
+After processing the whole DP, for the full mask `F = (1<<n)-1`,
+`dp[F][i]` equals the number of **special permutations** of all
+elements that end with `nums[i]`.
+
+**Proof.**
+
+Directly from Lemma&nbsp;1 with `mask = F`.  
+All indices are used, the sequence is a permutation, and adjacency
+conditions guarantee it is special. ∎
+
+
+
+##### Lemma 3  
+The sum `Σ_{i=l}^{n-1} dp[F][i]` equals the number of all special
+permutations of `nums`.
+
+**Proof.**
+
+Every special permutation ends with exactly one element `nums[i]`.  
+By Lemma&nbsp;2, `dp[F][i]` counts all special permutations that end
+with `i`.  
+Different `i` produce disjoint sets of permutations, so summing over
+all `i` gives the total number of special permutations. ∎
+
+
+
+##### Theorem  
+`special.perm(nums)` returned by the algorithm equals the number of
+special permutations of `nums` modulo `10^9+7`.
+
+**Proof.**
+
+By definition of the DP we compute each `dp` entry modulo `M`.
+From Lemma&nbsp;3, the final sum equals the required number of
+special permutations.  
+Thus the algorithm returns the correct answer. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+INF = 1000000007
+
+class Solution:
+    def specialPerm(self, nums: List[int]) -> int:
+        n = len(nums)
+        full = (1 << n) - 1
+
+        # Pre‑compute adjacency (divisibility)
+        adj = [[False]*n for _ in range(n)]
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+                        adj[i][j] = True
+
+        dp = [[0]*n for _ in range(n << 1)]                     # 2^n rows
+        for i in range(n):
+            dp[1 << i][i] = 1                                   # base
+
+        for mask in range(1 << n):
+            for last in range(n):
+                if not ((mask >> last) & 1):
+                    continue                # `last` not in mask
+                cur = dp[mask][last]
+                if cur == 0:
+                    continue
+                # try to append new element `next`
+                for nxt in range(n):
+                    if mask & (1 << nxt):
+                        continue
+                    if adj[last][nxt]:
+                        new_mask = mask | (1 << nxt)
+                        dp[new_mask][nxt] = (dp[new_mask][nxt] + cur) % INF
+
+        ans = 0
+        for i in range(n):
+            ans = (ans + dp[full][i]) % INF
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

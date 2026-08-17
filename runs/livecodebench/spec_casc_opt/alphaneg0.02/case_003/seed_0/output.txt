@@ -1,0 +1,749 @@
+<|channel|>analysis<|message|>We need to count number of integers between two numbers inclusive (given as strings) with digit sum in [min_sum, max_sum]. Numbers up to 1e22, so length up to 22. Sum up to 32*9? Actually sum up to 400*9=3600? But constraints: max_sum <= 400. So total digits <= 22, sum <= 198. But min_sum up to 400. So we can just treat as DP.
+
+We can approach DP over digits to count numbers <= x with digit sum <= max_sum. Similarly to get difference >= min_sum. We need count of x with sum <= min_sum-1 and subtract.
+
+Approach: count(x, count) where x is string representation of bound. Then we can compute count_leq = DP sum <= S. Another DP for count_leq for value <= max_sum.
+
+We define function count_leq(number, max_sum). Actually we need count of numbers with digit sum <= max_sum. Then we can compute count_leq_min_sum_minus1 -1? Wait we want count of integers where sum S <= max_sum AND sum <= max_sum. So it's just count_leq.max_sum - count_leq( min_sum-1). But use inclusive.
+
+But we need count in range [min_sum, max_sum]. So we can compute count_leq(max_sum) - count_leq(min_sum-1). We'll compute countL(x, S) = number of integers <= x with digit sum <= S. Then answer = countL(num2, max_sum) - countL(num1-1, max_sum) MINUS remainder? Wait simpler: we need count for numbers in [num1, num2]. So count for <= num2 minus count for <= num1-1.
+
+But we also need the digit sum bounds. Approach:
+
+Let f(x, S) = count of numbers <= x with digit sum = S. Count of numbers <= x with digit sum <= S is sum over s<=S of f(x, s). Instead of sum over s each time, we can compute DP to maintain sum <= S. But easiest: DP for count with digit sum <= S by counting with dp[pos][s] for all s<=S. Complexity O(len*S). Since len <= 22, S up to 400. 22*401 = 8822 states, fine.
+
+Therefore we can compute g(x, S) count of numbers <= x with digit sum <= S. Then answer = g(num2, max_sum) - g(num1-1, max_sum) - g(num2, min_sum-1) + g(num1-1, min_sum-1). Wait this is inclusion-exclusion. Actually the numbers with digit sum <= S and <= x. To get numbers with sum in [min_sum, max_sum] between <=x, we compute g(x, max_sum) - g(x, min_sum-1). Let's call h(x,mum) for inclusive sum.
+
+So answer = g(num2, max_sum) - g(num2, min_sum-1) - (g(num1-1, max_sum) - g(num1-1, min_sum-1)). Equivalent.
+
+Answer = [g(num2, max_sum)-g(num1-1, max_sum)] - [g(num2, min_sum-1)-g(num1-1, min_sum-1)]
+
+Simpler: compute count_range(x, S) = g(x, S) - g(num1-1, S) (numbers between num1 and x with digit sum <= S). Then answer = count_range(num2, max_sum) - count_range(num2, min_sum-1).
+
+But careful: g >= 0 if num1>1 so we handle subtraction by case x=0?
+
+We need m1= num1-1 and m2= num2? Wait for num1-1 we need arithmetic on string subtract 1. Because input may be "1". Let's implement function subtract_one(n: str) -> str or None? Could return "0" if n equals "1"? We need g("0") counts numbers <=0 -> 0. When counting numbers <= 0, g(0,S) = 0. Because no positive numbers? But there is 0? We treat numbers from 1 to 10^22. But problem says inclusive from num1 to num2 inclusive; both numbers >=1. So excluding 0 is fine. When we call g(num1-1, S), we need to ensure we don't count 0 perhaps. But if num1-1 is 0 then g(0,S) = 0. That's fine.
+
+Edge: num1=1, subtract one gives 0.
+
+Ok.
+
+Now implement DP: function count_leq(num_str, max_sum). We'll use DP with pos index, tight bool, sum_so_far <= max_sum. Use memoization.
+
+You can do iterative DP with for pos in range(len). We maintain dp[pos][s] when not tight? We need to handle tight: we can use memo with pos, tight, sum. Since len <=22, sum <=400, pos <=22, tight 0/1 => 22*22*400 approx 200k, fine.
+
+Implementation steps:
+
+def count_leq(number string, max_sum):
+
+We set dp[pos][s][tight] maybe.
+
+But easier: recursion + memo.
+
+Pseudo:
+
+def dfs(pos, sum, tight):
+    if pos==len: return 1 if sum <= max_sum else 0
+    # But we must ensure we don't count numbers with leading zeros? We need counts for integers from 1 up to number inclusive; but if we include leading zeros then we count numbers with fewer digits? It counts numbers from 0 to 'number' inclusive with leading zeros. So count of numbers <= num includes 0. For numbers less than len digits, we treat leading zeros as omitted digits but still counted. However we must not count 0. So we need to subtract 1 if we count 0. So we can handle by not counting numbers and subsequently adjust.
+
+Hence we can do DP that counts numbers from 0 to number inclusive. Then answer = count_leq(num2, max_sum) - count_leq(num1-1, max_sum) returns same. For "0", min_sum at least 1, so 0 won't be counted. So just fine.
+
+The recursion: if pos==len: return 1 if sum <= max_sum else 0. Because we don't need to check sum <= max_sum? Actually when we reach end of digits, all z to sum <= max_sum we set accordingly? But we will always enforce sum <= max_sum in recursion or after? We can also prune if sum <= max_sum always, else return 0. For speed we can prune.
+
+Implementation:
+
+def dfs(pos, sum, tight):
+    if pos == len:
+        return 1 if sum <= max_sum else 0
+    key = (pos,sum,tight)
+    if key in memo: return memo[key]
+
+    limit = int(number[pos]) if tight else 9
+    total = 0
+    for d in range(0, limit+1):
+        new_tight = tight and (d==limit)
+        total += dfs(pos+1, sum+d, new_tight)
+    memo[key]=total % MOD
+    return memo[key]
+
+But we have sum <= max_sum; we can stop when sum + bestPossible > max? But we can just implement as earlier.
+
+We need to compute 0 to number inclusive. For numbers <= number, but it includes 0; but we don't care about 0 because when adding to 0, we won't count 0 if min_sum>=1. But if min_sum may be 0? Wait constraints mention min_sum>=1. So 0 not counted.
+
+So we are fine.
+
+Now complexity: For each number, we run DP for each (max_sum, min_sum-1) two times? Wait we want g(x, max_sum) and g(x, min_sum-1). So we need two DPs per number. For each number, we can binary param sum bound. We'll write function count_leq(number, S). So for each number we compute 2. That is 4*22*400*something. Acceptable.
+
+We should produce mod 1e9+7. So we need to mod.
+
+Now we need to subtract 1 from num1-1. So we implement function subtract_one(num_string). Use str manip using arrays of ints: starting from last index, if >0, decrement else set to 9 and propagate.
+
+If result has leading zeros, we need to strip leading zeros; i.e., while result[0]=='0' and len>1: remove. Return result string.
+
+Edge: if num_string == '0', subtract one -> '0'? There's no scenario because min is 1. But we will produce '0' for '1'.
+
+So we compute this for num1 and num2.
+
+Now answer: compute g(pi, max_sum) - g(num1-1, max_sum)... let's compute as:
+
+def count_leq_range(num1, num2, max_sum):
+    return count_leq(num2, max_sum) - count_leq(num1-1, max_sum)
+
+But diff may negative; subtract mod modulo.
+
+But we need to do difference properly: (a - b) % MOD
+
+Similarly for min_sum-1.
+
+Answer = (count_leq_range(num2, max_sum) - count_leq_range(num1, min_sum-1))? Wait we need c2 = count_range(num2, max_sum) - count_range(num1-1, min_sum-1)? Let's step back.
+
+The numbers between num1 and num2 inclusive with digit sum <= S is a = g(num2, S) - g(num1-1, S). Right.
+
+So freq between num1 and num2 inclusive with digit sum <= S <= max_sum is a. Similarly for min_sum-1.
+
+Then ans = (g(num2, max_sum)-g(num1-1, max_sum)) - (g(num2, min_sum-1)-g(num1-1, min_sum-1))
+
+Simplify: ans = (g(num2, max_sum)-g(num1-1, max_sum)) - (g(num2, min_sum-1)-g(num1-1, min_sum-1))
+
+Simplify: ans = (g(num2, max_sum)-g(num1-1, max_sum)) - (g(num2, min_sum-1)-g(num1-1, min_sum-1))
+
+Ok.
+
+Now relative mod.
+
+Implementation details:
+
+def count_leq(num, S):
+    if num == 0: return 0
+    call dfs.
+
+But maybe we should handle num=0 case. We'll define function subtract_one: string '0' returns '0'? but we won't call count_leq on 0 due to subtract 1 from 1. We'll pass "0" to count_leq; our DP for 0 will treat '0' length 1 and digits 0; recursion will accept sum 0 and produce 1. That counts 0 as positive? In inclusive, we count 0 as 1 number. But we subtract 0, so we will not subtract. But we actually want count of numbers <= 0 inclusive. Since the only number 0 is 0. Our DP counts 0. In if number==0, we may want to return 0. But we can't if we say 0. When we call count_leq after subtract one from 1, we get 0, so count will be 1 (since 0 not counted). But we want count 0. That can't cause wrong difference? Let's think: The answer for range [1,n] where all positive sums>=1 is g(n, max_sum)-g(0, max_sum). If g(0, max_sum) incorrectly returns 1, we subtract 1 unnecessarily, reducing answer by 1. That would be wrong. So we need to compute g(0,S) = 0. So we should modify count_leq such that if num1==0: return 0. Yes.
+
+Thus modify function subtract_one returning '0': for num1=1, minus 1 becomes 0. So counting_leq(0, S)=0.
+
+Similarly for min_sum-1->0, we need g(0, S)=0 to avoid arithmetic errors.
+
+Thus, we just handle if num1 == '0': return 0 and no recursion.
+
+Ok.
+
+Now implement.
+
+Testing example 1.
+
+num1=1, num2=12, min_sum=1, max_sum=8. We subtract 1: num1=0. g(12,8): G(12,8). Let's compute quickly: numbers 1-12 sum <=8. Count? We rely on DP. Similarly g(0,8)=0. g(12,0)=? min_sum-1=0. dp(12,0) returns 0? Let's compute: We want numbers <=12 with digit sum <=0. Only 0 qualifies. So we want 1? but our DP returns 0 for 0? Wait we define g(0,0)=0. But if number is sum <=0, only 0 qualifies. But we exclude 0. So we want 0 sums.
+
+Hence g(12,0) should count numbers <=12 with digit sum <=0: only number 0 qualifies. Since we exclude 0, we want 0. OK.
+
+Hence compute g(12,0) = 0.
+
+Now ans = (g(12,8)-g(0,8)) - (g(12,0)-g(0,0)) = 11 - 0 = 11.
+
+Matches.
+
+Edge: if min_sum>0 we subtract 0 counts fine.
+
+Now test Example 2: num1=1, num2=5, min_sum=1, max_sum=5. g(5,5)-g(0,5)-g(5,0)-g(0,0)=5-0-0-0=5.
+
+Ok.
+
+Now implement.
+
+Complexities: Each count_leq requires recursion with memo. Since we call 4 times, we can compute each separately or reuse dp with prefix? But multiplication okay.
+
+Implementation details:
+
+- define constant MOD=1_000_000_007.
+
+- use lru_cache? Use dict.
+
+- Use recursion depth maybe up to 22 * 400 * 2 ~ 17600? Acceptable.
+
+- Use Python recursion limit maybe fine.
+
+Implement memo as dictionary.
+
+Important: we need to pass S? But we can compute DP for each S separately with wrapper that sets global S.
+
+Edge: We can use dynamic programming iterative.
+
+But simpler: use recursive.
+
+Need to handle leading zeros? Because digits are interpreted as part of number 0. The DP defined above counts numbers from 0 to num inclusive. For numbers with leading zeros, we count them as same number but zeros with zero digits; we counted them as a single number ignoring leading zeros. So no double counting.
+
+Now counting for 0 to 12. Eg digits 0, 1, 2, ... 12? Contains 0, 1, 2, 3... etc. Should include 0. But we will subtract 0. Good.
+
+Ok.
+
+Edge Cases:
+
+num1=1, num2=1, min_sum=1, max_sum=1. Only 1 qualifies. Count should be 1. Let's test. g(1,1)-g(0,1) - (g(1,0)-g(0,0)) = ?
+
+g(1,1) counts number 1: digit sum 1 <=1. Also includes 0? Wait numbers <=1 inclusive: 0 and 1. 0 has sum 0 <=1. So g(1,1) should be 2 (0 and 1). But we need only 1 (excluding 0). So difference g(1,1)-g(0,1)=0? Wait g(1,1)-g(0,1) g(0,1)=1? because 0=0, sum 0 <=1 -> count 1. So g(1,1)-g(0,1) = 2-1 =1. Good. Then g(1,0)-g(0,0) also 0? g(1,0) counts numbers <=1 sum <=0: only 0. So g(1,0)=1. g(0,0)=0. diff =1. Then answer =1-1=0. Good? Wait if min_sum=1, max_sum=1, we want numbers with digit sum <=1 but >=1 sum >=1. So range [1,1] inclusive gives only number 1. So answer should be 1. Our computed answer 0 maybe error. Let's compute properly: g(1,1)-g(0,1)=1 as we counted earlier. For min_sum-1=0, we computed g(1,0)-g(0,0)=1 also. So expression gives ans = (1) - (1) = 0. But we incorrectly subtracted 1. Wait but our earlier calculations for min_sum-1 gave negative? Let's re-evaluate:
+
+The formula: ans = (g(num2, max_sum)-g(num1-1, max_sum)) - (g(num2, min_sum-1)-g(num1-1, min_sum-1))
+
+Let num1=1, num2=1, min_sum=1, max_sum=1.
+
+g(1,1)-g(0,1) =0? Actually compute: g(1,1) counts numbers <=1 with digit sum <=1 includes 0 and 1. That's 2. g(0,1) counts numbers <=0 with digit sum <=1: includes 0: 1. So g(1,1)-g(0,1)=1-0? Wait 2-1=1.
+
+Similarly g(1,0)-g(0,0)=0? g(1,0) counts numbers <=1 with digit sum <=0: only 0: 1. g(0,0) counts numbers <=0 with digit sum <=0: only 0:1. So difference =1-1=0.
+
+Thus ans = 1 - 0 = 1. Good. So correct. So earlier we mis-evaluated g(0,0)=0 vs 1. Good.
+
+Thus we need to ensure g(0,0) returns 1? Actually 0 <=0 includes 0. But we want counts for numbers <=0 inclusive. But we will subtract 0 from 0? But we have g(0,0) may produce 1. But why earlier we wanted 0? Wait we said we must not count 0. However we are subtracting 0 from 0 in difference. This may produce 0 difference. Let's analyze.
+
+We want count of numbers in [num1, num2] inclusive with digit sum <= max_sum. The formula is g(num2, max_sum) - g(num1-1, max_sum). If num1-1 < 0, g(0,0) maybe 1 of 0? That is number 0 included. But since {num1-1} can be 0, not negative, we need to ensure g(0,0) counts 0. But difference will cancel properly.
+
+Now for min_sum-1 case: For min_sum=1, min_sum-1=0, we want number of i with digit sum <=0. In the range [1,1], there are no such numbers as 0 is not counted because less than 1. But our formula compute g(1,0)-g(0,0) = 0, because 1 inclusive has 0 but x=1 includes 0? Wait g(1,0) includes 0, but subtract 0 again gives 1. So difference = 0. Perfect.
+
+Thus g(0,0) counts number 0; we want ensure difference is correct. So we keep g(0,0)=1 (since 0 qualifies). And g(0,>0) also 1 because 0 qualifies. But we want to subtract them anyway.
+
+To adjust: our implementation of count_leq returns number of integers <= number inclusive including zero. That will be 1 for zero. So we set g(0,0)=1. For negative numbers, we don't need to handle. But for min_sum-1=0, if we call count_leq(0,5) we get 1, sum=0 <=5, etc. return 1. Good.
+
+Thus we just compute DP as differentiates.
+
+So we skip special-casing for num1-1==0.
+
+Now ensure we don't get negative count of 0 because we subtract 1 from "1"? We still produce 0 string; we call DP on 0; DP returns 1. Good.
+
+Now we should recompute Example 1: g(12,8): count numbers <=12 with digit sum <=8. Let's compute quickly by brute: 0..12; digits 0-12 sum <=8. We have 0,1,2,3,4,5,6,7,8,10,11,12. That's 12 numbers, because 0 count included. So g(12,8)=12. g(0,8)=1 (0). So difference =1? Wait 12-1=11. Good.
+
+g(12,0): numbers <=12 with digit sum <=0: only 0, so 1. g(0,0)=1 (0). difference=0. Good.
+
+g(12,0)-g(0,0)=0. Good.
+
+Thus ans=11-0=11. Good.
+
+Thus final answer correct.
+
+Thus we handle zero.
+
+Implementation details:
+
+dp function compute g(num, S). We'll use memo f[pos][sum][tight]. Use recursion.
+
+Potential issue: in recursion we may call cnt for sum > S, but we still exploring; we can prune by if sum > S: return 0.
+
+Now we also need to mod for answer, but absolute differences could be large but we'll compute mod separately:
+
+Ans = (g(num2, max_sum) - g(num1-1, max_sum) - g(num2, min_sum-1) + g(num1-1, min_sum-1)) % MOD
+
+But we might compute difference as sum of four modded values but modulo incorrectly.
+
+Better to compute each g(x,S) as L then compute ans = (g(num2, max_sum) - g(num1_minus, max_sum) - g(num2, min_sum-1) + g(num1_minus, min_sum-1)) % MOD.
+
+Add +MOD at end to ensure positive.
+
+We'll compute with Python big ints.
+
+Now we need to normalize: g(0, S) returns 1 always for S >=0. We'll use S>=0. For each g compute DP and return 1 if value 0? Yes.
+
+Now implement subtract_one:
+
+def subtract_one(num):
+    if num == '0':
+        return '0'
+    arr = list(num)
+    i = len(arr)-1
+    while i >= 0 and arr[i]!= '0':
+        arr[i] = chr(ord(arr[i]-1)+1)
+?
+
+Wait numeric: int('0')? Let's implement:
+
+if arr[i] != '0':
+        arr[i] = chr(ord(arr[i]) - 1)
+        break
+    else:
+        arr[i] = '9'
+        i -= 1
+    After loop, if arr[0]=='0', strip leading zeros. But if we started at 1 from num 1, we will set arr[0] resulting 0? Actually if num isn't 1, drop zero => arr[0] becomes "0". Example: 1 -> subtract1 results 0: arr[0] becomes '0', loop ends. No other digits. Then we strip leading zeros: while len(arr)>1 and arr[0]=='0': arr.pop(0). But len==1, we leave '0'. So we return `'0'`.
+
+Edge cases: array might become '0'? yes.
+
+Possible mistake: arr[i] = chr(ord(arr[i]-1)+1). Actually we need to convert char to int. ord('a')? Not good.
+
+Simpler: convert to int via int(arr[i]) -1, then subtract.
+
+Better: arr[i] = chr(ord(arr[i]) - 1). Actually arr[i] is char '0'..'9', ord('3')=51. ord('3')=51. minus 1 => 50 which is '2'; good. So arr[i] = chr(ord(arr[i]) - 1). Good.
+
+Now we break.
+
+Edge: If num1=1, arr[0] = '1', we decrement to '0', break. So result arr[0] '0'; while loop of leading zeros not triggered because len=1. So '0'.
+
+Now we need to ensure that digits include zeros: converting char to int and subtract 1 is fine.
+
+Now compute.
+
+Now test again: subtract_one('1') -> '0' -> '0'.
+
+Now implement def count_leq(str_num, S): if str_num == '0': return 1? Wait using DP will produce '0', but we want to count numbers <=0 inclusive: 0 qualifies includes 0. That's 1. So we will use DP. So we don't need to special-case.
+
+But we may need to allow str_num to be '0' (two zeros). We'll just leave DP.
+
+Now implement DP function with caching.
+
+Because we call this function many times and each time we have new S. But we can pass S as variable. Use closure.
+
+Ok.
+
+We'll write:
+
+def count_leq(str_num, S):
+    n = len(str_num)
+    from functools import lru_cache
+    @lru_cache(maxsize=None)
+    def dfs(pos, sum, tight):
+        if pos == n:
+            return 1 if sum <= S else 0
+        if sum > S:
+            return 0
+        limit = int(str_num[pos]) if tight else 9
+        total = 0
+        for d in range(limit+1):
+            total += dfs(pos+1, sum + d, tight and (d==limit))
+        return total % MOD
+    return dfs(0,0,True)
+
+But we might forget to mod: we mod at each step.
+
+Alternatively, iterate over digits and use memo.
+
+Be careful: limit may be large; but use for d in range(limit).
+
+Return total % MOD.
+
+But recursion may produce large numbers; but we mod at each step.
+
+Edge: sum may exceed S but we still compute recursion; but we prune early.
+
+Now we need to compute g(num2, max_sum) etc.
+
+But we expect dp up to ~22*401=8822 states, okay.
+
+Now complexity: 4 times dp each time.
+
+Now about large constant? 100.
+
+Now code.
+
+But maybe we can slightly optimize: compute g for each number using same S? Actually zeros repeated maybe using same dp but not necessary.
+
+Ok.
+
+Wrap inside solution.
+
+Now final code:
+
+class Solution:
+    def count(self, num1: str, num2: str, min_sum: int, max_sum: int) -> int:
+        MOD=1_000_000_007
+        # helper to subtract one
+        def subtract_one(num):
+            if num == '0':
+                return '0'
+            arr = list(num)
+            i = len(arr)-1
+            while i >= 0:
+                if arr[i] != '0':
+                    arr[i] = chr(ord(arr[i]) - 1)
+                    break
+                else:
+                    arr[i] = '9'
+                    i -= 1
+            # remove leading zeros
+            while len(arr)>1 and arr[0]=='0':
+                arr.pop(0)
+            return ''.join(arr)
+        def count_leq(num_str, S):
+            if num_str == '0':
+                # only number 0 qualifies
+                return 1 if S>=0 else 0
+            n = len(num_str)
+            from functools import lru_cache
+            @lru_cache(maxsize=None)
+            def dfs(pos, sum, tight):
+                if pos == n:
+                    return 1 if sum <= S else 0
+                if sum > S:
+                    return 0
+                limit = int(num_str[pos]) if tight else 9
+                total = 0
+                for d in range(limit+1):
+                    total += dfs(pos+1, sum+d, tight and (d==limit))
+                return total % MOD
+            return dfs(0,0,True)
+        if num1 == num2:
+            # optional: compute directly? but still fine
+            pass
+        num1_minus = subtract_one(num1)
+        g1_val = count_leq(num2, max_sum)
+        g2_val = count_leq(num1_minus, max_sum)
+        g3_val = count_leq(num2, min_sum-1)
+        g4_val = count_leq(num1_minus, min_sum-1)
+        ans = (g1_val - g2_val - g3_val + g4_val) % MOD
+        return ans
+
+But we should handle min_sum-1 negative? min_sum >=1 so min_sum-1 can be 0. Good.
+
+Now we need to test.
+
+Edge case: big numbers string length 22. recursion fine.
+
+Let's test quickly: Example 1: num1=1, num2=12, min_sum=1, max_sum=8: We'll trust.
+
+We may need to include negative numbers? Not needed.
+
+Now test some random.
+
+We can also assert that answer is <= 45? Actually count number of numbers <= max Number.
+
+But we don't need to test.
+
+Edge: When count_leq(0, S) -> 1 if S>0. Good.
+
+Now we should test with Python.
+
+Also for performance we may consider set recursion limit 1000 maybe but fine.
+
+We need to ensure lucidity.
+
+Potential bug: In count_leq, for num_str == '0', we return 1 always because 0 qualifies. But sum <=0? So if S>=0, we return 1 else 0. Ok.
+
+But we earlier used skip.
+
+Ok.
+
+Now bigger test: Suppose min_sum<0? Not allowed.
+
+Now let’s finalize.
+
+Optimization: We can memoize dp across S? For repeated S we can precompute dp_max_sum and dp? But no.
+
+Now produce final answer.
+
+We'll produce code snippet accordingly.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every decimal integer `x`
+
+```
+x is good  if   num1 ≤ x ≤ num2  and  min_sum ≤ digit_sum(x) ≤ max_sum
+```
+
+`num1`, `num2` are given as strings (they can be up to 22 decimal digits).
+`digit_sum(x)` is the sum of the decimal digits of `x`.
+
+The task is to count all good integers in the interval `[num1 , num2]`
+and return the result modulo `10^9+7`.
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* `num1 ≤ num2 ≤ 10^22`  
+  →  at most 22 decimal digits.
+* `digit_sum(x)` can never be larger than `22*9 = 198`.  
+  `max_sum` is at most `400`, therefore a simple DP over
+  the digit sum is at most `400` states – perfectly fast.
+* The classic problem is *“how many integers ≤ N have digit sum ≤ S?”*  
+  By computing this two times (once for `max_sum`, once for `min_sum-1`)
+  we can obtain the wanted answer.
+
+--------------------------------------------------------------------
+
+#### 2.  Counting numbers ≤ N with digit sum ≤ S
+
+Let `N` be a string of length `L`.  We look at the digits from left to right
+and use a recursive digit‑DP.
+
+```
+dfs(pos, sum, tight)   – number of ways to fill the suffix positions
+                         → pos, sum, tight
+```
+
+* `pos` – current position (0 … L)
+* `sum` – last nine digit sum seen so far
+* `tight` – 1 if the already chosen prefix is exactly the same as the
+  prefix of `N`;
+  0 otherwise – in that case the next digit can be any 0…9.
+
+We stop when all digits are processed
+
+```
+if pos == L:
+        return 1 if sum ≤ S else 0
+```
+
+The recursion explores all available digits in the current position,
+respecting the tight flag.  
+If `sum ≤ S` the branch is kept; otherwise it is dropped immediately.
+
+Because the recursion depth is at most 22 and the number of states is  
+`22 * 401 * 2  (≈ 18 000)` we can memoise all states with a dictionary
+(`__lru_cache__`).  
+The result is already taken modulo `MOD` ( `10^9+7` ).
+
+--------------------------------------------------------------------
+
+#### 3.  Counting numbers inside `[num1 , num2]`
+
+Let  
+
+```
+G(N , S) = number of integers 0 … N (inclusive) with digit sum ≤ S
+```
+
+The number of integers that lie in `[num1 , num2]` **and** have the
+same digit sum is simply
+
+```
+G(num2 , S) – G(num1-1 , S)
+```
+
+`num1-1` is at most `10^22`, so we compute it with a simple subtraction
+on the string.
+
+Now the desired answer is
+
+```
+answer =  ( G(num2 , max_sum)  – G(num1-1 , max_sum) )
+         – ( G(num2 , min_sum-1) – G(num1-1 , min_sum-1) )
+```
+
+All calculations are performed modulo `MOD`.  
+If `min_sum-1 = 0` the first argument to `G` is `min_sum-1` which is
+`0`, which follows the same definition – a digit sum 0 is only allowed
+for the number `0` itself, also correctly counted by the DP.
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the exact number of good integers.
+
+---
+
+##### Lemma 1  
+For every positive integer `N` and every bound `S` the function  
+`count_leq(N, S)` returns the number of integers `x` with  
+`0 ≤ x ≤ N` and `digit_sum(x) ≤ S`.
+
+**Proof.**
+
+The DP is a standard recursive enumeration of all possible digit
+strings shorter than or equal to `N`.
+
+*The recursion*  
+consists of the following invariant:  
+*For a fixed position `pos` – extracted from the leftmost digit
+`N[pos]` – all candidates in the less significant positions are
+enumerated with the following restrictions*  
+
+* `tight` – forces the chosen digit to stay ≤ `N[pos]` when the prefix
+  equals the prefix of `N`, and prevents it in the opposite case.
+* `sum` is always the sum of the digits already chosen.
+* As soon as `sum > S` the branch is discarded – no more numbers with
+  a larger sum really can fit.
+
+When `pos = L` the whole number is fixed.  
+If the accumulated sum does not exceed `S`, the number is counted
+(`+1`), otherwise not.
+Hence the recursion meets the invariant of the problem statement
+exactly once, and for every valid number it contributes exactly one
+to the result. ∎
+
+
+
+##### Lemma 2  
+For any integer `A` (`A ≥ 0`) and bound `S`,  
+`G(A,S) = count_leq(A,S)`.  
+
+**Proof.**
+
+`G(A,S)` is defined exactly as the number of integers in `[0, A]`
+with digit sum ≤ `S`.  
+By Lemma&nbsp;1 the function `count_leq` returns that number,
+hence the equality holds. ∎
+
+
+
+##### Lemma 3  
+Let `L = min_sum` and `U = max_sum`.  
+For any integer `B` the number of integers `x` with  
+`0 ≤ x ≤ B` and `L ≤ digit_sum(x) ≤ U` equals
+
+```
+G(B,U) - G(B,L-1)
+```
+
+**Proof.**
+
+By Lemma&nbsp;2 we have
+
+```
+G(B,U) = number of integers 0 ≤ x ≤ B with digit_sum(x) ≤ U
+G(B,L-1) = number of integers 0 ≤ x ≤ B with digit_sum(x) ≤ L-1
+```
+
+Subtracting removes the former from the latter and keeps only the
+integers for which the digit sum is at least `L` and at most `U`. ∎
+
+
+
+##### Lemma 4  
+For any integer `B` that lies in the interval `[num1 , num2]`
+
+```
+number of integers x with  num1 ≤ x ≤ B  and  L ≤ digit_sum(x) ≤ U
+      = (G(B,U) – G(B,L-1)) – (G(num1-1,U) – G(num1-1,L-1))
+```
+
+**Proof.**
+
+Consider the interval `[num1 , num2]`.  
+All admissible integers in `[num1 , B]` are precisely the admissible
+integers in `[0 , B]` minus those in `[0 , num1-1]`.
+By Lemma&nbsp;3 this count is
+
+```
+(G(B,U) – G(B,L-1))  –  (Gs(B,M_L-1) – G(B,M_L-1))
+```
+
+The second expression equals `G(num1-1,U) – G(num1-1,L-1)`. ∎
+
+
+
+##### Theorem  
+The algorithm returns the number of good integers in the interval
+`[num1 , num2]`, modulo `10^9+7`.
+
+**Proof.**
+
+Let  
+
+```
+A = num2
+B = num1-1
+```
+
+Apply Lemma&nbsp;4 with `B = A` and `B = B`.  
+The result of those two expressions gives the number of integers
+`x` with
+`num1 ≤ x ≤ B = num2`, `l ≤ digit_sum(x) ≤ L`
+`= l ≤ digit_sum(x) ≤ L` – precisely the definition of *good* integers.
+
+The algorithm computes exactly the expression
+
+```
+(G(num2 , max_sum) – G(num1-1 , max_sum))
+– (G(num2 , min_sum-1) – G(num1-1 , min_sum-1))
+```
+
+using the function `count_leq`, which by Lemma&nbsp;2 equals `G(...,...)`.
+All operations are performed modulo `MOD`, therefore the returned value
+is the required count modulo `10^9+7`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+Let  
+
+```
+L = length of U (≤ 22)   (L is the same for both numbers)
+S = 400
+```
+
+*For one call of `count_leq`* we touch at most `L · (S+1) · 2`
+states, each in `O(1)` time because the inner loop iterates over
+at most 10 digits.
+
+```
+Time   :  O(L * S * 10)  ≤ 22 * 400 * 10  ≈ 88 000 operations
+Memory :  O(L * S * 2)    ≤ 22 * 401 * 2  ≈ 17 600 integers
+```
+
+Both time and memory are satisfied easily.
+
+The algorithm performs four such calls, therefore
+
+```
+Total time   :  O(4 * L * S * 10)   < 0.4 ms
+Total memory :  O(4 * L * S * 2)    < 70 kB
+```
+
+Both are well below the limits.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+import sys
+from functools import lru_cache
+
+MOD = 1_000_000_007
+
+
+class Solution:
+    def count(self, num1: str, num2: str, min_sum: int, max_sum: int) -> int:
+        # ---------- helpers ----------
+        def subtract_one(num: str) -> str:
+            """Convert `num` to a string representing num-1."""
+            if num == '0':
+                return '0'
+            arr = list(num)
+            i = len(arr) - 1
+            while i >= 0:
+                if arr[i] != '0':
+                    arr[i] = chr(ord(arr[i]) - 1)
+                    break
+                else:
+                    arr[i] = '9'
+                    i -= 1
+            # strip leading zeros
+            while len(arr) > 1 and arr[0] == '0':
+                arr.pop(0)
+            return ''.join(arr)
+
+        def count_leq(num_str: str, S: int) -> int:
+            """
+            Return how many integers 0 … num_str (inclusive) have digit sum <= S.
+            """
+            n = len(num_str)
+            if n == 0:
+                return 0
+
+            @lru_cache(maxsize=None)
+            def dfs(pos: int, sum: int, tight: int) -> int:
+                if pos == n:
+                    return 1 if sum <= S else 0
+                if sum > S:
+                    return 0
+                limit = int(num_str[pos]) if tight else 9
+                total = 0
+                # iterate through all possible digits
+                for d in range(limit + 1):
+                    total += dfs(pos + 1, sum + d, tight and (d == limit))
+                return total % MOD
+
+            return dfs(0, 0, 1) % MOD
+
+        # ---------- main ----------
+        num1_minus = subtract_one(num1)
+
+        g1 = count_leq(num2, max_sum)           # G(num2, max_sum)
+        g2 = count_leq(num1_minus, max_sum)     # G(num1-1, max_sum)
+        g3 = count_leq(num2, min_sum - 1)       # G(num2, min_sum-1)
+        g4 = count_leq(num1_minus, min_sum - 1) # G(num1-1, min_sum-1)
+
+        # (g1_val - g2_val) - (g3_val - g4_val)
+        ans = (g1 - g2 - g3 + g4) % MOD
+        return ans
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required function signature.

@@ -1,0 +1,246 @@
+<|channel|>analysis<|message|>We need to produce a Python program that reads all text files under a directory and reports the top-5 words with most number of occurrences. The user didn't specify whether to use recursion or only immediate subdirectories. I'd assume we need to recursively read all .txt files in the directory and subdirectories. Also might have user-defined directory path.
+
+We'll provide code with argparse and relevant functions. We'll include logic: read all text files, split words, normalization (lowercase, strip punctuation). Count occurrences across all files. Then output top-5.
+
+We'll also consider third-party libraries like pathlib, collections.Counter.
+
+We need to test for corner cases and fail gracefully. Output in an easy way: Word: count.
+
+Also explanation guidelines: comments. Provide command line usage script.
+
+We might also handle environment variable.
+
+Let's produce a script. Possibly including optional arguments: path, top N, etc.
+
+Include usage: python top_words.py -d ./data -n 5.
+
+Also mention that we will ignore stopwords?
+
+But the user didn't ask for stopwords removal. Just raw words.
+
+I'll produce a robust script.
+
+We could also mention performance considerations, but as text sizes maybe moderate.
+
+Consider reading each file line by line. Use regex to extract words: re.findall(r'\b\w+\b', text). Lowercase.
+
+Also consider file encoding errors; use 'utf-8' with errors='ignore'.
+
+Use Path.rglob('*.txt') or Path.glob('*.txt').
+
+We'll present the script.
+
+Also mention that we can use count dictionary. Use Counter for convenient.
+
+We'll also mention if less than 5 unique words, output all.
+
+We'll show the resulting top 5.
+
+We can also include generating a demonstration.
+
+We may use functions: get_text_files(dir_path), count_words(file_paths), print_top_words(counter, top_n).
+
+Ok. Also we could optionally include environment variable to skip interactive reprompt.
+
+Let's produce final answer: explanation and program.
+
+<|end|><|start|>assistant<|channel|>final<|message|>Below is a **stand‑alone Python script** that will:
+
+1. Recursively walk a directory tree and find every file ending in `.txt`.  
+2. Read each file, split it into “words” (contiguous runs of ASCII letters and digits),  
+3. Count the occurrences of each word in **case‑insensitive** form (e.g. `"Apple"` and `"apple"` are the same).  
+4. Print the top‑N (default 5) most frequent words along with their counts.
+
+The script uses only the Python standard library (`pathlib`, `argparse`, `collections`, `re`) so you can drop it into any project, copy it to a folder, and run it.
+
+```python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Top‑5 (or N‑most) words in a directory of text files
+
+Usage
+-----
+    python top_words.py -d ./docs -n 5
+
+Options
+-------
+    -d, --dir   Directory whose *recursive* .txt files to analyse.
+    -n, --top   Number of words to display (default: 5).
+    -e, --ext   File extensions to include (comma‑separated). Default: .txt
+    -h, --help  Show help message.
+
+This script normalises all words to lower‑case and strips punctuation
+(only the characters `abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789`
+are considered part of a word). Anything else is treated as a separator.
+"""
+
+import argparse
+import re
+import sys
+from collections import Counter
+from pathlib import Path
+
+# --------------------------------------------------------------------------- #
+# Utility functions
+# --------------------------------------------------------------------------- #
+def find_text_files(root: Path, extensions: tuple[str, ...]) -> list[Path]:
+    """
+    Recursively search *root* for files whose suffix matches one of *extensions*.
+    Returns a list of Path objects.
+    """
+    if not root.is_dir():
+        raise NotADirectoryError(f"'{root}' is not a directory")
+
+    # Path.rglob allows walking the whole tree
+    files = [p for p in root.rglob("*") if p.is_file() and p.suffix in extensions]
+    return files
+
+
+def read_file_words(file_path: Path) -> list[str]:
+    """
+    Read a file and return a list of words.
+    A word is any maximal sequence of alphanumerics (letters + digits).
+    The function is case‑insensitive – all words are lower‑cased.
+    """
+    try:
+        text = file_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError as exc:
+        # We simply skip files that can't be read
+        print(f"⚠️  Skipping {file_path}: {exc}", file=sys.stderr)
+        return []
+
+    # \b\w+\b captures runs of letters + digits
+    # re.UNICODE is default; we just need to be explicit for clarity
+    words = re.findall(r"\b\w+\b", text, flags=re.UNICODE)
+    return [w.lower() for w in words]
+
+
+def count_words(file_paths: list[Path]) -> Counter:
+    """
+    Count all words in *file_paths* and return a Counter mapping word → count.
+    """
+    counter = Counter()
+    for fp in file_paths:
+        counter.update(read_file_words(fp))
+    return counter
+
+
+def print_top_words(counter: Counter, top_n: int):
+    """
+    Display the top_n words in *counter* in descending order of frequency.
+    """
+    if not counter:
+        print("No words were found.")
+        return
+
+    most_common = counter.most_common(top_n)
+    print(f"\n--- Top {len(most_common)} words ---")
+    for i, (word, count) in enumerate(most_common, start=1):
+        print(f"{i}. {word:<12} → {count}")
+    print("----------------------------\n")
+
+
+# --------------------------------------------------------------------------- #
+# Main entry point
+# --------------------------------------------------------------------------- #
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Show the most frequent words in a set of text files.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "-d",
+        "--dir",
+        type=Path,
+        default=".",
+        help="Root directory to scan for text files",
+    )
+    parser.add_argument(
+        "-e",
+        "--ext",
+        type=str,
+        default=".txt",
+        help="Comma‑separated list of file extensions (e.g. '.txt,.md')",
+    )
+    parser.add_argument(
+        "-n",
+        "--top",
+        type=int,
+        default=5,
+        help="Number of top words to display",
+    )
+    args = parser.parse_args()
+
+    # Normalise extensions: ensure each begins with a dot and is stripped
+    extensions = tuple(s.strip() for s in args.ext.split(",") if s.strip())
+    if not extensions:
+        parser.error("At least one valid file extension must be supplied")
+
+    try:
+        files = find_text_files(args.dir, extensions)
+    except Exception as exc:
+        parser.error(f"Error while scanning directory: {exc}")
+
+    if not files:
+        print(f"No files with extensions {extensions} found under {args.dir}")
+        sys.exit(0)
+
+    counter = count_words(files)
+    print_top_words(counter, args.top)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## How it works
+
+| Step | What happens | Why it matters |
+|------|--------------|----------------|
+| **Argument parsing** | `argparse` reads the command line and optionally accepts: <br>• `--dir` (folder to scan) <br>• `--ext` (file extensions) <br>• `--top` (how many words to show) | Keeps the script user‑friendly and portable |
+| **File discovery** | `Path.rglob("*")` finds every file in the folder tree; we filter by the requested extensions. | Works in any OS (POSIX/Windows) and is fast |
+| **Reading & tokenising** | `Path.read_text()` loads each file with UTF‑8 (ignoring bad bytes). We then use a regular expression `\b\w+\b` to find alphanumeric runs. | Standard English words are separated by whitespace or punctuation; `\b` ensures word boundaries. |
+| **Counting** | `collections.Counter` aggregates words. The `update` method folds the list from each file into the global counter. | Extremely efficient, O(total words) time. |
+| **Displaying** | `Counter.most_common()` returns the list sorted descendingly. We print them with numbers and the count. | Easy read‑out – 5 by default. |
+
+### Customisation tips
+
+- **Stop‑word removal** – simply filter out a list of common words before updating the counter (e.g. `if word not in STOPWORDS: counter[word] += 1`).
+- **Case‑sensitive** – drop `w.lower()` if you want the original case preserved.
+- **Locale‑specific tokenisation** – if you need Unicode word boundaries that respect non‑ASCII characters, replace the regex with `\w` (Python’s `re.UNICODE` handles that) or use `nltk`/`spacy`.  
+
+---
+
+## Running the script
+
+```bash
+# Install if you need the shebang executable
+chmod +x top_words.py
+
+# Search the current directory and display the top 5 words
+python top_words.py
+
+# Specify a different folder and show the top 10
+python top_words.py -d /path/to/docs -n 10
+
+# Only look at .txt and .md files
+python top_words.py -e ".txt,.md" -n 5
+```
+
+The script prints a summary at the end:
+
+```
+--- Top 5 words ---
+1. the          → 1583
+2. and          → 1127
+3. to           → 1075
+4. of           → 960
+5. a            → 870
+----------------------------
+```
+
+Feel free to drop it into your own projects or share with teammates – it requires no external libraries and runs on any system with Python 3.9+ (the `pathlib` and `argh` modules work in Python 3.7+ as well).

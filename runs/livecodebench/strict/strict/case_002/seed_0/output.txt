@@ -1,0 +1,371 @@
+<|channel|>analysis<|message|>We need maximum sum of subarray with alternating parity. Equivalent to choose a contiguous segment where consecutive numbers differ parity.
+
+Observations: The constraint small element values +/-1000, n up to 2e5. Need linear solution per test case.
+
+We can slide windows that maintain the alternating parity property. Whenever we see two consecutive elements with same parity (both odd or both even), the window cannot cross the boundary: we can restart at that element? Actually the subarray must be contiguous and we cannot skip elements. So segments where consecutive parities alternate. That is basically the longest chain of alternating parity may be broken when we have equal parity adjacent. So we need to consider subarrays that are within maximal alternating parity runs.
+
+Simpler: for each maximal segment where parity alternates (no consecutive equal parity), we could compute maximum subarray sum within that segment. That is run constraint. So algorithm: iterate entire array, keep window start l. For each i, if i>l and parity same as a[i-1], we start new run at i: l=i. Then we need to compute maximum subarray sum of current run. Use Kadane's algorithm within run. But the run can be long up to n. We can compute on the fly: maintain current sum and max sum for current run. When run restarts, reset current sum and current max.
+
+Edge: subarray must be non-empty. So if all numbers negative, answer is max element overall; but if we only consider segments, algorithm will produce max negative as well.
+
+Implementation:
+
+for each test case:
+
+ans = -inf
+current_sum = 0
+current_max = -inf
+prev_parity = None
+
+for idx, val in enumerate(a):
+    p = val & 1
+    if idx>0 and p==prev_parity:
+        # reset
+        current_sum = val
+        current_max = val
+    else:
+        current_sum += val
+        current_max = max(current_max, current_sum)
+    ans = max(ans, current_max)
+    prev_parity = p
+
+Return ans.
+
+Wait: Let's test.
+
+Example: array [1 2 3 4 5]
+
+parities: O E O E O: alternating overall. So algorithm should compute max subarray sum across entire array: sum=15. Let's step: idx0: val=1, cur_sum=1, cur_max=1, ans=1
+idx1: val=2, parity diff, cur_sum=3, cur_max=3, ans=3
+idx2: val=3, diff, cur_sum=6, cur_max=6, ans=6
+idx3: val=4, diff, cur_sum=10, cur_max=10, ans=10
+idx4: val=5, diff, cur_sum=15, cur_max=15, ans=15. Good.
+
+Second case: 9 9 8 8
+
+parities: odd, odd same. So algorithm: idx0: 9 cur_sum=9 cur_max=9 ans=9
+idx1: 9 same parity -> reset cur_sum=9 cur_max=9 ans stays 9
+idx2: 8 parity diff -> cur_sum=17 cur_max=17 ans=17
+idx3: 8 same parity (even same) -> reset cur_sum=8 cur_max=8 ans=17. Good.
+
+Third: -1 4 -1 0 5 -4
+
+parities: odd, even, odd, even, odd, even all alternate. Compute sum: prefix: -1,3,2,2,7,3. max subarray? The entire array sums 3 maybe but there might be subsequence: 4 -1 0 5 =8? Let's compute algorithm:
+
+idx0 -1: cur_sum=-1 cur_max=-1 ans=-1
+idx1 4 diff: cur_sum=3 cur_max=3 ans=3
+idx2 -1 diff: cur_sum=2 cur_max=3 ans=3
+idx3 0 diff: cur_sum=2 cur_max=3 ans=3
+idx4 5 diff: cur_sum=7 cur_max=7 ans=7
+idx5 -4 diff: cur_sum=3 cur_max=7 ans=7
+
+But sample answer is 8. Wait my algorithm yields 7. Let's analyze manually. array: [-1,4,-1,0,5,-4]
+
+We need subarray where adjacent parities alternate: that's satisfied for any subarray inside entire array because parities alternately odd even odd even odd even. So we can choose subarray [4, -1, 0, 5] sum=8; Indeed it's contiguous from idx1 to idx4. Kadane would produce 8? Let's recompute Kadane: standard max subarray over entire array: prefix sums: -1,3,2,2,7,3. The maximum subarray sum can start at idx1 (value 4) and end at idx4: 4-1+0+5 =8. Wait algorithm incorrectly computed due to resetting each time? Actually I didn't reset when parity same but parity did not repeat. But the issue: My algorithm uses current_sum that accumulates but when current_sum becomes negative, we don't reset. Standard Kadane resets when sum<0. Here, at idx0 cur_sum=-1 <0. Then at idx1 we added 4 => cur_sum=3 ; but we didn't reset. However if we maintain stack of last sum? Let's evaluate: To maximize subarray sum, need to consider starting fresh each time sum becomes negative. Standard algorithm: current_sum = max(val, current_sum+val). re using val. But we also need to keep parity restart on same parity. So we should combine: if same parity, start new run with cur_sum = val; else cur_sum = max(val, cur_sum + val). Because when parity changes we still have to consider starting new subarray inside same run. Let's test.
+
+Implementation: if idx>0 and parity==prev_parity: cur_sum = val
+else:
+    cur_sum = max(val, cur_sum+val)
+And cur_max = max(cur_max, cur_sum).
+
+Let's test for 3rd case:
+
+idx0: par=odd; cur_sum=-1 cur_max=-1 ans=-1
+idx1: par even diff => cur_sum = max(4, -1+4=3)=4; cur_max=4 ans=4
+idx2: par odd diff => cur_sum = max(-1, 4-1=3)=3; cur_max=4 ans=4
+idx3: par even diff => cur_sum = max(0,3+0=3)=3; cur_max=4 ans=4
+idx4: par odd diff => cur_sum = max(5,3+5=8)=8; cur_max=8 ans=8
+idx5: par even diff => cur_sum = max(-4,8-4=4)=4; cur_max=8 ans=8
+
+Good.
+
+Second test: 9 9 8 8
+
+idx0: cur_sum=9 cur_max=9 ans=9
+idx1: same parity => cur_sum=9 cur_max=9
+idx2: diff parity => cur_sum = max(8,9+8=17)=17 cur_max=17 ans=17
+idx3: same parity => cur_sum=8 cur_max=17 ans=17 good.
+
+Now test 4th case: -1 2 4 -3
+
+parities: odd, even, even, odd. There's same parity between 2 and 4 (both even), break.
+
+Let's compute manually best subarray alternating: possibilities: [-1,2] sum=1 good; [2,4] invalid; [4,-3] sum=1; [-1,2,4] invalid due to 2-4. So answer 1? But sample output 4. Wait sample output for test case 4: 4. Let's analyze again.
+
+Input case 4: 4 elements: -1 2 4 -3
+
+But wait maybe sample output 4 indicates subarray [4] alone sum=4. Yes.
+
+So algorithm should produce 4.
+
+Let's simulate: idx0: val=-1, cur_sum=-1 cur_max=-1 ans=-1
+idx1: 2 diff parity => cur_sum = max(2, -1+2=1)=2 cur_max=2 ans=2
+idx2: 4 same parity => cur_sum = 4 cur_max=4 ans=4
+idx3: -3 diff parity => cur_sum = max(-3, 4-3=1)=1 cur_max=4 ans=4
+
+Good.
+
+Edge case: single negative magnitude: sample 5: 1 element -1000 -> answer -1000. Let's test: idx0: -1000 cur_sum=-1000 cur_max=-1000 ans=-1000 good.
+
+Sample 6: 3: 101 -99 101
+
+parities: odd, odd? 101 odd, -99 odd same. Wait -99 odd too. So same parity at idx1 so cannot have adjacent same parity. But we can choose subarray [101] sum 101, or [-99] -99, or [101] last 101. Also [101 -99] is invalid because 101 and -99 both odd. So answer 101.
+
+Simulate: idx0: val=101 cur_sum=101 cur_max=101 ans=101
+idx1: same parity => cur_sum= -99 cur_max=101 ans=101
+idx2: same parity (odd with odd?) Wait val 101 after -99 but parity same but diff? Actually we have run: idx1 had same parity so start new run at idx1. At idx2 previous parity is odd (from idx1), same parity again, so start new run: cur_sum=101 cur_max=101 ans=101. Good.
+
+Last test 7: 20 elements. We'll trust algorithm.
+
+Edge Cases: we must maintain ans across all runs; current_max resets each run? Actually we keep cur_max across run but after resetting at same parity, cur_max resets to val too. That ensures we only consider subarrays inside current run, as we discard earlier. For new run, earliest subarray originates from the new start.
+
+Now complexity O(n) per test case.
+
+We must read upto 2e5 ints. Good.
+
+Implementation details: We'll use sys.stdin.buffer.read, parse ints.
+
+Make sure ans initial value is -10**18.
+
+Let's produce code.
+
+Test with given sample. Let's quickly mentally check final test: 20 elements array: -10 5 -8 10 6 -10 7 9 -2 -6 7 2 -4 6 -1 7 -6 -7 4 1
+
+It might produce 10? Sample output 10.
+
+Let's test quickly 20 numbers: We can run mental but trust algorithm.
+
+Double-check algorithm: Need to cast val as int (negative allowed). parity: val & 1 gives 0 for even, 1 for odd. For negative numbers, e.g. -1 & 1? In Python bitwise & works on 2's complement; -1 & 1 = 1 (since -1 in infinite 2's complement all bits 1). Good parity remains correct cause negative odd numbers still have 1 mod 2 = -1? But anyway; par = val % 2? For negative numbers, -1%2=1, -2%2=0. Equivalent. Use val & 1 is safe. In Python, -3 & 1 = 1. Good.
+
+Now implement.
+
+Edge: At reset due to same parity, set cur_sum = val, cur_max=val. Should also set ans accordingly. Then set prev_parity to p.
+
+Now final code.
+
+Let's final.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For one test case we are given an array `a[1…n]`.
+We have to choose a **non‑empty contiguous subarray** whose adjacent elements have
+different parity  
+(odd – even – odd – … or even – odd – even – …)  
+and maximise its sum.
+
+The important observation is
+
+> Inside one block of alternating parity the restriction never
+> touches the elements – only the starting point of the subarray matters.
+>  
+> When two neighbouring elements have the same parity the block ends
+> immediately before the second element.  
+>  
+> Therefore the array can be split into blocks
+
+```
+          | block 1 | block 2 | … | block k |
+```
+
+where inside each block all adjacent parities differ.
+Within one block we have to find the usual maximum subarray sum
+(Kadane’s algorithm).
+
+--------------------------------------------------------------------
+
+#### 1.   Kadane inside a block
+
+While scanning the array we keep
+
+```
+cur_sum   –  maximum sum of a subarray that ends at the current element
+cur_max   –  maximum of cur_sum inside the current block
+ans       –  global answer (over all blocks)
+```
+
+For an element `x`
+
+```
+if x and previous element have the same parity:
+        # a new block starts at x
+        cur_sum = x
+        cur_max = x
+else:
+        # still inside the same block – ordinary Kadane step
+        cur_sum = max(x, cur_sum + x)   # start new subarray or extend
+        cur_max = max(cur_max, cur_sum)
+
+ans = max(ans, cur_max)
+```
+
+`cur_sum` may become negative – then the next element will start a new
+subarray inside the same block, exactly as in ordinary Kadane.
+
+--------------------------------------------------------------------
+
+#### 2.   Algorithm
+
+```
+for every test case:
+        read n and array a
+        ans  = -∞
+        cur_sum = cur_max = 0
+        prev_parity = None
+        for i = 0 … n-1:
+                parity = a[i] & 1          # 0 for even, 1 for odd
+                if i>0 and parity==prev_parity:
+                        cur_sum = a[i]
+                        cur_max = a[i]
+                else:
+                        cur_sum = max(a[i], cur_sum + a[i])
+                        cur_max = max(cur_max, cur_sum)
+                ans = max(ans, cur_max)
+                prev_parity = parity
+        output ans
+```
+
+All operations are `O(1)`, the whole scan is linear.
+
+--------------------------------------------------------------------
+
+#### 3.   Correctness Proof  
+
+We prove that the algorithm outputs the maximum possible sum.
+
+---
+
+##### Lemma 1  
+For every index `i` the pair `(cur_sum, cur_max)` maintained by the
+algorithm is correct for the block that ends at `i` (i.e. the maximal
+alternating–parity segment that contains `i` and starts immediately
+after the previous equal‑parity pair).
+
+**Proof.**
+
+We distinguish the two cases used by the algorithm.
+
+*Case 1 – parity of `a[i]` equals parity of `a[i-1]`.*
+
+The block containing `i` starts at `i`.  
+The algorithm sets `cur_sum = a[i]` and `cur_max = a[i]`, which are
+indeed the maximum sum of a subarray ending at `i` and the maximum sum
+in this trivial block. ∎
+
+*Case 2 – parities differ.*
+
+Then `i` belongs to the same block as `i-1`.
+Let `S` be the set of all subarrays of this block that end at `i`.  
+A subarray in `S` is either
+
+1. a subarray that ends at `i-1` and is extended by `a[i]`;
+2. the singleton subarray `[a[i]]`.
+
+By induction hypothesis, before processing `i` the variable `cur_sum`
+equals `max{ sum(t) | t in S and t ends at i-1 }`,
+and `cur_max` is the maximum sum of a subarray inside this block.
+
+Consequently
+
+```
+max{ sum(t) | t in S } = max( a[i], cur_sum + a[i] )
+```
+
+which is exactly the update performed by the algorithm.
+`cur_max` is updated with this new `cur_sum`, so it stays the maximum
+sum of the block. ∎
+
+
+
+##### Lemma 2  
+During the scan `ans` is always the maximum sum of all valid subarrays
+that end at an already processed position.
+
+**Proof.**
+
+`ans` is updated after processing each position with
+`ans = max(ans, cur_max)`.  
+By Lemma&nbsp;1 `cur_max` is the maximum sum of a subarray inside the
+current block (i.e. among all valid subarrays that end inside this
+block).  
+Therefore after the update `ans` is the maximum sum among all valid
+subarrays that end at any processed position. ∎
+
+
+
+##### Theorem  
+After the whole array is processed, `ans`
+equals the maximum sum of any non‑empty subarray with alternating
+parities.
+
+**Proof.**
+
+Every valid subarray ends at some position `i`.  
+When the algorithm processes that position, by Lemma&nbsp;2
+`ans` is compared with the maximum sum among all valid subarrays that
+end at or before `i`.  
+Thus after the final position is processed, `ans` is at least as large
+as the sum of every valid subarray, and by construction it can never
+exceed it.  
+Hence `ans` equals the optimal value. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.   Complexity Analysis
+
+For one test case of length `n`
+
+```
+time   :  O(n)          (one linear scan)
+memory :  O(1)          (a few integer variables)
+```
+
+The sum of all `n` over all test cases is at most `2·10^5`, so the
+overall complexity satisfies the limits.
+
+
+
+--------------------------------------------------------------------
+
+#### 5.   Reference Implementation  (Python 3)
+
+```python
+import sys
+
+def solve() -> None:
+    data = list(map(int, sys.stdin.buffer.read().split()))
+    t = data[0]
+    idx = 1
+    out_lines = []
+    for _ in range(t):
+        n = data[idx]
+        idx += 1
+        a = data[idx:idx+n]
+        idx += n
+
+        ans = -10**18                      # less than any possible sum
+        cur_sum = 0
+        cur_max = 0
+        prev_par = None
+
+        for x in a:
+            parity = x & 1                # 0 even, 1 odd
+            if prev_par is not None and parity == prev_par:
+                # a new block starts here
+                cur_sum = x
+                cur_max = x
+            else:
+                # still inside the current block
+                cur_sum = max(x, cur_sum + x)
+                cur_max = max(cur_max, cur_sum)
+            ans = max(ans, cur_max)
+            prev_par = parity
+
+        out_lines.append(str(ans))
+    sys.stdout.write("\n".join(out_lines))
+
+if __name__ == "__main__":
+    solve()
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required input/output format.

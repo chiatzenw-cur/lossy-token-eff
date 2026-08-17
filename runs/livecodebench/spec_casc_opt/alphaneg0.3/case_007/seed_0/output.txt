@@ -1,0 +1,257 @@
+<|channel|>analysis<|message|>We need to compute total number of permutations of nums such that adjacent numbers have divisibility relation. n <= 14, so we can use DP over subsets. Classic problem: "Count number of special permutations" same as LeetCode 1562. Approach: dp[mask][i] = number of ways to form permutation represented by mask (mask) with last element index i. Then DP transitions: for all j not in mask, if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0, then dp[mask | (1<<j)][j] += dp[mask][i]. Base: dp[1<<i][i] = 1. At sum over i, dp[(1<<n)-1][i] = total ways.
+
+Complexities: O(n^2 * 2^n). For n=14 it's okay. Need modulo. So: dp[mask][i] = 0, modulo.
+
+We produce solution. Edge Cases: duplicates? Provided distinct.
+
+Implementation: In Python, we can use dictionary for each mask or 2D list. We'll do list of length 1<<n each with 0..n-1 entries. Use 2D array of size (1<<n, n). But for memory: 2^14=16384; times 14 = 229k integers fine.
+
+DP code:
+
+    MOD = 1_000_000_007
+    n = len(nums)
+    dp = [[0]*n for _ in range(1<<n)]
+    for i in range(n):
+        dp[1<<i][i] = 1
+    for mask in range(1<<n):
+        for i in range(n):
+            if not (mask & (1<<i)):
+                continue
+            cur = dp[mask][i]
+            if cur == 0:
+                continue
+            for j in range(n):
+                if mask & (1<<j):
+                    continue
+                if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+                    dp[mask | (1<<j)][j] = (dp[mask | (1<<j)][j] + cur) % MOD
+    full = (1<<n)-1
+    ans = sum(dp[full][i] for i in range(n)) % MOD
+    return ans
+
+Return answer.
+
+Test: For [2,3,6], [3,6,2] [2,6,3] -> 2.
+
+For [1,4,3] -> 2.
+
+Edge: [5,2] --> alphabet? 5%2=1 2%5=2 not zero; so 0 permutations. output 0.
+
+Ok.
+
+We propose code accordingly.
+
+Let's produce final answer.
+
+Need to import typing List.
+
+Return int.
+
+Also we can precompute adjacency matrix bool to accelerate: compat[i][j] true if divisible. Then skip mod.
+
+But it's fine.
+
+Now produce final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every permutation of the given array `nums` we need to check that  
+neighbouring two numbers are divisible by each other
+
+```
+nums[i] % nums[i+1] == 0   or   nums[i+1] % nums[i] == 0
+```
+
+The array length is at most 14, therefore we can enumerate all subsets
+of indices with a binary mask  
+(`mask` has `1` on the positions that are already used).
+
+--------------------------------------------------------------------
+
+#### 1.  State
+
+```
+dp[mask][i]  – number of ways to build a permutation that
+               uses exactly the indices in mask
+               and whose last element is nums[i].
+```
+
+`mask` is an integer from `0` to `2ⁿ-1`, `i` is an index `0 … n-1`.  
+The answer is
+
+```
+sum_{i} dp[full_mask][i]   (full_mask = 2ⁿ-1)
+```
+
+--------------------------------------------------------------------
+
+#### 2.  Transition
+
+Assume we already have a valid partial permutation
+
+```
+dp[mask][i]  > 0
+```
+
+and we want to append a new element `j` that is **not** in `mask`.
+
+The new element is allowed only if
+
+```
+nums[i] % nums[j] == 0   or   nums[j] % nums[i] == 0
+```
+
+In this case we add the current number of ways to the new state
+
+```
+new_mask = mask | (1 << j)
+dp[new_mask][j] += dp[mask][i]   (modulo MOD)
+```
+
+--------------------------------------------------------------------
+
+#### 3.  Base
+
+A permutation that contains only one element `i` is always valid
+
+```
+dp[1 << i][i] = 1
+```
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity
+
+```
+states = 2ⁿ * n
+transitions  : for each state try all n indices
+```
+
+Time   `O(n² · 2ⁿ)` – at most `14² * 4⁴ = 8192` states, easily fast.  
+Memory `O(n · 2ⁿ)` – less than 230 000 integers.
+
+--------------------------------------------------------------------
+
+#### 5.  Correctness Proof  
+
+We prove that the algorithm returns the number of special permutations.
+
+---
+
+##### Lemma 1  
+For every mask and every index `i` with `mask[i] == 1`,
+`dp[mask][i]` equals the number of **valid** permutations that
+
+* use exactly the indices in `mask`
+* end with the element `nums[i]`.
+
+**Proof.**
+
+We use induction over the number of set bits in `mask`.
+
+*Base Cases*  
+`mask` has only one set bit, i.e. `mask = 1 << i`.  
+`dp[mask][i]` is initialized to `1`; the only permutation of length `1`
+is trivially valid, so the lemma holds.
+
+*Induction Step*  
+Assume the lemma holds for all masks with `k` set bits.
+Take a mask `M` with `k+1` set bits and an index `i` that belongs to `M`.
+Let `dp[M][i]` be the value produced by the algorithm.
+
+During the transition step the algorithm considers every
+`j ∉ M` that can be appended to a previous permutation ending with `i`.  
+For each such `j` it adds
+
+```
+dp[M][i] += dp[M][j]   (mod MOD)
+```
+
+by the induction hypothesis `dp[M][j]` counts exactly the valid
+permutations of length `k` ending with `j`, so after the addition
+`dp[M][i]` counts all valid permutations of length `k+1` ending with `i`.
+
+Thus the lemma is true for all masks. ∎
+
+
+
+##### Lemma 2  
+After the DP finishes,  
+`ans = Σ_i dp[full_mask][i]` equals the number of special permutations
+of the whole array.
+
+**Proof.**
+
+By Lemma&nbsp;1 each `dp[full_mask][i]` counts the valid permutations that
+use **all** indices (full mask) and end with `nums[i]`.  
+These groups are disjoint, because the last element is different.
+Summing over all `i` gives the total number of valid permutations. ∎
+
+
+
+##### Theorem  
+The algorithm returns the required number of special permutations
+modulo `10⁹+7`.
+
+**Proof.**
+
+By Lemma&nbsp;2 the computed `ans` equals the exact number of special
+permutations.  
+All additions are performed modulo `10⁹+7`, therefore the returned
+value is the true count modulo `10⁹+7`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+MOD = 10 ** 9 + 7
+
+class Solution:
+    def specialPerm(self, nums: List[int]) -> int:
+        n = len(nums)
+        full_mask = (1 << n) - 1
+
+        # dp[mask][i] = number of ways to arrange indices in mask
+        # dp[mask][i] ends with index i
+        dp = [[0] * n for _ in range(1 << n)]
+
+        # base cases
+        for i in range(n):
+            dp[1 << i][i] = 1
+
+        # pre‑compute compatibility to avoid repeated modulo checks
+        compatible = [[False] * n for _ in range(n)]
+        for i in range(n):
+            for j in range(n):
+                if i == j: 
+                    continue
+                if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+                    compatible[i][j] = True
+
+        # DP over all masks
+        for mask in range(1 << n):
+            for i in range(n):
+                if not (mask & (1 << i)):
+                    continue
+                cur = dp[mask][i]
+                if cur == 0:
+                    continue
+                for j in range(n):
+                    if mask & (1 << j):
+                        continue
+                    if compatible[i][j]:
+                        new_mask = mask | (1 << j)
+                        dp[new_mask][j] = (dp[new_mask][j] + cur) % MOD
+
+        # sum over all masks that contain all indices
+        ans = 0
+        for i in range(n):
+            ans = (ans + dp[full_mask][i]) % MOD
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

@@ -1,0 +1,302 @@
+<|channel|>analysis<|message|>We need to produce minimal string containing all three as substrings. Equivalent to computing shortest common superstring (SCS) of three strings. Strings length <=100. So we can brute force via permutations and overlapping. Because only 3 strings; we can attempt all arrangements of order and compute overlapped; also handle that one string might contain another fully. Need lexicographic smallest among same length.
+
+Typical algorithm: For two strings s, t, get minimal superstring via maximum overlap: the longest suffix of s that is prefix of t (could be zero). Then superstring = s + t[len(overlap):]. Similarly for k=3, we can consider all permutations of a,b,c and in each compute superstring of first two, then third overlapping with result? But careful: overlapping arrangements may yield minimal if we allow second to be overlapped with third further than first two? But computing sequentially (merge first two, then merge with third) is fine because for two strings, the maximal overlap gives minimal length. For three, there might be cases where using a different ordering yields better results. We need to test all permutations of order of the three strings, merging step by step, but we might also need to consider overlapping of entire third string with the merged result but maybe we can also try merging third into each adjacent? Usually SCS for small set can be solved by evaluating all pairs order.
+
+But there is nuance: Suppose strings: a="abc", b="bcd", c="cd". Overlap all. The best might be "abcd". Through permutations: a,b,c -> merge a+b -> "abcd" as  abc + d ; overlapped  "abc"+"d" because suffix of "abc" 'c' matches prefix 'b'? Actually 'abc' and 'bcd' overlap 'bc' second? Let's test: a,b => longest overlap suffix of a that is prefix of b: "bc" (len=2). So result "abcd". Then merge with c: "cd". Overlap of "abcd" suffix with prefix of "cd" is 'cd'? suffix 'cd' length2. So merging yields "abcd" same. So fine.
+
+Edge cases: if one string contains another as substring, we might skip it: e.g., a="abc", b="b", c="bc". Minimum string can be "abc". Our algorithm: all permutations computed: a,b,c -> merge a+b: a contains b? yes, we might just keep a. But algorithm: when merging s and t if t contains s? Overlap? Let's treat merging as: if s contains t, result s. else if t contains s, result t. else compute overlap.
+
+But we also need to evaluate all permutations and lexicographic minimal.
+
+For n=3, there are 6 permutations. For each, we can compute superstring.
+
+Alternatively, we can compute minimal superstring of any subset using dynamic programming: DP over subsets of the 3 strings. For each subset mask, store minimal string that contains that subset. DP transitions: add another string t not in subset: compute superstring of current superstring and t. Complexity trivial. Then answer = DP[all]. This also automatically chooses optimal sequence and ensures lexicographic minimal among same length by comparing strings.
+
+But DP uses string compare lengths and lexicographic. Implementation: For DP[mask] store best string. Initialize DP[1<<i] = s[i]. Then for mask with dp defined, for each j not in mask, newmask=mask|1<<j; candidate = merge(dp[mask], s[j]) using longest overlap but first check containment. For merging function: same as earlier merging two strings with containment.
+
+Return dp[full]. This reduces need of permutations enumeration. But correctness: The merging function for two strings gives minimal superstring of the two. For DP, merging dp subset (which might already be minimal superstring of subset) and another string. But does optimal solution of 3 necessarily consist of merging optimal subset string with another string via minimal overlap? I think yes; the SCS problem can be solved by dynamic programming with pairwise merging as we assume merges are associative? Actually merging may not be associative: There might be cases where merging minimal string of subset with t yields not minimal overall. But for 3 strings, exhaustive search of permutations suffices. So we can simple do 6 permutations.
+
+I'll produce solution:
+
+Define function merge(s,t):
+  # if t in s: return s
+  if t in s: return s
+  if s in t: return t
+  find max overlap where suffix of s matches prefix of t. Do for i from min(len(s),len(t)) down to 0: if s[-i:]==t[:i], pick i max.
+  return s + t[i:].
+
+We compute four step? For each permutation p: temp=merge(p[0],p[1]); temp=merge(temp,p[2]); Add to list of candidates. Keep best by length, then lexicographic.
+
+Also handle case where overlapping bigger after merging? but done sequentially.
+
+Test: Example1: a=abc, b=bca, c=aaa
+ perm order? Their sample answer "aaabca". Let's run algorithm quickly conceptually: Suppose perm [c,a,b]: merge c="aaa" and a="abc": check overlaps: largest suffix of "aaa" with prefix of "abc": maybe "a"? yes overlap length 1: "aaa"+"abc"[1:] = "aaabc". -> temp "aaabc". Merge with b="bca": check t in s? "bca" not in "aaabc". s in t? "aaabc" in "bca"? no. find overlap suffix of temp with prefix of "bca": suffix "abc" prefix "bca" => "bc"? Actually suffix "abc" vs "bca" mismatched. Overlap length 1? "c" vs "b"? no. 0. So merge yields "aaabcbca" length 8. Not best.
+
+Try order [b,c,a]: b="bca", c="aaa", a="abc". merge b+c: check overlap suffix b "bca" with prefix c "aaa": maybe "a"? last char 'a' vs first 'a': yes overlap length 1 => "bca"+"aa" -> "bca aa" => "bca aa"? Wait carefully: b="bca", c="aaa" -> overlap 'a' -> result = "bca"+"aa" (since c[1:]) = "bca aa" => "bca aa" => "bca aa"? Actually result "bca aa". This is "bca"+"aa" = "bca aa" but string "bca aa" => "bca aa" -> "bca aa"? Combined: "bca aa". We'll just trust.
+
+Then merge with a="abc" gives etc.
+
+But the given answer string "aaabca" length 6. Let's see if our algorithm finds it for some order. Suppose order [c,b,a]? c+ b => earlier check. But maybe order [c, a, b]? Already computed >6. Another possibility: The algorithm may need to consider not only sequential merges but also overlapping multiple strings simultaneously? But typical minimal superstring for 3 strings may involve aligning like c in before b? Let's compute directly: "aaabca" contains "c" as suffix? Let's analyze: "aaabca" substring a=abc appears at index 2..4, b=bca at 3..5, c=aaa at 0..2. So ordering in the final string is c, a, b with overlapping. Overlap chain: c "aaa" to a "abc": overlapping 'a' maybe? Actually c ends with "aa"?? Wait "c"+"a": c "aaa", a "abc". They overlap on 'a': c's suffix of length 1 'a' matches a's prefix 'a', resulting string "aa"+"abc"?? Wait superstring is "aa"+"abc"?? but their final string "aaabca": c to a: starting string maybe "aaa", overlapping a: we get "aa" + "abc" -> "aaabc". Then to b: a's suffix 'bc' overlaps with b prefix 'bc', giving "aaabca". So sequential merging works: order c,a,b gives "aaabca". But earlier we computed difference: merge c+a produced "aaabc" correct. Merge with b then gave "aaabcbca" because we overlapped incorrectly. Let's redo: temp="aaabc". We need to merge temp with b="bca". Find longest suffix of temp that is prefix of b. temp ends with "bc". wait suffix "bc"? temp "aaabc" ends with "bc". b starts with "bca". Overlap length 2: "bc". So merge yields temp + b[2:] = "aaabc" + "a" = "aaabca". Our earlier compute incorrectly overlapped 0. So algorithm works. Good.
+
+Edge: we also need to handle merging where one string fully contains the other as overlapping longer than any suffix/prefix? But containment case handled earlier.
+
+We also need to ensure minimal lexicographic: after gathering best strings, choose minimal.
+
+Implementation: Use Python's str.find to check containment? Use if t in s. For reverse check.
+
+Compute overlap: for i from min(len(s), len(t)) down to 0: if s.endswith(t[:i]) then break.
+
+Potential complexity fine.
+
+Return result.
+
+Edge case: length maybe equal but lexicographically smaller; choose.
+
+Test example 2: a="ab", b="ba", c="aba". permutations.
+
+Let's compute order [c,a,b]. c="aba", a="ab": check overlap (suffix of c with prefix of a). c ends "ab" prefix of a "ab": overlap len 2. But also a in c? yes "ab" is prefix of c? Actually "ab" not substring? it is prefix. But merging will produce "aba". merging with b gives "aba"+"ba"? find overlaps: suffix of "aba" with prefix of "ba": "a"? suffix "a" prefix "b"? no. "ba"? suffix "ba" prefix "ba" yes overlap length 2? but temp ends with "ba", yes. Merge: "aba"+"": -> "aba". Gives answer "aba". Good.
+
+Edge: Might need lexicographic small among equal lengths; our enumeration will choose.
+
+Need to ensure merging results don't create duplicate overlapping prematurely that cause longer string? But algorithm uses maximum overlap; this yields minimal length for two strings. For full problem, ok.
+
+Let's test a case where string1 contains string2, e.g., a="abcd", b="b", c="bc". Order [a,b,c] typical? a then b: merge a and b: b in a -> return a. Then with c: merge "abcd" with "bc": check overlap suffix of "abcd" with prefix of "bc": "bc"? suffix "cd" not matches; "bc"? maybe no. Overlap 0. So final "abcd"+"bc"="abcd bc". But actual minimal "abcd". Because c is substring of a, so final remains "abcd". Our merging with c: if s contains t, returns s. So need to check that. In above step we missing: s="abcd", t="bc". t in s? yes because "bc" is substring. So merge returns s. so final "abcd". Good.
+
+Thus algorithm works.
+
+Let's produce final solution.
+
+Provide code with class Solution and method.
+
+Also add helper functions: merge(a,b). Implementation details: using for loop for overlap.
+
+Running complexity fine.
+
+Edge: equal lengths, lexicographic compare using if new < best.
+
+Ok produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For three strings  
+`a , b , c` (length ≤ 100) we have to build the shortest string that
+contains all of them as substrings.
+If several strings of the same minimal length exist we have to output the
+lexicographically smallest one.
+
+The problem is a special case of the **Shortest Common Superstring** (SCS)
+problem for only three strings – its size is tiny, therefore an exhaustive
+search over all possible orders is trivial.
+
+--------------------------------------------------------------------
+
+#### 1.  Merging two strings
+
+For two strings `x` and `y`
+
+```
+merge(x , y)
+```
+
+returns the smallest string that contains both `x` and `y`.
+
+*If one string already contains the other*  
+```
+y in x  ->  result = x          (x already covers y)
+x in y  ->  result = y          (y already covers x)
+```
+
+*Otherwise*  
+take the longest suffix of `x` that is a prefix of `y`.  
+Let its length be `k` (`0 ≤ k ≤ min(|x|, |y|)`).
+
+```
+result = x + y[k:]      # append the rest of y
+```
+
+The loop that computes `k` runs from the maximum possible length down to
+`0`; `k` stops at the first match, guaranteeing the maximum possible
+overlap – thus the produced string has minimal length.
+
+--------------------------------------------------------------------
+
+#### 2.  Enumerating all orders
+
+There are only `3! = 6` permutations of the three strings.
+For each permutation `[p0, p1, p2]` we perform
+
+```
+tmp   = merge(p0 , p1)
+best2 = merge(tmp, p2)          # superstring for the whole order
+```
+
+`best2` is a candidate answer.  
+During the enumeration we keep the best candidate seen so far:
+
+```
+if (len(best2) < len(best)) or
+   (len(best2) == len(best) and best2 < best):
+        best = best2
+```
+
+The minimal length is always obtained, because for each order we use
+the minimal superstring of the first two strings.  
+The lexicographically smallest among all minimal‑length candidates is
+output.
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the required string.
+
+---
+
+##### Lemma 1  
+`merge(x , y)` returns a superstring of `x` and `y` of minimal possible
+length.
+
+**Proof.**
+
+*Case 1 – containment*  
+If `y` is a substring of `x`, the only string that contains both is `x`
+itself; its length is minimal.
+
+*Case 2 – no containment*  
+Let `k` be the length of the longest suffix of `x` that equals a prefix of
+`y`.  
+Any superstring of `x` and `y` must contain `x` and then at least the
+remaining `|y|-k` characters of `y` (the part not overlapped). Hence the
+length of any superstring is at least `|x| + |y| - k`.  
+`merge` produces exactly this length, thus it is minimal. ∎
+
+
+
+##### Lemma 2  
+For any order `[s1, s2, s3]` of the three strings the string
+`merge( merge(s1,s2) , s3 )` equals the shortest superstring that
+contains `s1`, `s2` and `s3` with that order of first letters  
+(meaning that in the final string the leftmost appearance of each
+substring follows the order).
+
+**Proof.**
+
+First, `merge(s1,s2)` is minimal by Lemma&nbsp;1.  
+Merge this result with `s3` again yields the minimal superstring
+containing all three strings, because adding `s3` can only reduce the
+length by considering the largest possible overlap between the current
+superstring and `s3`.  
+Thus the final string is the minimal one preserving that order. ∎
+
+
+
+##### Lemma 3  
+Among all superstrings that contain all three strings, at least one
+has its first appearances of `a`, `b`, `c` in some order.
+Therefore one of the candidates generated by the algorithm is optimal.
+
+**Proof.**
+
+Take an optimal superstring `T`.  
+Read `T` from left to right and record the first position of each of the
+three substrings.  
+Sort the three substrings according to these first positions -> a definite
+order `[s1,s2,s3]`.  
+`T` contains all three strings and respects this order.  
+By Lemma&nbsp;2, the string produced for that order is a shortest
+superstring with that order, thus its length cannot be larger than
+`|T|`.  
+Consequently the candidate for that order is optimal. ∎
+
+
+
+##### Theorem  
+The algorithm returns the lexicographically smallest string that
+
+* has minimal possible length,
+* contains `a`, `b`, and `c` as substrings.
+
+**Proof.**
+
+Let `best` be the string produced by the algorithm after inspecting all
+six permutations.
+
+*Optimality of length.*  
+By Lemma&nbsp;3 at least one permutation yields a string of minimal
+length.  
+During enumeration we keep the shortest candidate, hence `best`
+has minimal length.
+
+*Lexicographical minimality.*  
+All candidates of minimal length are compared, and the lexicographically
+smallest among them is kept.  
+Thus `best` is the required answer. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+Strings are at most length 100.
+
+*Computing one pairwise merge* :  
+`O(|x| + |y|) ≤ 200` operations (loop over at most 100 lengths).
+
+*Six permutations, each two merges* :  
+`6 × 2 × 200 = 2400` operations – negligible.
+
+Memory usage is  
+`O(|a|+|b|+|c|)` for the temporary strings – ≤ 300 characters.
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation (Python 3)
+
+```python
+class Solution:
+    def minimumString(self, a: str, b: str, c: str) -> str:
+        """
+        Returns the minimal string that contains a, b, c as substrings.
+        Among all minimal strings returns the lexicographically smallest.
+        """
+
+        def merge(x: str, y: str) -> str:
+            """
+            Minimal superstring of two strings x and y.
+            """
+            if y in x:
+                return x
+            if x in y:
+                return y
+
+            # longest suffix of x that is prefix of y
+            max_k = 0
+            max_len = min(len(x), len(y))
+            for k in range(max_len, 0, -1):
+                if x.endswith(y[:k]):
+                    max_k = k
+                    break
+            return x + y[max_k:]
+
+        strings = [a, b, c]
+        best = None
+
+        # iterate through all 6 permutations of the 3 strings
+        for i in range(3):
+            for j in range(3):
+                if j == i:
+                    continue
+                k = 3 - i - j          # remaining index
+                # order: strings[i], strings[j], strings[k]
+                tmp = merge(strings[i], strings[j])
+                candidate = merge(tmp, strings[k])
+
+                if best is None or \
+                   len(candidate) < len(best) or \
+                   (len(candidate) == len(best) and candidate < best):
+                    best = candidate
+
+        return best
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the requested function signature.

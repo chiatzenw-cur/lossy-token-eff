@@ -1,0 +1,259 @@
+<|channel|>analysis<|message|>We need to compute total number of permutations of nums such that adjacent numbers have divisibility relation. n <= 14, so we can use DP over subsets. Classic problem: "Count number of special permutations" same as LeetCode problem. Solve using bitmask DP: dp[mask][i] = number of ways to form permutation of set bits in mask ending with nums[i] (i must be included). Transition: from dp[mask][i] to dp[mask|1<<j][j] if nums[i]|nums[j] or nums[j]|nums[i]. Complexity O(n^2 * 2^n) ~ 14^2 * 16384 = 12 million -> fine.
+
+Alternatively, we can use bitmask DP over indices. Implementation: Precompute adjacency matrix valid[i][j] telling if numbers can be adjacent. Then DP array of size (1<<n) * n. Initialize dp[1<<i][i] = 1. For mask from 0..(1<<n)-1: for i from 0..n-1: if dp[mask][i] > 0: for j not in mask: if valid[i][j]: dp[mask|1<<j][j] += dp[mask][i]. modulo. Answer: sum dp[(1<<n)-1][i] over i.
+
+Constraints allow: modulo 1e9+7.
+
+Edge cases: We can use integer 1e9+7.
+
+Implementation:
+
+class Solution:
+    def specialPerm(self, nums: List[int]) -> int:
+        mod=10**9+7
+        n=len(nums)
+        adj=[[False]*n for _ in range(n)]
+        for i in range(n):
+            for j in range(n):
+                if i!=j and (nums[i]%nums[j]==0 or nums[j]%nums[i]==0):
+                    adj[i][j]=True
+        size=1<<n
+        dp=[[0]*n for _ in range(size)]
+        for i in range(n):
+            dp[1<<i][i]=1
+        for mask in range(size):
+            for i in range(n):
+                if not (mask&(1<<i)):
+                    continue
+                val=dp[mask][i]
+                if val==0:
+                    continue
+                for j in range(n):
+                    if mask&(1<<j):
+                        continue
+                    if adj[i][j]:
+                        dp[mask|1<<j][j]=(dp[mask|1<<j][j]+val)%mod
+        full= (1<<n)-1
+        ans=sum(dp[full][i] for i in range(n))%mod
+        return ans
+
+Time complexity fine.
+
+Testing sample:
+
+Example 1: [2,3,6] -> n=3. we compute ans=2.
+
+But we should ensure modulo orientation.
+
+Return final code.
+
+Potential optimization: Use list of lists or 2D array.
+
+But does DP using integer arrays produce 64-bit sum possibly exceeding 32-bit -> use Python big ints anyway.
+
+Consider memory: dp size 16384 * 14 ~ 229k ints, fine.
+
+Edge: n=14 -> dp size 16384*14=229k ~ small.
+
+Return.
+
+Let's produce final answer with explanation.
+
+<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a permutation to be **special** every adjacent pair must satisfy
+
+```
+a % b == 0   or   b % a == 0            (a and b are neighbours)
+```
+
+The array `nums` contains at most `14` distinct positive integers.
+`14!` is far too large to enumerate, but `2^14` is only `16384`.  
+We use *bitmask DP* in which
+
+* `mask` – a bitmask of the numbers that have already been placed
+* `i`     – the index of the last number in the current partial permutation
+
+`dp[mask][i]` – number of ways to build a permutation of the elements
+represented by `mask` whose last element is `nums[i]`.
+
+--------------------------------------------------------------------
+
+#### 1.  Pre‑computation – adjacency
+
+For every pair `(i , j)` we pre‑compute whether `nums[i]` and `nums[j]`
+can stand next to each other.
+
+```
+adj[i][j] = True  if  nums[i] % nums[j] == 0  or  nums[j] % nums[i] == 0
+```
+
+`adj` is symmetric, but we keep it as a full `n × n` matrix for simplicity.
+
+--------------------------------------------------------------------
+
+#### 2.  Transition
+
+Initialize
+
+```
+dp[1 << i][i] = 1          for every i
+```
+
+(Only one number is used – the permutation consists of that single element).
+
+For any state `(mask , i)`  we try to append any unused number `j`:
+
+```
+if not (mask & (1 << j)) and adj[i][j]:
+        dp[mask | (1 << j)][j] += dp[mask][i]
+```
+
+All operations are performed modulo `MOD = 1 000 000 007`.
+
+--------------------------------------------------------------------
+
+#### 3.  Result
+
+When all numbers have been used (`mask == (1<<n)-1`) the last element can be
+anything.  
+The answer is the sum over all possible final elements.
+
+```
+answer = Σ dp[(1<<n)-1][i]  (mod MOD)
+```
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the number of all special permutations.
+
+---
+
+##### Lemma 1  
+For every mask and index `i` with `mask` containing `i`,  
+`dp[mask][i]` equals the number of special permutations that
+
+* use exactly the elements in `mask`, and
+* end with `nums[i]`.
+
+**Proof.**
+
+By induction over the number of set bits in `mask`.
+
+*Base (`|mask| = 1`).*  
+`dp[1<<i][i] = 1`, which is exactly the single‑element permutation
+`[nums[i]]`. The statement holds.
+
+*Induction step.*  
+Assume the lemma true for all masks of size `k`.  
+Take a mask of size `k+1`.  
+Any special permutation counted in `dp[mask][i]` has a predecessor
+`j` such that `j` is not in `mask` and `adj[i][j]` holds,
+and the remaining part of the permutation is a special permutation of
+`mask \ {i}` ending with `j`.  
+When the algorithm processes state `(mask \ {i}, j)` it adds
+`dp[mask \ {i}][j]` to `dp[mask][i]` exactly when `adj[i][j]` holds,
+reproducing all valid permutations.  
+No other permutations are added, because the transition requires
+`adj[i][j]`.  
+Thus `dp[mask][i]` counts precisely the desired permutations.
+
+∎
+
+
+
+##### Lemma 2  
+For the full mask `full = (1<<n)-1`,  
+`Σ_i dp[full][i]` equals the number of all special permutations of `nums`.
+
+**Proof.**
+
+By Lemma&nbsp;1, each term `dp[full][i]` counts special permutations that
+contain all numbers and end with `nums[i]`.  
+The sets for different `i` are disjoint (different last elements),  
+and their union comprises **all** special permutations.
+Therefore the sum is exactly the total number.
+
+∎
+
+
+
+##### Theorem  
+The algorithm returns the number of special permutations of `nums`
+(modulo `10^9+7`).
+
+**Proof.**
+
+By Lemma&nbsp;2 the value computed before the final modulo operation
+equals the total number of special permutations.
+All updates are performed modulo `MOD`, thus the final returned value
+is the number modulo `MOD`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+* `n ≤ 14`
+* Number of masks: `2^n ≤ 16384`
+* For each mask we iterate over all `i` and all possible `j` → `O(n²)`
+
+```
+Time   :  O(n² · 2^n)   ≤ 14² · 16384  ≈ 12 M operations
+Memory :  O(n · 2^n)    ≤ 14 · 16384  ≈ 230 k integers
+```
+
+Both fit easily into the limits.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+MOD = 10 ** 9 + 7
+
+class Solution:
+    def specialPerm(self, nums: List[int]) -> int:
+        n = len(nums)
+        # adjacency matrix
+        adj = [[False] * n for _ in range(n)]
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+                    adj[i][j] = True
+
+        total_masks = 1 << n
+        dp = [[0] * n for _ in range(total_masks)]
+
+        # Base cases: single element permutations
+        for i in range(n):
+            dp[1 << i][i] = 1
+
+        # Dynamic programming over subsets
+        for mask in range(total_masks):
+            for i in range(n):
+                if not (mask & (1 << i)):
+                    continue
+                val = dp[mask][i]
+                if val == 0:
+                    continue
+                for j in range(n):
+                    if mask & (1 << j):
+                        continue
+                    if adj[i][j]:
+                        nxt = mask | (1 << j)
+                        dp[nxt][j] = (dp[nxt][j] + val) % MOD
+
+        full = total_masks - 1
+        ans = sum(dp[full][i] for i in range(n)) % MOD
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above.

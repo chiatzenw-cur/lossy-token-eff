@@ -1,0 +1,188 @@
+<|channel|>analysis<|message|>We need to produce a Python program that reads all text files under a directory and reprompt top-5 words with the most number of occurrences. This typical word count problem. Directory may contain subdirectories? Ask reading all text files under a directory (maybe recursively). Count words. Probably ignoring case and punctuation. Then produce top 5 words. Provide code. Might use argparse for directory argument. Also might use collections.Counter. Provide explanation. Also might need file reading.
+
+We should also handle Word punctuation removal: use regex or string.punctuation. Probably use re.findall(r'\b\w+\b'). Combine all words, convert to lower case. Count. Then print top 5.
+
+Also better prompt: "reprompt top-5 words" likely means "report top-5 words". Probably produce print.
+
+Additionally, we can also optionally allow user to input directory path and number of top words. Provide full script.
+
+Need to consider error handling: directory exists, file read errors.
+
+Also note we might want to skip non-text files by extension '.txt'.
+
+Also we can use os.walk for recursion.
+
+Let's produce a script.
+
+Also perhaps we can provide instruction to run: python script.py /path/to/directory
+
+We'll write code with argparse. Use Counter.
+
+Also we can optionally display word counts sorted.
+
+Also we can optionally ignore stopwords using nltk? But not required.
+
+Just normal.
+
+Let's produce final answer with explanation and the code block.
+
+Also mention how to run and test.
+
+Let's produce.<|end|><|start|>assistant<|channel|>final<|message|>Below is a **stand‑alone Python script** that
+
+1.  Walks through a user‑supplied directory (recursively) and opens every file that ends with `.txt`.
+2.  Tokenises each file, normalises words to lower‑case and strips punctuation.
+3.  Counts the frequency of every word using `collections.Counter`.
+4.  Prints the **top‑5 most frequent words** together with their counts.
+
+```python
+#!/usr/bin/env python3
+"""
+word_counter.py
+
+Read all *.txt files under a directory, count word frequencies,
+and report the top‑5 most frequent words.
+"""
+
+import argparse
+import os
+import re
+import sys
+from collections import Counter
+from typing import Iterable, Tuple
+
+# --------------------------------------------------------------------------- #
+# Helper functions
+# --------------------------------------------------------------------------- #
+
+WORD_RE = re.compile(r"\b\w+\b")  # matches sequences of alphanumerics
+
+
+def words_from_text(text: str) -> Iterable[str]:
+    """Yield all lower‑case words from *text*."""
+    for match in WORD_RE.finditer(text):
+        yield match.group(0).lower()
+
+
+def words_from_file(path: str) -> Iterable[str]:
+    """Yield words from the supplied file path."""
+    try:
+        with open(path, "r", encoding="utf-8") as fp:
+            for line in fp:
+                yield from words_from_text(line)
+    except (IOError, OSError) as exc:
+        print(f"⚠️  Could not read {path!r}: {exc}", file=sys.stderr)
+
+
+def iterate_text_files(root: str) -> Iterable[str]:
+    """Yield full paths of all *.txt files under *root* (recursively)."""
+    for dirpath, _, filenames in os.walk(root):
+        for fname in filenames:
+            if fname.lower().endswith(".txt"):
+                yield os.path.join(dirpath, fname)
+
+
+# --------------------------------------------------------------------------- #
+# Main logic
+# --------------------------------------------------------------------------- #
+
+def count_words_in_directory(root: str) -> Counter:
+    """Return a Counter with word frequencies for all *.txt files in *root*."""
+    counter = Counter()
+    for txt_path in iterate_text_files(root):
+        counter.update(words_from_file(txt_path))
+    return counter
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Count words in all *.txt files under a directory "
+        "(recursively) and display the top‑5 most frequent words."
+    )
+    parser.add_argument(
+        "directory",
+        metavar="DIR",
+        help="Root directory to search for *.txt files",
+    )
+    parser.add_argument(
+        "-n",
+        "--top",
+        type=int,
+        default=5,
+        help="Number of top words to display (default: 5)",
+    )
+    args = parser.parse_args()
+
+    if not os.path.isdir(args.directory):
+        print(f"❌  {args.directory!r} is not a directory or cannot be accessed.", file=sys.stderr)
+        sys.exit(1)
+
+    counter = count_words_in_directory(args.directory)
+
+    if not counter:
+        print("⚠️  No words found in the provided directory.")
+        sys.exit(0)
+
+    print(f"\nTop {args.top} words in {args.directory!r}:\n")
+    for word, count in counter.most_common(args.top):
+        print(f"{word:>20} : {count}")
+
+    # Optional: show total words counted
+    print(f"\nTotal distinct words: {len(counter)}")
+    print(f"Total words processed: {sum(counter.values())}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## How to use
+
+1. **Save** the script as `word_counter.py`.
+2. **Make it executable** (optional):
+
+   ```bash
+   chmod +x word_counter.py
+   ```
+
+3. **Run** it, pointing to the directory you want to analyse:
+
+   ```bash
+   python3 word_counter.py /path/to/my/texts
+   ```
+
+   or, if you made it executable:
+
+   ```bash
+   ./word_counter.py /path/to/my/texts
+   ```
+
+4. **Optional arguments**
+
+   * `-n 10` or `--top 10` – show the top 10 words instead of the default 5.
+   * No arguments → program prints the top‑5 words.
+
+---
+
+## How it works (quick walk‑through)
+
+| Step | What happens | Why |
+|------|--------------|-----|
+| **Walk the directory** | `os.walk()` yields every file under the root. | Recursively search for all `.txt` files. |
+| **Read each file** | `open(..., encoding="utf-8")` reads line by line. | Handles large files efficiently. |
+| **Tokenise** | `re.compile(r"\b\w+\b")` extracts words; `.lower()` normalises. | Ignores case, punctuation, and keeps only alphanumerics. |
+| **Count** | `Counter.update()` aggregates word counts. | Efficient frequency counting. |
+| **Report** | `most_common(n)` gives the top‑n words. | Easy to display results. |
+
+---
+
+## Customisation ideas
+
+* **Stop‑word removal** – plug in a list of common words to skip.
+* **Different file types** – change the `if fname.lower().endswith(".txt")` check.
+* **More sophisticated tokenisation** – use `nltk` or `spaCy` if you need stemming, lemmatization, etc.
+* **Export results** – write the counts to a CSV or JSON file.
+
+Happy word‑counting!

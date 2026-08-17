@@ -205,6 +205,23 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--overwrite", action="store_true", help="Redo runs that already exist.")
+    # Model-family override (2026-08-17, Qwen3-8B+drafter run). Every
+    # default below is GPT-OSS-20B's own pair, so a plain invocation is
+    # byte-for-byte the same as before this was added. All three must move
+    # together: MODEL_PATH/DRAFT_MODEL_PATH become run_server_vllm.sh's own
+    # env vars (what the server actually loads), served-model-name becomes
+    # BOTH the server's --served-model-name AND run_experiment_vllm.py's
+    # --model (the client's request_payload["model"] -- vLLM 400s if these
+    # two don't match).
+    parser.add_argument("--model-path", default="openai/gpt-oss-20b", help="Target model, HF repo id or local path. Sets run_server_vllm.sh's MODEL_PATH.")
+    parser.add_argument("--draft-model-path", default="nebius/EAGLE3-gpt-oss-20b", help="Speculative-decoding draft model. Sets run_server_vllm.sh's DRAFT_MODEL_PATH.")
+    parser.add_argument("--served-model-name", default="gpt-oss-20b", help="Must match on both the server (--served-model-name) and the client (request's \"model\" field).")
+    parser.add_argument(
+        "--rope-scaling-json", default="",
+        help="Raw JSON for run_server_vllm.sh's ROPE_SCALING_JSON (the value of a \"rope_scaling\" hf-override, "
+        "e.g. '{\"rope_type\":\"yarn\",\"factor\":1.6,\"original_max_position_embeddings\":40960}'). "
+        "Empty (default) = no override, matches every model whose native window already covers --max-new-tokens.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -410,6 +427,10 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
     env["PORT"] = str(args.port)
     env["SEED"] = str(args.server_seed)
     env["NUM_SPEC"] = str(args.num_spec)
+    env["MODEL_PATH"] = args.model_path
+    env["DRAFT_MODEL_PATH"] = args.draft_model_path
+    env["SERVED_MODEL_NAME"] = args.served_model_name
+    env["ROPE_SCALING_JSON"] = args.rope_scaling_json
     mode = "baseline" if arm == "baseline" else ("strict" if arm == "strict" else "lossy")
     if arm not in ("baseline", "strict"):
         env["LOSSY_RULE"] = arm
@@ -486,6 +507,8 @@ def request_once(
         "--server-url", f"http://127.0.0.1:{args.port}",
         "--server-log", str(log_path),
         "--assert-fresh-server",
+        "--model", args.served_model_name,
+        "--draft-model", args.draft_model_path,
     ]
     if arm not in ("baseline", "strict"):
         command += ["--lossy-method", arm, "--alpha", f"{alpha_for(args, arm):g}"]

@@ -1,0 +1,441 @@
+<|channel|>analysis<|message|>We need to find length of longest subarray that can be made all equal after deleting up to k elements. Equivalent to find longest segment where after removing at most k elements, we can keep the rest consist of same value. That is, we can consider sliding window with two pointers l,r where we maintain a frequency of numbers in window. For each window, we want to see if we can delete all elements except value with max freq. Deletions needed = window_size - max_freq. Must be <= k. We need longest index window.
+
+We can maintain frequency dictionary of window counts. For each r, we add nums[r]. Keep track of max_freq. While window_size - max_freq > k, we move l forward: decrement freq[nums[l]] and if that freq was equal to max_freq, might need to recompute max? Usually we need to recompute max maybe keep maintain differently: Since values are bounded to 1..n. We can maintain max frequency in window: we can keep as variable, but when we drop out of window, we might need to recalc when max freq number decreased. However we can maintain a structure where we can keep an array of counts and maintain max frequency via current counts; recompute max when necessary, but we may use a multiset or fenwick? We can maintain a counter of counts, but we can avoid recompute each time if max freq may fade but we only rely on max >= something? Actually we can maintain a fenwick of counts? simpler: maintain array freq and maximum tracked variable. When l moves, we decrement freq[nums[l]]; if value we removed had freq equal to max_freq, that could decrease max_freq. But we may not know if there is another value with that same frequency. However we can recompute max via scanning freq across all numbers up to maybe 1e5. That is O(n) each time; too slow. So we need a more efficient way.
+
+Actually typical approach: Use max_freq_in_window = max freq of any number in the window: can maintain as variable and not shrink accurately, but we might overestimate? Wait we need condition <=k: if we overestimate max frequency, then we may think window_size - max_freq <= k, but actual deletions may be >k and we incorrectly accept. But we only shrink using while window_size - max_freq > k. If our max_freq is overestimated, we may keep window longer, but may fail later? Wait we care longest; if we have overestimated max, we might keep window longer but still potentially overcount. But we may prematurely break when window_size - max_freq > k? Let's analyze typical method: We maintain max_freq by updating when adding a new number only: if freq[x] > max_freq, set max_freq = freq[x]. When we remove a number, we don't adjust max_freq. This can only become larger than real maximum over time since we will never decrease. So window_size - max_freq becomes <= actual deletions. That may mean we might allow larger windowSize than we should: i.e., we may consider a window where we think we can delete <= k but actual deletions > k, thus we incorrectly take longer window which is invalid. So algorithm fails.
+
+However typical solution for such problem uses that we maintain the maximum frequency for each value but we shrink when count_with_max less? Wait standard solution for longest subarray where we can replace at most k elements to make all equal? That's similar to "Longest Repeating Character Replacement" problem (Leetcode 424). The solution uses sliding window but doesn't recalc max fully, but it works because we only care about maximum length, but we might misplace? Let's recall: For given string s, we can replace up to k letters to make all same. The window condition: if window_size - max_freq <= k, then window is valid. We maintain max_freq as the maximum count of any character seen in window; but we don't reduce it when we shrink window. Yet it works because we only care to compute max length; even though max_freq may be stale, we may not update best length. Because we might store best length as current window length. When we shrink, window_size reduces, but we might overwrite best length incorrectly? Let's think: Suppose we overestimated max_freq by 1. Then condition maybe passes when actually window size > k+true_max. So we might incorrectly record a window of length bigger than allowed? Actually we might record bigger length but later maybe when we shrink it there will be a point where window_size - max_freq > k triggers shrink; but because max_freq is overestimated, we might not trigger at right positions: Actually we only shrink when window_size - max_freq > k. If we overestimated max_freq, then the difference will be smaller, making the condition more likely to be satisfied; we might extend window longer than possible. But if we later shrink too late, then you'll keep a window that violates condition. But we don't finalize invalid ones.
+
+Thus algorithm may produce too big answer that is not correct? Let's examine example: freq= [1,2,2,1] decreases? But we don't recompute.
+
+Let's think of actual counterexample: Suppose array [1,2,1,2] k=1. We need longest subset that can become equal with at most 1 deletion. We can delete 2 at index 3? Actually if we delete 2, then we have [1,2,1] which not all equal. We can delete 1 or 2 to achieve 3 equal? Actually we can delete one element. The longest equal subarray length is 3? Let's test: array [1,2,1,2]. Delete index2 (1) -> [1,2,2] not equal. Delete index3 (2) -> [1,2,1] not equal. Delete index1 (2) -> [1,1,2] not equal. Delete index0 (1) -> [2,1,2] not equal. We only delete one element; cannot get equal. Wait maybe we can delete 1 and 2 to get 3? No, only deleting one element. So max length is 2: pick [1,1] or [2,2] by removing others. So answer 2.
+
+Let's simulate algorithm: r=0: window [1], max=1, window_size=1, diff=0 <=1 => ans=1. r=1: window [1,2], max=1, diff=1 <=1 -> ans=2. r=2: window [1,2,1], max=2, diff=1 <=1 -> ans=3. r=3: window [1,2,1,2], max=2, diff=2 >1, break: while shrink until diff<=1: shrink l=0: remove 1 -> counts[1]=1, max remains 2. window_size=3, diff=1 <=1 -> ok. Now ans= max(3,3) ??? but ans currently 3; but this window is [2,1,2] after removal, freq=1,1,2? Wait l=0 removed, window [2,1,2] counts: 2->2,1->1. diff=1. That's valid. But length 3 > actual? But we want a length 3 subarray where we can delete 1 element. Wait we have window [2,1,2] length 3. We can delete 1 element (the 1) to keep 2,2. That's length 2 equal subarray of length 2. Actually we need length after deletion (subarray length) not count after deletion. The equal subarray length is after deletion, i.e., the remaining segment after deletion. When we keep this window[2,1,2], the elements we keep are 2,2. Their length 2 equal subarray. But algorithm length is 3, but that counts number of elements considered (including the one to delete?), Actually we keep block of 3 elements; but we are allowed to delete 1 to get 2 equal. So length 3 is not valid subarray length because we cannot keep it as equal of length 3 (need 3 equal elements). The longest subarray after deletion may be length 2, but we evaluated 3. So algorithm overestimates. But the problem asks for longest subarray after deletions. That's exactly what we counted: we maintain window of length 3 after removing one element, but we count window length 3, but we actually considered that we can delete 1 element in the window, producing a subarray of length 2 equal. So we need to output the length of the longest subarray after deletion, i.e., the number of elements that remain after deletion? Wait we kept a sliding window of length 3, deleting 1 element. The remaining elements after deletion might be 2. And we are asked to return the length of the completed " equal subarray" after deleting up to k elements. That would be 2? Wait the problem: Given array, delete at most k elements from nums. Then we want longest possible equal subarray. That means we delete some elements to reduce the array; what remains is a new array. In that array, we look for longest equal contiguous subarray. So we consider final array length we keep. The length of the longest equal subarray might be 2. So algorithm should output 2. But we found 3, which is wrong.
+
+Thus our algorithm fails due to overestimation of max.
+
+Hence need correct approach: Use two pointers by value. For each distinct value, we need to find longest window where we can delete at most k elements not equal to that value. Equivalent to find longest subarray of elements where at most k "non-c" elements. That's same as longest subarray where up-to-k elements are not equal to value. That reduces to classic "longest subarray with at most k elements not equal to c" for each value. We can precompute for each value frequency.
+
+But we can compute longest subarray where we can get all z, "converted" ignoring up to k elements. But a simpler algorithm: Instead of searching all values, we can keep track of maximum frequency of some value in window while also maintain min deletions: that number of elements in window not equal to that value. But we must guarantee that we can assign target value to element that appears with max freq in the current window. Since we cannot change the value. So indeed we need to examine subarray where we can get all equal to some value. This is similar to longest subarray with at most k numbers you can delete. Equivalent to we take sliding window where condition: window_size - max_freq <= k. We earlier kept max freq stale. But we may compute exact maximum via an array of counts and also maintain a max pointer possibly updated when we shrink. We can keep track of counts of each value and maintain the maximum frequency using a "scalable" method: For each value, we keep its current count. When we shrink, we need to possibly update max if we removed the value that had max frequency. But max could be decreased to max of possibly other values. We could maintain a list of counts as we slide. But recomputing max at each shrink from array of size up to 1e5 is O(n^2) worst-case. Need better.
+
+We could use a binary relation: maintain a "maxFreq" that we compute as max freq seen for the current window; but even if we reduce it before it's safe, we may count larger window lengths when we incorrectly consider it valid. However we can still use this algorithm to produce correct answer? Wait we can use approach that only increases window when condition holds; and we also track best length. Not resetting max but maybe we can find longest works.
+
+But earlier example with k=1 gave answer 3 that is wrong. So incorrect.
+
+Let's attempt better: Use per value sliding window. We will iterate over each distinct value v present. For each v, we find longest window with at most k elements not equal to v. That's simple: maintain two pointers, count of non-v elements. So we can compute for each value the maximum window length. Complexity O(n * num_distinct) which can be large (n up to 1e5). But number of distinct values up to 1e5. That's O(n^2). Need smarter.
+
+We can use frequency dictionary over correct algorithm: we can maintain max - but we may need to maintain a counting sort to quickly find maximum frequency after changes. Approach: use array freq and also maintain a separate array 'freq_of_freq' counts: how many values have particular frequency. Keep track of max freq. When we increment freq[v], we decrement freq_of_freq[oldfreq], increment freq_of_freq[newfreq], and update maxfreq accordingly. When we decrement freq[v] on removal, we decrement freq_of_freq[old_freq] and increment freq_of_freq[old_freq-1]. If old_freq == maxfreq and freq_of_freq[oldfreq] == 0, then maxfreq -= 1. Actually if we fill freq_of_freq array of size up to n, we can maintain O(1) updates each time.
+
+Therefore we can maintain maxfreq correctly for sliding window. So we can slide window accordingly.
+
+Implementation: n <= 1e5. So freq array size n+1. freq_of_freq array size n+2. So we can update counts.
+
+Procedure:
+
+- freq = [0]*(n+1)
+- freq_of_freq = [0]*(n+2)
+- maxfreq = 0
+- l=0
+- ans=0
+- For r in range(n):
+    val = nums[r]
+    old = freq[val]
+    freq[val] += 1
+    new = old+1
+    freq_of_freq[old] -= 1
+    freq_of_freq[new] += 1
+    if new > maxfreq:
+        maxfreq = new
+    while r - l + 1 - maxfreq > k:
+        rem = nums[l]
+        oldr = freq[rem]
+        freq[rem] -= 1
+        newr = oldr-1
+        freq_of_freq[oldr] -= 1
+        freq_of_freq[newr] += 1
+        if oldr == maxfreq and freq_of_freq[oldr]==0:
+            maxfreq -= 1
+        l += 1
+    ans = max(ans, r - l + 1)
+    # After window processed, answer is window length? Wait this is number of elements retained after possible deletion? The window length may be larger than k but we still have window containing elements we delete some to make equal. For example earlier example had window [2,1,2] length 3, with k=1. We had maxfreq=2; diff=1. This is allowed. But longest remaining equal subarray length is maxfreq (2) or window length? We need final answer: longest equal subarray after deletions. The equal subarray length after deletions we will get after deleting up to k elements. For a window, we can delete at most k elements (i.e., window_size - maxfreq). The equal subarray after deletion will be size window_size? Actually we are allowed to delete any elements anywhere in the array. We are not forced to delete exactly k elements from a window: we can delete at most k from entire array. The final array becomes original array minus deletions. The equal subarray we consider is contiguous in the resulting array. The deletions can be anywhere, but within the final contiguous subarray, we delete some elements of original array that are not part of that subarray. But we can delete elements anywhere.
+
+So the question: given we can delete up to k elements from nums, we want longest contiguous subarray that is equal. To maximize length, we consider selecting a contiguous subarray segment [l,r] and potentially deleting some elements within it: those are the non-unique elements? Actually we can delete any elements outside the segment too? Wait if we delete elements outside, we only reduce array length before segment. But we can choose to delete some elements inside [l,r] that are not equal to chosen value. This would produce a new contiguous subarray? But if we delete elements inside, we might break contiguity. So we need subarray after deletions must still be contiguous originally; we cannot have gaps. So we can only delete elements from within the subarray to provide equal elements? The array after deletion is considered; we choose any deletions <= k and the subarray after deletions may skip some elements. But we want contiguous subarray in the final array. So we can also delete elements at extremes: then subarray is contiguous by default. So we might want to delete from one side of the subarray to limit length. But we can always delete deleted elements from the ends of the subarray to make it contiguous? Wait but we need contiguous subarray after deletions; deletions are via removing elements, leaving gaps removed. In new array, indices are compressed; we can think of residual elements as subsequence of original with order. The contiguous subarray in final array corresponds to a contiguous sequence in the original array with no gaps between selected elements. Since we cannot have gaps: i.e., we couldn't delete all elements between two selected elements without destroying contiguity; but we can delete all elements between them but that would reduce to just one element? Actually if we delete all intermediate elements, there is a gap but the final array compresses; but we cannot skip an element because that would make the subarray not contiguous in new array: e.g., original indices 1,3, if we delete 2, final array indices 0,1 and the selected elements are consecutive indices 0 and1, so they are contiguous. So we can delete elements in between, but indices shift, they become contiguous.
+
+Thus starting from original array [1,2,1,2], we can delete indices 1,3 -> array [1,1] length 2 equal. That's contiguous: we removed 2 at indices 2 and 4? Wait indices 1,3 removed; left [1,1] contiguous in final array. Good.
+
+So any subarray after deletion corresponds to selecting a segment of original array and removing some elements from it; after deletion, the remaining elements are contiguous as original but with gaps removed. So the length after deletion equals original length minus number of deletions inside. So we need to find the maximum possible length of a contiguous subsequence of original array after deleting up to k elements from anywhere (maybe not necessarily inside the continuous segment). But the deletions inside segment won't affect contiguity of remaining elements after deletion. Is there possibility we can delete certain elements inside the segment to make remaining elements contiguous? Example: we can remove an element somewhere inside, but remaining elements may become adjacent. Example [1,2,1,2], delete 2 at index 2 -> remains [1,2,2] contiguous? Wait we removed 2 at index1? Let's consider: indices 0,1,2,3. Delete element at index1: it becomes [1,1,2] contiguous. This corresponds to original indices 0,2,3: after deletion, 1,1,2 are consecutive but with index2 originally removed. So the subarray that remains is original indices 0,2,3 with gap of 1 removed. This is contiguous after deletion, yes. The subarray length is 3. So we can consider "subarray" after deletions that is contiguous in the final array: the indices in original array considered are some subset of consecutive indices but not necessarily contiguous themselves; but after deletion, they become contiguous. Thus the new subarray length equals original length - deletions inside segment.
+
+Therefore we need to find the maximum length of a contiguous subarray of original array after deletions inside such that all elements become equal. That is basically: we have a contiguous window in original array; we are allowed to delete at most k elements from that window to make all its elements equal. The new array is contiguous. But does it matter if we delete some elements at outside end? Yes you'd effectively choose to trim the window. But we can treat that as like we have a window where we can delete <= k elements, but still the final segment = the original window minus those deletions? Wait could we delete elements from outside the window? Suppose we take window [0,3] and delete indices 0..3 again? That would bring window length 2 after deletion inside. That is same as choosing a smaller window of original indices. So having a window of length L and deleting ≤ k internal elements yields end size = L - d where d <= k. But we want to maximize original length where after deletion we have "all equal" contiguous segment of length L - d: we can choose d up to k <= L. But we want maximum final length, not window length. So we need to treat window L, but we keep only elements equal to some value.
+
+Thus algorithm: sliding window with condition L - max_freq <= k, and we maximize L - (L - maxfreq) ??? Wait final length is max_freq? Actually after deletion, the subarray will consist only of elements equal to that value, so the remaining length equals number of elements that have the value, which is max_freq for that window. Since we can delete at most k occurrences of other values, we can keep at most max_freq. So length of equal subarray after deletions inside window equals the count of elements equal to that value att present in window. So the longest possible equal subarray after deletions will result from choosing window with maximum max_freq with window size - maxfreq <= k. The answer is max_freq. Good.
+
+Thus algorithm: compute window where deletions <= k; return maximum max_freq among windows. That is what we earlier compute.
+
+Implementation: When we maintain window, we will track maxfreq, and answer is max(ans, maxfreq). Now we need to update maxfreq correctly with freq_of_freq. So algorithm: while r-l+1 - maxfreq > k, shrink. After loop, we update ans = max(ans, maxfreq). This yields maximum equal subarray length.
+
+Test with example: [1,2,1,2], k=1. Step: r=0: freq[1]=1, max=1, size=1, diff=0 <=1, ans=1. r=1: freq[2]=1, max=1, diff=1 <=1, ans=1? Since maxfreq=1, ans=1. r=2: freq[1]=2, max=2, diff=1 <=1 => ans=2. r=3: freq[2]=2, max=2, diff=2 >1; shrink: l=0 remove 1 -> freq[1]=1, maxfreq remains 2? Actually freq[1] changed from 2 to 1; freq_of_freq[2]-- until 1. Since maxfreq's freq_of_freq[2] is still 1? No, we had two values with freq 2, so freq_of_freq[2]=2. After removing 1, freq_of_freq[2] becomes 1. Now maxfreq still 2. Now window_size=3, diff=1 <=1, ans=2 remains. So final answer 2. Works.
+
+Now for example 1: nums=[1,3,2,3,1,3], k=3. We should compute answer 3? Let's simulate quickly: r=0: [1], max=1 ans=1. r=1: [1,3], max=1, diff=1 <=3, ans=1? Actually maxfreq=1; ans=1. r=2: [1,3,2], max=1, diff=2 <=3, ans=1. r=3: [1,3,2,3], max=2(arr=3), diff=2 <=3, ans=2. r=4: [1,3,2,3,1], max=2, diff=3 <=3, ans=2? Actually maxfreq=2. r=5: [1,3,2,3,1,3], max=3 (value 3), diff=6-3=3 <=3, ans=3. Good.
+
+Ok.
+
+Need to implement efficient freq_of_freq.
+
+Implementation details:
+
+- freq_of_freq array length n+2 because freq can go up to n.
+
+- Initially freq_of_freq[0] = n+1 because all initial values have freq 0? Actually all values are empty. We can ignore. We'll just update when adding.
+
+Edge Cases: When we decrement freq to zero, outer new freq is zero. So we keep freq_of_freq[0] accordingly. That doesn't matter.
+
+Implementation:
+
+for r, val in enumerate(nums):
+    old = freq[val]
+    freq[val] +=1
+    freq_of_freq[old] -=1
+    freq_of_freq[old+1] +=1
+    if old+1 > maxfreq:
+        maxfreq = old+1
+
+    # Shrink while necessary
+    while r - l + 1 - maxfreq > k:
+        rem = nums[l]
+        old = freq[rem]
+        freq[rem] -=1
+        freq_of_freq[old] -=1
+        freq_of_freq[old-1] +=1
+        if old == maxfreq and freq_of_freq[old] == 0:
+            maxfreq -=1
+        l += 1
+
+    ans = max(ans, maxfreq)
+
+Return ans.
+
+Complexities: O(n) time, O(n) memory.
+
+Test second example: [1,1,2,2,1,1], k=2. Process:
+
+Will get ans=4.
+
+Edge: when we decrement freq_of_freq[0] maybe negative? freq_of_freq[0] might be high; we not used for maxfreq; but we can maintain while we just decrement freq_of_freq[old] where old>=1. Example: when old=0 we may not update freq_of_freq[old] -1, but it is 0 for new freq. No freq_of_freq[0] used. But we should keep freq_of_freq=0 so that counts are correct. But we treat freq_of_freq[0] not needed.
+
+But we can skip freq_of_freq when old=0. For remove, old>=1. So we only decrement freq_of_freq[old] etc. Good.
+
+Implementation simpler: Use array freq_of_freq for counts 0..n.
+
+Simplify: we can start freq_of_freq array size n+1, all zeros. After each update we update freq_of_freq[old]--, freq_of_freq[old+1]++ for increment; but we may subtract before we verify old+1 >0. For old=0, we decrement freq_of_freq[0] which is 0. But we can store zeros; negative only if we subtract but we didn't start from 0 and it might be 0. Let's check: initially freq[ x ] = 0. freq_of_freq[0] = number of values currently there? Not necessary but we can ignore.
+
+But after adding first frequency, old=0, freq_of_freq[0] would be -1, which is wrong. So avoid updating freq_of_freq[0] when old=0. We'll update only if old>0. Or we can avoid freq_of_freq for 0 size to not negative. Count of freq 0 not needed. We'll only maintain freq_of_freq for freq >0. So we could maintain array freq_of_freq sized n+1. We update on increment: freq_of_freq[old] -=1 if old>0; freq_of_freq[old+1] +=1. Similarly for decrement: freq_of_freq[old] -=1; freq_of_freq[old-1] +=1 if old-1>0.
+
+We can still check: If old==0, we skip first decrement. Similarly after decrement to zero, freq_of_freq[old-1] is freq_of_freq[0] skip standard.
+
+Thus also keep maxfreq correct.
+
+Now complexity fine.
+
+Edge case: k=0, we need longest consecutive equal subarray that is already contiguous. Use same algorithm: condition diff <= 0, so we only keep windows where each element equal to same value. The loop will shrink until window has all same value. So algorithm returns maxfreq that appears at same time? Actually maxfreq will be 1 for window of length 1 when diff>0. So answer = 1. Good.
+
+Edge case: we want to handle all elements equal? For k=any, algorithm will find maxfreq up to n.
+
+Let's implement.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a subarray `a[l … r]` we may delete *at most* `k` elements from this
+segment.
+The remaining elements must all be equal, therefore after the deletions
+exactly  
+
+```
+   number of elements with value x  in a[l … r]    (x – the value that we keep)
+```
+
+are kept in the final equal subarray.
+
+Let
+
+```
+cnt[v] = occurrences of value v inside the current window
+mx     = maximum of cnt[v] over all v
+```
+
+`len = r – l + 1`  (size of the current window)  
+The number of elements that are *not* equal to the chosen value `x` is  
+
+```
+len – mx
+```
+
+If `len – mx ≤ k` the whole window can be turned into an equal subarray
+by deleting at most `k` elements.  
+The resulting equal subarray length is `mx` (the number of elements that stay).
+
+Thus we must
+
+```
+maximise mx   over all windows with  len – mx ≤ k
+```
+
+--------------------------------------------------------------------
+
+#### 1.  Sliding window with dynamic `mx`
+
+The idea looks like the classic “longest subarray with at most  k
+different elements” problem – we move a right border `r` and only shrink the
+left border `l` when the window becomes illegal.
+
+The only difficulty is that `mx` changes when we delete a value
+(`l` moves).  
+We need to keep the current maximum frequency **exactly**.
+Brute forcing `mx` in a whole loop would be `O(n²)` – too slow.
+
+--------------------------------------------------------------------
+
+#### 2.  Maintaining a histogram of frequencies
+
+`freq[v]` – current frequency of value `v` in the window  
+We maintain an additional array
+
+```
+freq_of_freq[f] = how many distinct values have current frequency f
+```
+
+`freq_of_freq` is updated in constant time when we
+
+* add one occurrence of `v`   ( `freq[v]` increases by 1 )
+* remove one occurrence of `v` ( `freq[v]` decreases by 1 )
+
+Pseudo‑code for **adding** a value `v`
+
+```
+old = freq[v]
+freq[v] += 1
+if old > 0:           freq_of_freq[old] -= 1
+freq_of_freq[old+1] += 1
+```
+
+Pseudo‑code for **removing** a value `v`
+
+```
+old = freq[v]
+freq[v] -= 1
+freq_of_freq[old] -= 1
+if old-1 > 0:         freq_of_freq[old-1] += 1
+```
+
+Because we keep the array `freq_of_freq`, after an update we know
+
+```
+maxfreq = highest f with freq_of_freq[f] > 0
+```
+
+When we decrease a value that had frequency `maxfreq`, we may need to
+decrease `maxfreq`:
+
+```
+if old == maxfreq and freq_of_freq[old] == 0:
+        maxfreq -= 1
+```
+
+All operations are `O(1)`.
+
+--------------------------------------------------------------------
+
+#### 3.  Algorithm
+
+```
+l = 0, ans = 0, maxfreq = 0
+for r = 0 .. n-1
+        add nums[r]           // update cnt and freq_of_freq
+        while  (r - l + 1) - maxfreq > k:
+                remove nums[l]   // update cnt and freq_of_freq
+                l += 1
+        ans = max(ans, maxfreq)
+return ans
+```
+
+The loop invariant
+(`(r - l + 1) - maxfreq ≤ k`) guarantees that the window is always
+valid.  
+The answer is always the number of copies of a value that the
+current window can keep – i.e. the longest possible equal subarray.
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the length of the longest possible
+equal subarray after deleting at most `k` elements.
+
+---
+
+##### Lemma 1  
+For every window the value `maxfreq` computed by the algorithm equals the
+maximum frequency of any value inside the current window.
+
+**Proof.**
+
+`freq_of_freq` explicitly records the number of distinct values having
+frequency `f`.  
+We maintain the invariant
+
+```
+freq_of_freq[f] = |{ v | freq[v] = f }|
+```
+
+by updating it at each addition or removal.  
+After any update, the algorithm checks whether the current value `v`
+had the previous `maxfreq` and whether its frequency pool became empty.
+If so, it decreases `maxfreq` by one.
+This keeps `maxfreq` the highest `f` with `freq_of_freq[f] > 0`.
+
+Thus `maxfreq` is always the maximum frequency of any value in the
+current window. ∎
+
+
+
+##### Lemma 2  
+When the inner `while` loop finishes, the condition  
+`(window_length) - maxfreq ≤ k` holds.
+
+**Proof.**
+
+The `while` loop stops only when the loop condition becomes false, i.e.
+`(window_length) - maxfreq ≤ k`.  
+Since the outer for–loop never decreases the window length,
+no earlier iteration of the inner loop could have made this
+condition true. ∎
+
+
+
+##### Lemma 3  
+For every window that the algorithm processes, the value `maxfreq`
+equals the length of the longest equal subarray that can be obtained
+from **this** window after deleting at most `k` elements.
+
+**Proof.**
+
+By Lemma&nbsp;1 the window contains `mx` occurrences of a particular value.
+Deleting any `len – mx` elements equal to other values turns the window
+into an equal subarray of length `mx`.  
+The number of deletions needed is `len – mx`.  
+By Lemma&nbsp;2 this value is at most `k`, so the deletion is allowed.
+Thus, `mx` is attainable.  
+Conversely, any equal subarray obtained from the window uses at
+least `len – mx` deletions, so its length cannot exceed `mx`. ∎
+
+
+
+##### Lemma 4  
+For every possible set of at most `k` deletions that creates an equal
+subarray, the algorithm considers a window containing exactly the same
+remaining elements and records its length.
+
+**Proof.**
+
+Take any optimal set of deletions.  
+Let `L` be the minimal contiguous block of original indices that
+contains all remaining (kept) elements.  
+The algorithm scans once over the whole array, so for the last
+right boundary `r` of that block it will include the whole block.
+While processing this `r`, the left border `l` will be moved until the
+window is valid and therefore contains the same set of elements
+inside this block (possibly plus some additional elements outside the
+block, but they are all deleted and do not influence the count of
+kept elements).
+Hence an interval corresponding to the optimal solution is considered
+and its length `mx` is compared with `ans`. ∎
+
+
+
+##### Theorem  
+The algorithm returns the length of the longest equal subarray that can
+be achieved after deleting at most `k` elements.
+
+**Proof.**
+
+*Upper bound:*  
+By Lemma&nbsp;3 each window the algorithm examines yields an equal
+subarray length `maxfreq`.  The algorithm stores the maximum of those
+`maxfreq`, so the returned value is **at most** the optimum.
+
+*Lower bound:*  
+Let `opt` be an optimal multiset of deletions that gives an equal
+subarray of length `opt_len`.  
+By Lemma&nbsp;4 the algorithm examines a window whose maximum
+frequency equals `opt_len`, thus sets `ans ≥ opt_len`.  
+Therefore the algorithm’s answer is **no smaller** than the optimum.
+
+Both bounds coincide, hence the algorithm is optimal. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+Let `n = len(nums)`.
+
+* Every element is added and removed at most once ⇒ **O(n)** updates.
+* Each update touches only a few array positions ⇒ **O(1)** time.
+* Total time: **O(n)**
+
+Memory usage:
+
+* `freq` – `n+1` integers
+* `freq_of_freq` – `n+2` integers
+* constant additional space
+
+total: **O(n)** integers.
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def longestEqualSubarray(self, nums: List[int], k: int) -> int:
+        n = len(nums)
+        # freq of each value
+        freq = [0] * (n + 1)
+        # freq_of_freq[f] = how many values have frequency f
+        freq_of_freq = [0] * (n + 2)
+
+        maxfreq = 0          # current maximum frequency in window
+        l = 0
+        ans = 0
+
+        for r, val in enumerate(nums):
+            # add value at r
+            old = freq[val]
+            freq[val] += 1
+            if old > 0:
+                freq_of_freq[old] -= 1
+            freq_of_freq[old + 1] += 1
+            if old + 1 > maxfreq:
+                maxfreq = old + 1
+
+            # shrink window if too many deletions are needed
+            while (r - l + 1) - maxfreq > k:
+                rem = nums[l]
+                old = freq[rem]
+                freq[rem] -= 1
+                freq_of_freq[old] -= 1
+                if old - 1 > 0:
+                    freq_of_freq[old - 1] += 1
+                if old == maxfreq and freq_of_freq[old] == 0:
+                    maxfreq -= 1
+                l += 1
+
+            ans = max(ans, maxfreq)
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

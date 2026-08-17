@@ -1,0 +1,376 @@
+<|channel|>analysis<|message|>We need to count number of integers between two numbers inclusive such that digit sum is between min_sum and max_sum. Numbers up to 10^22, so up to 22 digits. We need to count using digit DP. Standard approach: count numbers <= bound with digit sum constraints. Then compute count for num2 minus count for num1-1. But we need modulo 1e9+7.
+
+We need to handle big numbers. All operations normal.
+
+DP: dp[pos][tight][sum][started?]. We might use memoization with recursion.
+
+However, max_sum <= 400. So we can limit sum dimension to 400. That's fine.
+
+Since we need count of numbers <= bound with digit sum in [min_sum, max_sum]. We can compute f(bound) = number of numbers <= bound with digit sum <= bound? Wait we can compute number of numbers <= bound with digit sum <= some limit. But easiest: DP returns counts for all sums then we sum over sums in [min_sum, max_sum].
+
+We'll compute DP function: dfs(pos, tight, sum, started) returning number of ways from pos to end. pos index in string (0..len-1). Since the number of digits maybe up to 22. We'll use memoization dictionary keyed by (pos, tight, sum, started). For leading zeros: we treat numbers with leading zeros considered not started. sum remains 0 when started false. When we finish at pos==len, we check if started = True (since 0 maybe not allowed? But numbers start from 1 and also min_sum >=1. However, if we count numbers 0 we might include 0 if sum=0. But min_sum >=1, so 0 will not be counted. So we can simply return 1 if started and sum in [min_sum, max_sum], else 0. For leading zeros un started, we can still count 0? But we don't want 0; but if number has all zeros, we skip. So we can return 0 if not started. But if we want to include leading zeros representing numbers with less digits than bound we handle started flag.
+
+Implementation: In recursion, we loop digit d from 0 to limit (tight? bound[pos]): next_started = started or d != 0. next_sum = sum + d if next_started else sum (but sum anyway 0 when not started). But if not started, we don't change sum. Wait we can keep sum unchanged; but when we start, we add d even if d==0? If d==0 and started==False, then next_started false. So skip. So sum only changes when started or d!=0.
+
+Edge: sum may exceed max_sum; we can prune: if sum > max_sum: return 0.
+
+At end, if started and min_sum <= sum <= max_sum: return 1; else 0.
+
+Memoization: we can use dictionary, but we need to consider tight and started bit. pos up to 22, sum up to 400, 2*2 combos => 22*2*2*401 ~ 35100 states. Good.
+
+Time: O(length * 10 * states). Good.
+
+But we need to compute counts for two bounds. For num1-1, we need to subtract. Since string may be "1", we need to handle negative numbers? For num1-1, we need to subtract 1 from string. We can implement a function subtract_one(str): if str == "0" return "0"? But we only call for num1 > 0. So we can compute num1_minus1 = subtract_one(num1). If num1 == "0", but constraints say 1 <= num1, so safe.
+
+Implementation subtract_one: convert to list of digits, subtract with borrow.
+
+Edge: For num1="1", result "0". We'll call count_on_bounds with 0 inclusive? Actually we want count from 0 to num1-1 inclusive. But we don't want to count 0 because min_sum>=1, but our DP will exclude 0 automatically. So using bound "0" will return 0.
+
+But we need to handle bound string representation of numbers less than 1? For bound "0" we will have DP with length 1. It will process digits 0, started false, sum 0, at end started false => 0. So fine.
+
+Implementation details: f(bound) returns count. Then answer = (f(num2) - f(num1_minus1)) % MOD. Make sure non-negative.
+
+Test with examples.
+
+Example1: num1="1", num2="12", min=1, max=8. Let's compute quickly. Should output 11.
+
+Let's test mental: numbers 1-12: digits sums: 1,2,3,4,5,6,7,8,9,10,11,12. Wait sum 9 for 9? 9 sum 9>8. 10 sum 1, 11 sum 2, 12 sum 3. 9 not counted. So 11 numbers. Good.
+
+Our DP should count.
+
+Edge: Do we need to handle numbers up to 10^22 inclusive? Bound length may be 23 digits? Actually 10^22 has 23 digits? 10^22 is 10000000000000000000000 (23 digits). Problem says 1 <= num1 <= num2 <= 10^22; that's 10^22 inclusive. So max digits 23. But we can handle up to 23 digits. DP length 23.
+
+Memory: sum dimension up to 400; 23*2*2*401=36800 states.
+
+Ok.
+
+Implementation details: use lru_cache.
+
+Pseudo:
+
+MOD=1_000_000_007
+
+def count_le(bound):
+    s = bound
+    n = len(s)
+    @lru_cache(None)
+    def dfs(pos, tight, sum, started):
+        if pos==n:
+            if started and min_sum <= sum <= max_sum:
+                return 1
+            else:
+                return 0
+        limit = int(s[pos]) if tight else 9
+        total=0
+        for d in range(limit+1):
+            ntight = tight and d==limit
+            nstarted = started or d!=0
+            nsum = sum + d if nstarted else sum
+            if nsum > max_sum: continue
+            total += dfs(pos+1, ntight, nsum, nstarted)
+        return total % MOD
+    return dfs(0, True, 0, False)
+
+After computing counts we compute ans = (count_le(num2) - count_le(num1_minus1)) % MOD
+
+Return ans.
+
+Edge: Since we use modulo, we may need to mod total. But because counts may be large but we mod each addition. For dp we may not need to mod until returned; but we keep mod.
+
+Potential issue: Use default int for counts upto 10^22, but counts may be huge but still within python int. But to keep mod easier, we mod at each step.
+
+Now subtract_one function:
+
+def subtract_one(s):
+    if s == "0":
+        return "0"
+    digits = list(map(int, s))
+    i = len(digits)-1
+    while i>=0:
+        if digits[i] > 0:
+            digits[i] -=1
+            break
+        else:
+            digits[i] = 9
+            i -=1
+    # Remove leading zeros
+    res = ''.join(map(str, digits)).lstrip('0')
+    return res if res else "0"
+
+Edge: num1 may be "1", returns "0". Good.
+
+Now check for min_sum <= max_sum else? Provided.
+
+Return results.
+
+Time complexity: O(length*10*states). Good.
+
+Let's test quickly with example 1:
+
+num1="1", num2="12". min=1, max=8.
+
+count_le("12")? Let's approximate.
+
+We can test in head: number of good numbers <=12. They all <=12. Good => 11.
+
+Count_le("0")? 0. Subtract => 11.
+
+Example 2: num1="1", num2="5", min=1, max=5. Count_le("5") -- numbers 1-5 => 5. Count_le("0") => 0. Answer 5.
+
+Edge: When digits sum > max_sum, we prune.
+
+Large numbers: fine.
+
+Got solution.
+
+Now produce final answer with code.
+
+Also need to mention that we use BFS vs recursion.
+
+Let's produce final solution.
+
+Also careful about recursion depth: at most 23, fine.
+
+Therefore final code.
+
+Let's produce final message.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every integer `x` in the interval
+
+```
+num1 ≤ x ≤ num2
+```
+
+we have to know whether its digit sum lies in the interval
+
+```
+min_sum ≤ digit_sum(x) ≤ max_sum
+```
+
+`num1` and `num2` can be as large as `10^22` (23 decimal digits),  
+`max_sum` is at most `400`.  
+The natural way to count such numbers is a **digit dynamic programming** (digit‑DP).
+
+--------------------------------------------------------------------
+
+#### 1.   Digit DP
+
+For a fixed number `bound` we count all integers `0 … bound` that satisfy the
+digit‑sum condition.  
+Later we will subtract the count for `num1-1` from the count for `num2`.
+
+During the DP we process the digits of `bound` from left to right.
+
+* `pos` – current position (0 … length−1)
+* `tight` – whether the prefix built so far is identical to the prefix of `bound`
+  (`tight==True` → the next digit cannot exceed the digit of `bound` at that
+  position)
+* `sum` – digit sum of the already chosen prefix
+* `started` – whether we have already placed a non‑zero digit  
+  (value `0` is allowed only as a leading zero; it does not contribute to the
+  digit sum)
+
+```
+dfs(pos, tight, sum, started)   → number of ways to complete the number
+```
+
+**Transition**
+
+```
+limit = bound[pos] if tight else 9
+for d in 0 … limit:
+        ntight   = tight   and d == limit
+        nstarted = started or d != 0
+        nsum     = sum + d if nstarted else sum
+        if nsum > max_sum: continue          # pruning
+        total += dfs(pos+1, ntight, nsum, nstarted)
+```
+
+**Base case**
+
+When `pos == len(bound)` we have finished building one number.
+
+*If* `started` is `True` and `min_sum ≤ sum ≤ max_sum`  
+ → this number is valid → return `1`  
+*Else* → return `0`
+
+The DP is memoised (Python’s `lru_cache`) –  
+states are at most `length * 2 * 2 * (max_sum+1)`  
+(`length ≤ 23`, `max_sum ≤ 400`) → far below a few hundred thousand states.
+
+All arithmetic is done modulo `MOD = 1_000_000_007`.
+
+--------------------------------------------------------------------
+
+#### 2.   Count for an arbitrary bound
+
+```
+def count_le(bound):
+        return dfs(0, True, 0, False)
+```
+
+The function counts all integers `0 … bound` that satisfy the digit‑sum
+constraint.  
+Because `min_sum ≥ 1` our DP automatically ignores the number `0` – it is
+never counted.
+
+--------------------------------------------------------------------
+
+#### 3.   Answer for the interval `[num1 , num2]`
+
+```
+ans = count_le(num2) – count_le(num1-1)
+```
+
+`num1-1` is obtained by a simple string subtraction that works for
+`num1 ≥ 1`.  
+If `num1 == "1"` the result is `"0"`, which is a valid bound for
+`count_le` (it contributes `0`).
+
+The final answer is taken modulo `MOD` (add `MOD` before taking `%` to avoid
+negative results).
+
+--------------------------------------------------------------------
+
+#### 4.   Correctness Proof  
+
+We prove that the algorithm returns the number of integers in  
+`[num1 , num2]` with digit sum in `[min_sum , max_sum]`.
+
+---
+
+##### Lemma 1  
+For any bound `B` (decimal string), `count_le(B)` equals the number of
+integers `x` with `0 ≤ x ≤ B` whose digit sum lies in `[min_sum , max_sum]`.
+
+**Proof.**
+
+The DP explores all digit strings of the same length as `B`.  
+For each position it chooses a digit `d` that is:
+
+* not larger than the corresponding digit of `B` when `tight` is `True`;
+* any digit `0 … 9` otherwise.
+
+Thus every produced digit string forms a number `x` with `0 ≤ x ≤ B`.  
+Conversely, every number `x` in that range has a unique decimal representation
+of the same length (leading zeros are allowed because we use the `started`
+flag).  
+The DP will traverse exactly that path, because at each step the chosen digit
+is admissible.
+
+The DP adds the digit to the running sum only when the number has already
+started, i.e. when the digit is a non‑leading‑zero digit.  
+Therefore the final `sum` equals the digit sum of the built number.
+
+The base case counts a number only if it has started and
+`min_sum ≤ sum ≤ max_sum`.  
+Therefore the DP counts exactly the numbers that satisfy the digit‑sum
+constraint. ∎
+
+
+
+##### Lemma 2  
+For any two bounds `A ≤ B` the number of integers `x` with  
+`A ≤ x ≤ B` and `min_sum ≤ digit_sum(x) ≤ max_sum` equals  
+`count_le(B) – count_le(A-1)`.
+
+**Proof.**
+
+By Lemma&nbsp;1, `count_le(B)` counts all valid numbers in `[0 , B]`.  
+Similarly `count_le(A-1)` counts all valid numbers in `[0 , A-1]`.  
+Subtracting removes exactly the numbers `< A`.  
+The remaining numbers are precisely those in `[A , B]`. ∎
+
+
+
+##### Theorem  
+`Solution.count(num1, num2, min_sum, max_sum)` returns the number of good
+integers in the interval `[num1 , num2]` modulo `10^9+7`.
+
+**Proof.**
+
+By Lemma&nbsp;1 the helper `count_le` gives correct counts for any bound.
+The final answer is computed as `count_le(num2) – count_le(num1-1)`.  
+By Lemma&nbsp;2 this is exactly the number of integers in the required
+interval satisfying the digit‑sum property.  
+All operations are performed modulo `MOD`, so the returned value is the
+desired count modulo `10^9+7`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.   Complexity Analysis
+
+Let `L = len(num2)`  (≤ 23).  
+The DP has at most `L × 2 × 2 × (max_sum+1)` states;  
+for each state we try at most 10 digits.
+
+```
+Time   :  O(L · 10 · max_sum)   ≤  23 · 10 · 400  ≈ 9·10^4 operations
+Memory :  O(L · max_sum)        ≤  23 · 400        ≈ 9·10^3 integers
+```
+
+Both are easily within limits.
+
+--------------------------------------------------------------------
+
+#### 6.   Reference Implementation  (Python 3)
+
+```python
+from functools import lru_cache
+
+MOD = 10 ** 9 + 7
+
+class Solution:
+    def count(self, num1: str, num2: str, min_sum: int, max_sum: int) -> int:
+        # ---------- helper: subtract one from a decimal string ----------
+        def subtract_one(s: str) -> str:
+            if s == "0":
+                return "0"
+            digits = list(map(int, s))
+            i = len(digits) - 1
+            while i >= 0:
+                if digits[i] > 0:
+                    digits[i] -= 1
+                    break
+                else:
+                    digits[i] = 9
+                    i -= 1
+            # remove leading zeros
+            res = ''.join(map(str, digits)).lstrip('0')
+            return res if res else "0"
+
+        # ---------- DP for numbers <= bound ----------
+        def count_le(bound: str) -> int:
+            n = len(bound)
+
+            @lru_cache(maxsize=None)
+            def dfs(pos: int, tight: bool, sum_: int, started: bool) -> int:
+                if pos == n:
+                    return 1 if started and min_sum <= sum_ <= max_sum else 0
+
+                limit = int(bound[pos]) if tight else 9
+                total = 0
+                for d in range(limit + 1):
+                    ntight = tight and d == limit
+                    nstarted = started or d != 0
+                    nsum = sum_ + d if nstarted else sum_
+                    if nsum > max_sum:       # pruning
+                        continue
+                    total += dfs(pos + 1, ntight, nsum, nstarted)
+                    if total >= MOD:
+                        total -= MOD
+                return total
+
+            return dfs(0, True, 0, False)
+
+        # ---------- compute answer ----------
+        num1_minus1 = subtract_one(num1)
+        ans = count_le(num2) - count_le(num1_minus1)
+        ans %= MOD
+        return ans
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required function signature.

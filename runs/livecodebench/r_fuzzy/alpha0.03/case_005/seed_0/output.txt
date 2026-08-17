@@ -1,0 +1,379 @@
+<|channel|>analysis<|message|>We need minimal cost to make all bits equal. We can use two operations: prefix invert cost i+1, suffix invert cost n-i.
+
+Observation: operations invert contiguous segments from an endpoint. Equivalent to we can flip prefix or suffix any number. Goal all same. Equivalent to we need to make string constant by flips. We can think of each operation toggles bits. Because operations are linear over GF(2). Let's attempt to formulate: we need to find sequence of operations minimizing sum costs, such that final bits all same (either all 0 or all 1). We can treat flips as variables x_i (prefix at i) and y_i (suffix at i). Apply each operation at most once? Actually could be repeated; but repeating two identical does cancel, so optimal solution uses each operation at most once. Because flipping twice same segment cancels, and costs positive. So binary variables.
+
+We need to find bitwise condition: For each index j, number of flips affecting j mod 2 results in final bit value. The flips affecting j: all prefix operations with i >= j; all suffix operations with i <= j. So we have constraints: For all j, s[j] + sum_{i>=j} x_i + sum_{i<=j} y_i = target (0 or 1) mod 2 over GF(2).
+
+Goal min sum (i+1) x_i + (n-i) y_i. This is a linear programming over GF(2). But maybe we can transform.
+
+Symmetry: operation costs are (i+1) and (n-i). It's reminiscent of flipping and cost equal to segment length. Actually prefix flip cost equals length i+1; suffix flip cost equals length n-i.
+
+Observation: operation prefix at i same as suffix at n-i-1? Wait suffix starting at i cost n-i equal to prefix length from i to end? But that's reversed direction.
+
+Maybe there's dynamic programming computing minimal cost of turning entire string identical.
+
+We can think of scanning from left to right accumulating orientation? Another approach: treat both operations as ability to toggle a chosen boundary. The overall effect of a sequence can be modeled by toggling boundaries between characters.
+
+Because flip of prefix 0..i toggles first i+1 bits. Equivalent to toggling bits at prefix positions. Similarly suffix.
+
+We can think of pattern of differences between adjacent bits: d_j = s[j] xor s[j+1] for j=0..n-2. When we flip any prefix/suffix, what happens to d? Let's evaluate: flipping prefix 0..i toggles bits 0..i. d_j for j<i changes? For j<i, both sides toggled so d_j unchanged. For j=i, left side toggled but right not, so d_i flips. So flipping prefix only flips d at position i. Similarly, flipping suffix i..n-1 changes d_{i-1} if i>0; only one bit toggled at boundary.
+
+Thus each operation toggles exactly one difference border: prefix i toggles d_i; suffix i decrements flips d_{i-1}. Additionally, flipping the whole string? If i=n-1 prefix toggles d_{n-1? none}. Wait d defined up to n-2. For suffix i=0, it toggles d_{-1} none? Actually suffix from 0 to n-1 flips whole string. That toggles both boundaries? for i=0, t flips entire string: both sides? No, for d_j, both sides toggled when j not on boundary i-1 or i? For suffix i, only left at i-1 boundary flips. For i=0, left boundary none, so no d flips. Wait global effect? d_j remains same for all j, because flipping whole string flips all bits, same for adjacent pair. So d unchanged.
+
+Thus operations manipulate counts of flips at boundaries plus overall parity.
+
+Goal: all bits equal means all d_j =0. So we need to make all differences zero. Equivalently, we want to fix each d_j via toggling border operations. For each j, we need to flip d_j odd number of times if d_j=1 else even times. Since operations only flip one d at a time, the cost minimal is equivalent to selecting operations such that each d_j with value 1 is toggled odd times, others even.
+
+Thus we can treat each d_j as needing flip; operations: prefix i cost i+1 flips d_i; suffix i cost n-i flips d_{i-1}.
+
+Also target parity of overall string not needed, because all bits equal either '0' or '1'. d_j all zero implies string constant; actual value could be 0 or 1. There's no constraint on global bit parity.
+
+Thus we just need to solve an unconstrained parity equation: For each j require that sum of operations affecting d_j mod 2 = d_j. This is a linear program over GF(2). Since matrix is simple (triangular), we can greedily solve.
+
+Let's index operations x_i (prefix i) affecting d_i for i=0..n-2 plus also d_{n-1? none}. operations y_i (suffix i 1..n-1) affecting d_{i-1}.
+
+So each d_k can be flipped by either prefix k or suffix k+1. Thus it's a chain: For each k, we need parity constraint: x_k xor y_{k+1} = d_k. where x_k and y_{k+1} in {0,1}.
+
+But also x_{n-1}? prefix at n-1 flips all bits but does not affect any diff; but it could be used to adjust global value? Not needed. Similarly y_0 (suffix at 0) no diffs.
+
+Thus unknowns: x_0..x_n-1, y_k for k=0..n-1. But constraints only involve x_k and y_{k+1} for k 0..-1? Wait for k=0..n-2. Right.
+
+So we have n-1 equations with 2n variables. Many degrees of freedom. We want minimize cost while satisfying parity constraints.
+
+Essentially for each j we can choose either x_j=1, y_{j+1}=0; or x_j=0, y_{j+1}=1; or both 1, both 0 (if d_j=0). Actually constraint: x_j xor y_{j+1} = d_j. So four possibilities: 
+- if d_j=0: (x_j, y_{j+1}) can be (0,0) or (1,1)
+- if d_j=1: possibilities (1,0) or (0,1)
+
+We can assign each pair independently because no cross equations. So solution reduces to pick for each j optimal choice between two options.
+
+But we must also include costs of operations that might appear in multiple equations? Operation x_i appears only once in constraint for d_i, except x_{n-1}=prefix entire not used; similarly y_0 not used.
+
+Thus choose for each j independent.
+
+But careful: y_{j+1} also used in equation for d_{j+1-1}=d_j? Actually same variable appears twice? Wait y_{k} appears with d_{k-1} if k>=1. So each variable y_k appears in only one equation except y_0? Let's check: y_k influences d_{k-1}. So each y_k appears exactly once. Similarly each x_j appears once. So there is no coupling across equations. Good.
+
+Hence we can solve per difference.
+
+Hence minimal cost is sum over j of min(option1cost, option2cost) where
+If d_j=1:
+- choose prefix i=j: cost j+1
+- choose suffix i=j+1: cost n-(j+
+1) = n-j-1? Wait if suffix index i=j+1 cost n-i = n-(j+1) = n-j-1.
+Take min.
+
+If d_j=0:
+- either do nothing cost 0
+- or do both operations: cost (j+1)+(n-j-1)=n
+But both operations incur cost n. So choose min between 0 and n: obviously 0. So for equal bits difference don't apply flips.
+
+Thus the minimal cost is sum over indices where s[j]!=s[j+1] of min(j+1, n-j-1). That seems to be answer.
+
+Let's test example 1: s="0011": n=4. differences: j=1 (0 vs 1)? s[0]=0, s[1]=0 same. j=1: s[1]=0, s[2]=1 diff -> sum: min(j+1=2, n-j-1=4-(2)-1=1) =>1. j=2: s[2]=1,s[3]=1 same diff? no. So total =1? Wait but expected answer 2. Let's calculate: j=1 diff cost 1, but their solution says cost 2. maybe 1 is not feasible because prefix or suffix that flips boundary also changes overall string maybe causing other differences? But we considered diff cost only, ignoring that suffix operation may cause other diffs at adjacent boundary? Wait we earlier argued each operation flips exactly one d. But is that always? Let's re-evaluate: flipping suffix i toggles d_{i-1} only, but also may affect d_{n-1? none}. That's correct. However flipping suffix i also costs n-i, which for n=4, i=2 gives cost 2. But our cost for boundary j=1 using suffix i=2 cost n-2=2. Wait we mis-calc: n-j-1 for j=1 = 4-1-1=2. Yes. But we used 1 earlier incorrectly; let's recompute: j=1: n-j-1=4-1-1=2. min(j+1=2, n-j-1=2)=2. So total cost 2. Good.
+
+Check example 2: s="010101", n=6
+differences positions: 0-1 diff? 0 vs 1 diff. j=0 => min(j+1=1, n-j-1=6-0-1=5)=1
+j=1 diff 1 vs 0 diff => min(2, 6-1-1=4)=2
+j=2 diff 0 vs 1 diff => min(3,6-2-1=3)=2? Wait (3,3) both 3 =>3? Actually min 3.
+j=3 diff 1 vs 0 diff => min(4,6-3-1=2)=2
+j=4 diff 0 vs 1 diff => min(5,6-4-1=1)=1
+Total =1+2+3+2+1=9 matches example. Good.
+
+Thus formula works. Add potential cost for prefix at n-1 or suffix 0? They don't affect differences but could be used to flip entire string if all bits same but different value? Not needed because we just need all same maybe '0' or '1' whichever cheaper. But we can always final all zeros by using diff flips; final uniform may be 1 though also possible via flipping all bits. Let's see if cost difference: After making all same as computed for differences, we get uniform value s[0] XOR (sum of flips affecting index 0). The effect of operations chosen: each operation may flip some prefix and suffix; but our cost selection ensures all diffs zero, so string will be constant but maybe value changed relative to original. But value doesn't matter; we just need uniform. So no extra cost.
+
+But could we use overall flip (prefix n-1) cost n to invert entire string final? Would help if it reduces cost? But since it doesn't affect differences, adding it doesn't harm differences; but overall cost increases. So unnecessary.
+
+Hence final minimal cost is sum_{j=0}^{n-2} if s[j]!=s[i+1] then min(j+1, n-j-1) else 0.
+
+Edge case n=1: no differences; cost 0 because string already uniform yes. So answer 0.
+
+Complexities O(n). Good.
+
+Let's craft final solution. Provide explanation.
+
+Implementation: iterate i from 0 to n-2 compare s[i]!=s[i+1]; add cost.
+
+Return sum.
+
+Test quickly.
+
+Edge: "0" =>0.
+
+Edge: "01": n=2. diff j=0: min(1,1)=1 => cost 1. Let's think: we can flip prefix i=0 cost1 or suffix i=1 cost1 => either works. So 1.
+
+Edge: "00": no diff => 0.
+
+Edge: "101": diff j=0: 1 vs 0 => min(1,2)=1; j=1: 0 vs 1 => min(2,1)=1 => total 2. Let's test manually: 101, can we reach uniform in 2? Option: flip suffix i=1 (cost n-i=3-1=2) ?? but that flips bits from 1..2 => "110" -> not uniform. Let's attempt: Flip prefix i=0 cost1 => "001", diff j=1 remains. Then flip suffix i=2 cost1 => "000"? Wait flipping suffix i=2 flips only index 2 -> "001" -> would become "001"? Actually suffix i=2 flips index 2 only -> "001" -> becomes "001"? Wait still 1. Not. Let's evaluate systematically: start 101. diff positions: 0-0? 1 vs 0 diff. 1-1? 0 vs 1 diff. So one at each side. Proposed solution picks prefix i=0 cost1 and suffix i=1 cost1. After these: prefix i=0 flips first bit => 001. suffix i=1 flips bits 1..2: from 01 to 10? Wait original after prefix: 001. suffix i=1 flips indices 1-2: 01 -> 10, giving 0 0 1? Wait we mis. Let's compute: original 101.
+Step1: prefix i=0 -> flip first bit: 001.
+Step2: suffix i=1 -> flip bits 1..2 (0-index). Current bits: 0 0 1. After flipping suffix 1: bits 1-1...2: 0 1 => 0 -> bits 1-2 = 1 0 => new string 0 1 0 = 010. Not uniform. Hmm fails. Let's try other order: suffix i=1 first: 101 -> flip bits 1..2: 0 1 -> 1 0 => result 110. Then prefix i=0: flip first bit -> 010. Not uniform. So maybe 2 not feasible? Wait our algorithm might be wrong for odd length? Let's recompute cost model: For j=0 diff 1 vs 0: options:
+- prefix cost j+1=1 -> flips d_0
+- suffix cost n-j-1= 3-0-1=2 -> flips d_{-1}? Wait suffix i=j+1=1 cost 2 flips d_{0}. That matches.
+
+For j=1 diff 0 vs1:
+- prefix cost j+1=4? Wait j=1 => prefix i=1 cost 2 flips d_1
+- suffix i=2 cost n-2=1 flips d_1.
+
+Thus algorithm chooses prefix for j=0 cost1, suffix for j=1 cost1. But we earlier tried that and didn't achieve uniform. Let's see sequence that works: Use suffix i=1 (cost 2) for j=0? But our chosen cost 1 prefix is cheaper but maybe not globally optimal? Because maybe doing both operations at same index produce parity? Wait each equation independent but we must ensure final parity of bits maybe resulting differently but still uniform. The choices per j might create conflicts at index 0 because x_0 and y_1 interact on bits? Let's verify: index 0 bit after flips depends on operations affecting it: x_0 (prefix 0) and maybe y_0? but y_0 not used. Also suffix i=1 flips bits up to end but does not affect bit 0. Thus bit0 flips only by x_i where i >=0? Wait prefix flips bits < =i, so operations with i>=0 affect bit0. Prefix i=0 flips only bit0; prefix i>=1 also flips bit0. But we didn't include effect in equations. So our model earlier might miss that operations affect multiple bits beyond difference; but we only used differences. Yet uniformity requires all bits equal, not only diffs zero. However if all diffs zero, that means string is all same but may not hold if operations produce extra global flip? Actually all diffs zero implies for all adjacent pairs same. Then string is constant, but could be either all 0 or all 1. That is achieved regardless of absolute value. But our chosen operations might produce constant string? Let's test with operations chosen earlier: x_0=1, x_1? presumably 0; y_1=0? Wait we choose x_0=1 for j=0; and for j=1 choose y_2? Actually j=1 chooses y_2=1. So operations: prefix 0 only, suffix 2 only. Let's calculate: Starting 101.
+Apply prefix 0: flip bit0 -> 001
+Apply suffix 2: flip bits 2..2 (since i=2, conflicts?). In our selection y_2 corresponds to suffix i=2? Wait j=1 choose cost n-j-1=1 corresponds to suffix i=j+1=2 cost 1. So suffix 2 flips bits 2..2? Actually n=3; suffix 2 flips from index 2 to 2. So flips last bit. After step: 001 -> last bit flips: 001 -> 000. Wait 001 -> 000? Wait positions: 0=0,1=0,2=1. Flipping last bit makes 0 0 0. Yes uniform! That works with cost 1+1=2. But earlier we mistakenly flipped suffix 1. Mist. So correct.
+
+Hence algorithm works.
+
+Let's produce final solution.
+
+Edge test: n=3 "101": Our algorithm gives cost 2. Works.
+
+Thus final answer formula stands.
+
+Implementation: n=len(s). ans=0
+for i in range(n-1):
+  if s[i]!=s[i+1]:
+     ans += min(i+1, n-i-1)
+Return ans.
+
+Time complexity O(n).
+
+Now produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every test a binary string `s` is given
+
+```
+s[0] s[1] … s[n-1]     ( 1 ≤ n ≤ 10^5 )
+```
+
+Two operations may be applied
+
+* **Prefix flip** – choose an index `i` (`0 ≤ i < n`)  
+  invert all bits in `[0 , i]` – cost `i + 1`
+
+* **Suffix flip** – choose an index `i` (`0 ≤ i < n`)  
+  invert all bits in `[i , n-1]` – cost `n – i`
+
+All operations are free O(1) to perform and we may use any number of
+operations, but the total cost has to be minimum.
+
+--------------------------------------------------------------------
+
+#### 1.   What does a flip change?
+
+Consider the array of *differences*
+
+```
+d[j] = (s[j]  xor  s[j+1])      for j = 0 … n-2
+```
+
+`d[j] = 0` → the two neighbours are equal,  
+`d[j] = 1` → the two neighbours are different.
+
+If all differences are `0` the string is **uniform**,
+i.e. every character is the same (value does not matter).
+
+Observe what happens to the differences when we apply one operation
+
+* **Prefix 0 … i**
+
+  all bits `0 … i` are flipped.
+  For a neighbour pair `j < i` both members of the pair are flipped →  
+  the xor does **not** change.
+
+  The pair `(i , i+1)` has one element flipped →  
+  `d[i]` **changes its value**.
+
+  So a prefix flip changes **exactly one** element of `d`: `d[i]`.
+
+* **Suffix i … n-1**
+
+  Only the element at position `i-1` is affected among neighboring pairs,
+  therefore a suffix flip changes `d[i-1]` (if `i > 0`).
+
+  So a suffix flip changes **exactly one** element of `d`: `d[i-1]`.
+
+*Applying the whole string*
+
+Prefix `i = n-1` or suffix `i = 0` flips every bit of the string.
+All neighbour pairs stay equal → all differences stay unchanged.
+The only effect is that the whole string is inverted, which does not
+harm “uniformity”.
+
+--------------------------------------------------------------------
+
+#### 2.   The optimisation
+
+For every difference `d[j]` we have to make it become `0`.
+
+* If `d[j] = 0` – we may leave it, cost `0`.  
+  To flip it we would have to apply **both** the corresponding prefix
+  and suffix operation, total cost ` (j+1) + (n-j-1) = n`.  
+  This is never cheaper than keeping it – `0` is optimal.
+
+* If `d[j] = 1` – we must toggle this difference an **odd** number of
+  times.  
+  It can be toggled by
+
+  * prefix `i = j`  – cost `j + 1`
+  * suffix `i = j+1` – cost `n - (j + 1) = n - j - 1`
+
+  The cheaper of the two is the optimal choice for this position.
+
+The different differences are independent –  
+an operation influences only its own difference.
+Thus the global optimum is simply the sum of the best local choices.
+
+Special cases:  
+* `n = 1` – there are no differences, the string is already uniform,
+  answer `0`.
+
+--------------------------------------------------------------------
+
+#### 3.   Algorithm
+
+```
+ans = 0
+for j = 0 … n-2:
+        if s[j] != s[j+1]:
+                ans += min(j+1 , n-j-1)
+return ans
+```
+
+--------------------------------------------------------------------
+
+#### 4.   Correctness Proof  
+
+We prove that the algorithm returns the minimal possible total cost.
+
+---
+
+##### Lemma 1  
+A prefix flip at index `i` changes only the difference `d[i]`.  
+A suffix flip at index `i` changes only the difference `d[i-1]`
+(`i > 0`).  
+Applying a whole‑string flip changes no difference.
+
+**Proof.**
+
+*Prefix:* every neighbour pair with both indices `< i` is flipped twice,
+hence unchanged; the pair `(i , i+1)` has exactly one component flipped,
+therefore its xor changes. No other pair contains a flipped element.
+
+*Suffix:* analogous, the only neighbour pair that contains the first
+changed element is `(i-1 , i)`.
+
+*Whole‑string:* every bit of a neighbour pair is flipped once,
+hence the xor of the pair stays the same. ∎
+
+
+
+##### Lemma 2  
+For each `j  (0 ≤ j < n-1)` the set of operations affecting difference
+`d[j]` is `{prefix i = j , suffix i = j+1}` and they are disjoint
+between different `j`.
+
+**Proof.**
+
+By Lemma&nbsp;1 a prefix at `j` touches only `d[j]`;
+a suffix at `j+1` (if `j+1 < n`) touches only `d[j]`.  
+No other operation touches `d[j]`.  
+For a different index `k ≠ i`, the two sets are disjoint,
+because the prefix at `i` touches `d[i]` only and the suffix at `i+1`
+touches `d[i]` only. ∎
+
+
+
+##### Lemma 3  
+For a fixed `j` with `d[j] = 1` exactly one of  
+`prefix j` or `suffix j+1` must be chosen, and the cheaper of the two
+yields a minimal total cost for all operations that touch `d[j]`.
+
+**Proof.**
+
+Using both operations would toggle `d[j]` twice → it would stay `1`,
+which is forbidden.  
+Using neither would leave it `1`, also forbidden.  
+Thus exactly one operation must be applied.
+Choosing the cheaper one minimises the contribution of `j`. ∎
+
+
+
+##### Lemma 4  
+If `d[j] = 0` the optimal choice is to apply **no** operation touching
+`d[j]`.
+
+**Proof.**
+
+Doing nothing costs `0`.  
+Doing both prefix and suffix costs
+`(j+1)+(n-j-1)=n>0`, which is never better. ∎
+
+
+
+##### Lemma 5  
+The sum computed by the algorithm equals the minimal total cost of any
+sequence of allowed operations that makes `s` uniform.
+
+**Proof.**
+
+Using Lemma&nbsp;2 every operation is associated with exactly one
+difference.  
+Therefore any solution can be represented by, for each `j`,
+either choosing prefix `j`, suffix `j+1`, both, or none.
+
+By Lemma&nbsp;3 and Lemma&nbsp;4 the optimal choice for each `j`
+is independent of all other `j`.  
+Hence the minimal possible total cost is the sum of the
+optimal per–difference costs, i.e. precisely what the algorithm
+computes. ∎
+
+
+
+##### Theorem  
+`Solution.minimumCost(s)` returns the minimum possible total cost to
+make all characters of `s` equal.
+
+**Proof.**
+
+*Soundness*:  
+By Lemma&nbsp;5 the computed cost is attainable by a feasible sequence
+of operations (choosing for each `j` the operation indicated in the
+algorithm).  
+Thus the algorithm never outputs a value that is not a valid cost.
+
+*Optimality*:  
+Again by Lemma&nbsp;5 no other sequence of operations can have a lower
+total cost, because each `j` is optimally solved independently and the
+sum of optimal local costs is global optimum.
+
+Therefore the algorithm is correct. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.   Complexity Analysis
+
+The loop scans the string once.
+
+```
+Time   :  O(n)          ( ≤ 10^5 operations )
+Memory :  O(1)
+```
+
+--------------------------------------------------------------------
+
+#### 6.   Reference Implementation (Python 3)
+
+```python
+class Solution:
+    def minimumCost(self, s: str) -> int:
+        n = len(s)
+        if n <= 1:
+            return 0
+
+        ans = 0
+        for i in range(n - 1):
+            if s[i] != s[i + 1]:
+                # choose cheaper of prefix at i or suffix at i+1
+                ans += min(i + 1, n - i - 1)
+        return ans
+```
+
+The implementation follows exactly the algorithm proven correct
+above.
