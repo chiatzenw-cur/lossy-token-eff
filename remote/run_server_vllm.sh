@@ -46,6 +46,30 @@ GPU_UTIL="${GPU_UTIL:-0.85}"
 # dataset uniformly, matching MAX_MODEL_LEN's own "one fixed setting across
 # all 6 datasets" precedent rather than tuning per-dataset.
 ROPE_SCALING_JSON="${ROPE_SCALING_JSON:-}"
+# Diagnostic/workaround knob (2026-08-18): longbench_v2_qwen3's 3 longest
+# cases (case_002/007/010, all requiring the YaRN extension above) crashed
+# with a CUDA device-side assert on every method/alpha that touched them.
+# --enforce-eager disables CUDA graph capture -- a standard first thing to
+# try for exactly this failure shape (a shape/length the compiled graph
+# cache never captured a bucket for). Off by default (every prior run,
+# GPT-OSS included, wants CUDA graphs for speed); set to any non-empty
+# value to add the flag.
+ENFORCE_EAGER="${ENFORCE_EAGER:-}"
+# Diagnostic knob (2026-08-20): --enforce-eager alone does NOT disable
+# torch.compile/Dynamo tracing -- confirmed by reading vllm/config/vllm.py's
+# own enforce_eager handling, which only sets compilation_config.cudagraph_mode
+# = CUDAGraphMode.NONE, leaving compilation_config.mode at whatever it already
+# was (VLLM_COMPILE by default). A torch.compile'd function only re-executes
+# Python-level side effects (prints, file writes) on its FIRST (tracing) call;
+# every subsequent call replays the traced FX graph directly, skipping Python
+# entirely -- this is what made live debug instrumentation inside
+# rejection_sample()/RejectionSampler.forward()/the EAGLE proposer's
+# _sample_draft_tokens() consistently produce zero output even under
+# --enforce-eager. COMPILATION_CONFIG_JSON, set to '{"mode":0}'
+# (CompilationMode.NONE), is the actual way to force pure eager Python
+# execution end-to-end. Empty by default (every prior run wants compilation
+# for speed); set for diagnosis, not normal use.
+COMPILATION_CONFIG_JSON="${COMPILATION_CONFIG_JSON:-}"
 
 # Lossy knob. One of: mentored_dec, cactus, spec_casc_opt, r_fuzzy,
 # spec_casc_tok, r_fuzzy_semantic_guard, synthetic. The first six need the
@@ -247,9 +271,55 @@ common_args=(
   # request on the same server, while two warm requests were bit-identical.
   # Same failure mode SGLang's radix cache caused there too.
   --no-enable-prefix-caching
+  # REQUIRED, not optional (found 2026-08-19, after the whole Qwen3-8B
+  # campaign had already run once): without this, vLLM silently overrides
+  # every per-REQUEST temperature/top_p/top_k with whatever the served
+  # model's own generation_config.json bundles -- for Qwen/Qwen3-8B that is
+  # temperature=0.6, top_k=20, top_p=0.95, NOT this campaign's own
+  # --temperature 1.0/--top-p 1.0 (fresh_server_replay.py's own defaults,
+  # matched exactly by GPT-OSS-20B, which has no such override and never
+  # printed this warning -- confirmed by grepping all 6 GPT-OSS dataset
+  # logs: zero hits, vs. Qwen3's logs: every single server). vLLM only logs
+  # a WARNING for this ("Default vLLM sampling parameters have been
+  # overridden by the model's generation_config.json ... If this is not
+  # intended, please relaunch vLLM instance with --generation-config vllm"),
+  # never refuses to start, so it went unnoticed until the resulting flat
+  # alpha-sweep results forced digging into the server logs directly. A
+  # narrower top_k=20 + lower temperature sharply truncates and re-shapes
+  # the effective p/q landscape every threshold-based relaxation method
+  # operates on -- the leading suspect for why cactus/spec_casc_opt/
+  # r_fuzzy/spec_casc_tok showed zero alpha-sensitivity on Qwen3-8B.
+  --generation-config vllm
 )
 if [[ -n "$ROPE_SCALING_JSON" ]]; then
-  common_args+=(--hf-overrides "{\"rope_scaling\":$ROPE_SCALING_JSON}")
+  # max_position_embeddings ALSO needs overriding here, not just
+  # rope_scaling -- found 2026-08-22, on longbench_v2_qwen3 (the first
+  # dataset with prompts anywhere near this long). Qwen3-8B's own
+  # config.json ships max_position_embeddings=40960 with rope_scaling=null;
+  # the rope_scaling override above correctly configures YaRN to extend
+  # the EFFECTIVE range to MAX_MODEL_LEN, but at least one compiled kernel
+  # (a Triton index bound baked in at torch.compile time, per its own
+  # generated source under ~/.cache/vllm/torch_compile_cache) reads
+  # config.max_position_embeddings directly, not the YaRN-scaled range --
+  # so any sequence (prompt + generated so far) crossing 40960 crashed
+  # with "CUDA error: device-side assert triggered" / "index out of
+  # bounds: ... < 40960" inside that kernel, silently, one whole EngineCore
+  # process at a time. Every prior _qwen3 dataset's prompts + max-new-
+  # tokens budgets stayed well under 40960 (longbench_v2 is genuinely
+  # long-context, ~12k-47k prompt tokens per case; the other five
+  # datasets' worst case never approached this), so the gap went
+  # undetected until now. Overriding max_position_embeddings alongside
+  # rope_scaling makes config.max_position_embeddings itself report
+  # MAX_MODEL_LEN, matching the convention other YaRN-scaled HF configs
+  # use (bump both fields together, not just rope_scaling's own
+  # original_max_position_embeddings sub-field).
+  common_args+=(--hf-overrides "{\"rope_scaling\":$ROPE_SCALING_JSON,\"max_position_embeddings\":$MAX_MODEL_LEN}")
+fi
+if [[ -n "$ENFORCE_EAGER" ]]; then
+  common_args+=(--enforce-eager)
+fi
+if [[ -n "$COMPILATION_CONFIG_JSON" ]]; then
+  common_args+=(--compilation-config "$COMPILATION_CONFIG_JSON")
 fi
 
 # draft_sample_method=probabilistic makes the drafter sample stochastically

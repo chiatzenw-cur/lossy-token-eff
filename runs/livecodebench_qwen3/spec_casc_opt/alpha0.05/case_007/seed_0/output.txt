@@ -1,0 +1,861 @@
+<think>
+Okay, I need to solve this problem where I have to find the number of special permutations of a given array of distinct positive integers. The condition for a permutation is that for every consecutive pair of elements, one must divide the other. Let me think about how to approach this.
+
+First, the constraints say that the length of nums is up to 14. Hmm, 14 elements. The total number of permutations is 14! which is way too big to check each one by one. So brute force is definitely not feasible. So I need a dynamic programming approach here.
+
+Let me think about dynamic programming. The key idea for permutation problems with constraints is often to track the state of the elements used so far and the last element in the permutation. Because the next element can only be chosen if it satisfies the divisibility condition with the last one.
+
+So, the state for DP could be something like dp[mask][last], where mask represents the set of elements already used, and last is the index of the last element in the permutation. The value of dp[mask][last] would be the number of ways to form a permutation with the elements in mask, ending with the element at index 'last'.
+
+Yes, that makes sense. For each state, we can try to add a new element that hasn't been used yet, and check if it's compatible with the last element.
+
+Let me think about the steps. The mask is a bitmask that represents which elements are included. Since the maximum length is 14, the mask can be represented as a 14-bit integer. For each mask, and for each possible last element, we can compute the number of ways.
+
+The base case would be when all elements are used. Wait, no. The base case is when the mask is just a single element. For example, for each individual element, there's exactly one way to have a permutation of length 1. So for mask with only the i-th bit set, dp[mask][last] = 1.
+
+Then, for each mask and each possible last element, we can iterate through all elements not in the mask, and check if the current last element and the new element satisfy the divisibility condition. If they do, we can add the number of ways from the previous state (mask without the new element) to the new state.
+
+So the recurrence would be:
+
+For each mask and last in mask:
+    for each next in mask that is not in mask:
+        if last % next == 00 or next % last == 00:
+            dp[new_mask][next] += dp[mask][last]
+
+Wait, no. Wait, the new_mask is mask | (1 << next). And the next element is added to the permutation. So for each existing state (mask, last), we can look for all elements not in mask that can be added next, and update the new state accordingly.
+
+So the plan is:
+
+1. Precompute the adjacency matrix for each pair of elements. For each pair (i, j), check if nums[i] divides nums[j] or vice versa. But wait, since the order is important (i is the last element, j is the next element), maybe we need to check for each pair (i, j) whether they can be be consecutive in the permutation. So when we have a permutation ending with last, and we want to add a next element, we need that the last element and next element satisfy the condition. 
+
+Yes, so for each pair (i, j), we can check if nums[i] and nums[j] are divisible. So for every pair, we can precompute a matrix to know if they can be be adjacent.
+
+But wait, for the permutation, the order matters. For example, if we have a permutation ending with last (say element i), then adding j (element not in mask) is allowed only if i and j are compatible. So for each pair (i, j), we can check if nums[i] % nums[j] == 00 or nums[j] % nums[j] == 00. Wait, no, it's the other way. The last element is i, and the next element is j. So the check is whether i divides j or j divides i. So for the pair (i, j), whether nums[i] divides nums[j] or nums[j] divides nums[i]. If that's true, then they can be adjacent in the permutation.
+
+So for each possible pair (i, j), we can precompute a boolean array where allowed[i][j] is True if nums[i] and nums[j] are compatible (i.e., one divides the other). But since in the DP, we have to check for the current last element (i) and the next element (j), we check allowed[i][j].
+
+So the steps are:
+
+Initialize a dp table where dp[mask][last] is the number of ways to form a permutation with the elements in mask, ending with last element.
+
+Then for each mask, for each possible last element in the mask, we iterate through all possible next elements not in the mask. For each next element, check if allowed[i][j] (where i is last and j is next) is true. If so, then we add dp[mask][last] to dp[new_mask][next].
+
+The final answer is the sum of all dp[full_mask][i] for all i in 0..n-1.
+
+Now, we need to implement this with memoization or using a DP table.
+
+Let me think about the building blocks.
+
+The mask is n bits. For n up to 14, n=14, mask can be up to 2^14 = 16384, which is manageable. For each mask, the number of possible last elements is up to n. So total number of states is 16384 * 14 = around 229,376. And for each state, we have to check up to n possible next elements. So for each state, n=14 steps, total steps are 229,376 * 14 = 3.2 million. Which is acceptable.
+
+So the DP approach is feasible.
+
+Now, let's think about the implementation.
+
+We can represent mask as an integer. For each mask, and for each possible last element (i.e., for each j where mask has the j-th bit set), we process transitions.
+
+Let's start with first initializing the dp. For each element, the mask with only that element is set. So for mask = 1 << j, dp[mask][j] = 1.
+
+Then for each mask, for each possible last element in the mask, we look for all elements not in the mask. For each such element, check if the last element and the new element are compatible. If yes, then add the new ways Bay to the new mask/edit.
+
+So the code will be:
+
+Initialize a dp table. Since Python uses 0-based indices, maybe we can use a dictionary or a 2D array. Since mask can be up to 2^14, and for each mask, up to 14 elements, perhaps a 2D list. For example, dp is a list of size (2^14) x n, where each entry is a count. But with n=14, 2^14 is 14 bits, so 16384 masks. So for each mask, and for each possible last, we can store the count.
+
+Now, the code steps:
+
+1. Precompute allowed[i][j] for all i, j. allowed[i][j] is True if either nums[i] divides nums[j] or nums[j] divides nums[i].
+
+But since for the DP case, when we have a last element i, and add j next, we need to check if nums[i] divides nums[j] or vice versa.
+
+Wait, allowed[i][j] is True if (nums[i] % nums[j] == 00) or (nums[j] % nums[j] == 00)?
+
+Wait, for the pair (i, j), whether nums[i] divides nums[j] OR nums[j] divides nums[i]. So yes.
+
+But then, for allowed[i][j], we can store that.
+
+2. Initialize the dp table. For each j in 0..n-14, dp[1 << j][j] = 1.
+
+3. Iterate through all all possible masks. For each mask, iterate through all possible last elements in the mask. For each such last, iterate through all elements not in the mask, and check if allowed[i][j] (i is last, j is next) is true. If so, then add dp[mask][last] to dp[new_mask][next].
+
+But how do we iterate through all masks?
+
+We can iterate via all possible masks from 0 to 2^14-1. For each mask, we can check for all possible last elements (i) that are in the mask. For each such i, and for each j not in the mask, check if allowed[i][j] is true.
+
+But how to iterate through each i in the mask?
+
+For each mask, we can loop through each bit in the mask to see if it's set. For example, for each I in 0..n-1, if (mask & (1<<i)) != 0, then i is part of the mask.
+
+So for each mask, we can loop through all possible i's in the mask, and for each of those, loop through all possible j's not in the mask that are allowed to be addedAi.
+
+So for each mask, for each i in the mask, for each j in the mask, but j not in the mask.
+
+Wait, the j's not in the mask. So for each k in 0..n-1, if (mask & (1 << k)) is 000, then j is k.
+
+So for each mask, for each i in the mask, for each j not in the mask, check if allowed[i][j], and if so, add dp[mask][i] to dp[new_mask][j].
+
+This process would build up the dp table.
+
+Once all masks are processed, the answer is the sum of all dp[full_mask][i] for i in 0..n-1.
+
+Now, the full_mask is (1 << n) - 1.
+
+Let me test this with the example 1.
+
+Example 1:
+
+nums = [2,3,6, ...]. Wait example 1 is nums = [2,3,6], length 3. So for each mask, let's see.
+
+Initial masks are 11 << 0, 1 << 1, 1 << 2. For each of those, dp is 11.
+
+Then, process masks with 1 bit set. For example, mask 001 (binary 1), which represents the first element (2), and then for each j not in the mask (0 and 1). So j can be 1 or 2.
+
+Check allowed[i][j] where i is 0 (the last element is 2). So for j=1 (value 3), check if 2 divides 3 (no) or 3 divides 2 (no). So allowed[0][1] is false. So.
+
+So for j=1, the transition is not allowed. For j=2 (value 6), check if 2 divides 6 or vice versa. 2 divides 6, so allowed. So for mask 001, last element 0, then adding j=2 (value 6) gives new_mask 101, and the next last element is 2. So dp[101][2] += dp[001][0] = 1.
+
+Similarly for Render 001, when next element is 3 (index 1) is not allowed, so for mask 001, only j=2 is allowed.
+
+Then for other masks. Let's think of the example 1:
+
+Let's explore the transitions.
+
+But maybe I should get to the code part.
+
+So for the code, in Python:
+
+We can represent dp as a dictionary or as a list of lists. Since n can be up to 14, mask can be up to 2^14 = 16384, and for each mask, we have n possible last elements. So for each mask, we can have a list of size n.
+
+But in Python, for each mask, and for each last in 0..n-1, we can store the count.
+
+We can initialize necessarily for all masks and last elements as 00, then set the initial masks for all single elements.
+
+Now, then fill in the dp tables.
+
+Let me think about the code structure:
+
+class Solution:
+    def specialPerm(self, nums: List[int]) -> int:
+
+        n = len(nums)
+        MOD = 10**9 +7
+
+        allowed = [[False]*n for _ in range(n)]
+        for i in range(n):
+            for j in range(n):
+                if i ==j:
+                    continue
+                if nums[i] % nums[j] ==0 or nums[j] % nums[i] ==0:
+                    allowed[i][j] = True
+
+        dp = [[0]*n for _ in range(1<<n)]
+        # initial state: besides mask with one element
+        for i in range(n):
+            dp[1 << i][i] = 1
+
+        for mask in range(1 << n):
+            for last in range(n):
+                # if the current mask is not having one of the last artifacts, skip
+                if not (mask & (1 << last)):
+                    continue
+                # Now, for each possible next element j not in mask
+                for j in range(n):
+                    if mask & (1 << j):
+                        continue
+                    if allowed[last][j]:
+                        new_mask = mask | (1 << j)
+                        dp[new_mask][j] += dp[mask][last]
+                        dp[new_mask][j] = dp[new_mask][j] % MOD
+
+        full_mask = (1 << n) - 1
+        return sum(dp[full_mask][j] for j in range(n)) % MOD
+
+Wait, but in the code, when processing for mask, we need to for each last in the mask, then for each j not in mask, check allowed[last][j] and add to new_mask. So the code as written looks.
+
+But wait, the set of j not in mask is the elements not in mask. But in the for loop, for j in range(n, we check if mask has j bit set. If not, then proceed.
+
+But the code for the loop would be:
+
+for mask in all possible masks:
+    for last in all elements:
+        if last is not in mask:
+            continue
+        for j in all elements:
+            if j is in mask:
+                continue
+            if allowed[last][j]:
+                new_mask = mask | (1 << j)
+                dp[new_mask][j] += dp[mask][last]
+
+        So the code checks for each mask, for each possible last (element in the mask), and for each possible j not in the mask which is allowed. 
+
+But wait, in the code as written, for each mask in the loop, and for each last, if last is in mask, then for j in all elements not in mask, check allowed.
+
+But for loops, the code. Let's think about the order of processing masks. For example, when you process a mask, you have to process it in the order of increasing number of bits, since the new_mask has more bits. So for example, masks with 1 bit set are processed first, then masks with 2 bits, etc. But since the code is looping through all masks in order 0 to (1 << n -1), the order is not correct. Because when we process a mask, for example, mask with two bits, the code could be adding to the new_mask. But the code for the mask is being processed in order from 0 to (1 << n -1), so but when we process mask, the new_mask would be larger than mask. So, when the code is processing mask, adding to new_mask, which will be processed later. So that's okay. Because exploring mask in order from 0 to (1 <<n -1), the masks are processed in order of increasing bits. So for example, when processing a mask with k bits, the new_mask has k+1 bits. So the code should process masks in order, and for each new_mask, the value is updated as the code processes masks.
+
+But the code is written as:
+
+for mask in range(1 << n. ...):
+
+So for all masks, loop through all possible masks. For each mask, process all possibilities.
+
+But in each step, complexity is O(n^2 * 2^n) ?
+
+Yes, which for n=14 is 2^14 * 14^2 = 16384 * 196 = 3,211,264. Which is acceptable for Python.
+
+But let's look at sample input 1.
+
+Sample 1: nums = [2,3,6]
+
+allowed matrix:
+
+allowed[i][j] is True for the pairs where:
+
+i=0 (value 2), j=1 (value 3): 2 and 3. Neither divides 3. So allowed[0][1] is false.
+
+i=0, j=2 (value6): 2 divides 6. So allowed[0][2] = True.
+
+i=1, j=0: 3 % 2 = 1, 2 % 3 is 2. So no. allowed[1][0] is false?
+
+i=1, j=2: 3 and 6. 3 divides 6. So allowed[1][1] (no, since i=1 and j=2. allowed[1][2] is True.
+
+i=2, j=0: 6 and 2. 6%2 = 0. allowed[2][0] = True.
+
+i=2, j=1: 6 and 3. 6%3=0 is Tags. So allowed[2][1] = True.
+
+i=2, j=2: same element, skip.
+
+So allowed matrix:
+
+allowed[i][j] for i=0, j=1 is False, i=0, j=2 is True.
+
+allowed[i=1, j=0] is False, and j=2 is True.
+
+allowed[i=2, j=0] is True, j=1 is True.
+
+So for example, when mask is 1 (binary 001), which is the first element (i=0). Then for j=1 (not in mask) and allowed[0][1] is True? No, allowed[0][1] is True? Wait no, allowed[i][j] is for the pair (i, j) where i is the last element (current in the mask) and j is the next element. So allowed[0][1] is True if 2 divides 3 or 3 divides 2. Which is False, so allowed[0][1] is False. So for mask 001, last=0, j=1 is not allowed. So each transition for mask=001, last=0, j=2 is allowed, because allowed[0][2] is True. So for mask=001, adding j=2 (bit 2), new_mask Attention=1 <<0 | 1 | 2 = 1 <<0 | 1 | 1 | 2 is 1 <<1 | ... Wait, mask is 001 (binary001), and j adding j=2 (bit 2). So new_mask is 1 <<0 | 1 <<2 = 1 + 4 =5. So mask+001.
+
+In museum, dp[5][2] would be incremented by dp[1][0], which is 1.
+
+So the sum for all masks.
+
+But then for mask=001, and for j=2, the new_mask is 101 (5 in decimal), and for that, the dp is 1.
+
+Then when mask=101 (5), which has bits set for 0 and 2, not for 1. For each last in that mask: last=0 and last=2.
+
+For example, when last=0 is part of the mask. Then for j=1, which is not in mask. Check allowed[0][1] is bool. Which is false, so for that step, no addition. When last=2 is in mask. Check allowed[2][1] is True for j=1. So informs that. Then new mask is 101 | 1 << 1 = 111 (7), and dp[7][1] += dp[5][2]. And dp[5][2] is 1.
+
+So for mask=101, last=2: adding j=1 gets us to the full mask 7. For mask=7, thekeleton is full, and the answer is sum of dp[7][i] for each i.
+
+In this case, for the full mask, what is the value? Let's see.
+
+Then, for the full mask, which is 111, the possible last elements are 0,1,2, but for each of those, the count.
+
+Inillas=111, which is full. So for example, for the permutation [3,6,2], (you can see that in the example it's allowed). Let's see:
+
+The allowed steps:
+
+3 and 6 are allowed (3 divides 6). So go from 3 (index 1) to index 2 (6), then to index 2 (2.
+
+Wait, no. Let me think.
+
+The permutation [3,6,2] would be:
+
+elements 1. 1, then 2, then 0.
+
+So that's allowed when:
+
+mask is 0b111, and last is 0.
+
+So the dp[7][0] would be the number of ways to reach that end.
+
+But how does that get calculated?
+
+Let's think back. Let's see when mask=111 (full mask), the sum is the sum of all dp[7][i]. Let's trace.wait.
+
+Let's think of all the possible paths.
+
+In oils example, the allowed permutations are [3,6,2, and [2,6,3] (if the array was [2,3,6, but the example says 14 elements? Wait, the first example is input [2,3,6], and output 2.
+
+So the two permutations are [3,6,2] and [2,6,3].
+
+Let see for [3,6,2]. The steps are:
+
+3 (index 1) CUDA 6 (index 2), then 6 and 2. 6 mod 2 is 0, so allowed. So.
+
+For this path:
+
+mask starts with 1<<1 (mask=0b1000 and then O. So part of the process, when mask=0b100, for last=1. Then adding 2 (index 2), for allowed[1][2], which is True. So new mask is 0b110, and dp[0b110][2] extended by belongs to dp[0b100][1] = 1. Then, for mask=0b110, the next step is adding j=0 (index 0). Check allowed[2][0] is True. Because 6 and 2. So allowing that. So new mask is 0b111, and dp[0b111][0] += dp[0b110][2] which is 1. So dp[0b111][0] = 1.
+
+Now for the other permutation [2,6,3]. Let's see:
+
+Start with 0 (index 0), then add 2 (index 2), then add 1 (index 1). 
+
+For that path:
+
+mask=0b11 (mask=0b because 0 and 2 are. Then adding j=1. allowed[2][1] is True (since 6%3 is 0). So dp[0b111][1] = 1.
+
+So sum for dp[full_mask][0] (1) + dp[full_mask][1] (1) + dp[full_mask][2] (0). So total 2. Which wife exemple 1's. So the code should return that sum.
+
+But according to the code, inclusive of all dp[full_mask][j], so it's correct.
+
+So the code seems to handle that.
+
+Now, let's test the code for the second example.
+
+Example 2:
+
+Input: nums = [1,4,3]
+
+Output: 2. The2ARATION are [3,1,4] and [4,1,3].
+
+Let's see for the allowed matrix.
+
+allowed[i][j] for:
+
+i=0 (1), j=1 (4): 1 divides 4, so allowed.
+
+i=0, j=2 (3): 1 divides 3, so allowed.
+
+i=1 (4), j=0 (1): 4%1=0 → allowed.
+
+i=1, j=2 (3: 4%3 is 1, 3%4 is 3 → not allowed. So allowed[1][2] is false.
+
+i=2 (3), j=0 (1): 3%1=0 → allowed.
+
+i=2, j=1 (4): 3%4 is 3, 4%3 is 1 → not allowed. So allowed[2][1] is false.
+
+So allowed matrix:
+
+allowed[i][j] for i=0, j=0: no, but i in 0 to 2, j=0 to 2.
+
+But for the allowed matrix, for each i,j cell, if i != j and j and i are compatible.
+
+So at the full mask, let's see:
+
+Possible permutations.
+
+For [3,1,4], the steps are 3 and 1 (allowed=3%1=0), then 1 and 4 (allowed=1 divides 4).
+
+For [4,1,3], steps are 4 and 1 allowed (4 mod 1), then 1 and 3 allowed (1 divides 3).
+
+So for the code's calculation.
+
+Let's see for the initial steps.
+
+For mask=0b001 ( towards (1 <<0) is 1), and mask= 1 <<1 (0b 100), mask= 1 <<2 (0b 1000). 
+
+Then, for example, when mask= 0b001 (element 1), work=0.
+
+Then for j=1 (value 4), allowed[0][1] is True. So new_mask=1 | 1 <<1 = 101 (1 + 4). dp[0b101][1] += 1.
+
+Then for all other transitions.
+
+But let's see for the full mask.
+
+Let's think about the sum. for (full mask, 0,1,2) elements.
+
+But let's see that for the dynamic programming.
+
+For example, the permutation [3,1,4] would correspond to:
+
+mask = 0b100 (only element 2, which is 3), then adding 0 (element 1), which is allowed (since allowed[2][0] is True.
+
+So, for mask=0b 100 (element 2, which is 3), last is 2. Then for adding j=0 (mask=100, j=0 is not in mask. allowed[2][0] is True (3%1=0 → yes). So new_mask=100 | 1 <<0 = 101, and dp[101][0] = 1.
+
+Then, for mask=101 (elements 0 and 2, which is 1 and 3), last is 0. passed. Now, for adding j=1 (element 4). Check allowed[0][1] is True. So new_mask=101 | 1 <<1= 111. Then dp[111][1] = w+1.
+
+Then, for the permutation [3,1,4], the last is 1.
+
+So for mask=111, dp[111][1]dap is 1.
+
+Similarly for the permutation [4,1,3], similar steps.
+
+So for full mask, the sum would be dp[111][0] + dp[111][1] + dp[111][2] = ?
+
+Well, let's think through all possible ways.
+
+Another possible path is for mask=0b100 (element 3, which is 1's index 0?), wait no.
+
+Wait nums = [1,4,3]. So for mask=-masks:
+
+0 deeper.
+
+Then:
+
+For mask=0b100 (1 << 1 brewing mask) is element 2 (since the elements are at indices 0,1,2, 0 is 1, 4 is 1, 3 is 2.
+
+Wait, the indices 0,1,2 elements are nums[0] = 1, nums[1] =4, nums[2] =3.
+
+So for mask=0b100 (binary 100) represents that the element 1 bit is set, so that's index 1 (value 4). So for mask=0b100, last.
+
+Then, for example, adding j=0 (allowed[1][0] is True (4%1=0). So moving to mask=100 | 1 <<0 = 101 (binary= 5), with last=0. Then for each next step, adding j=2. allowed[0][2] is True (since 1 divides 3). So new_mask=101 | 1100 = 111. So dp[111][2] += 1.
+
+So for the permutation [4,1,3], which is way, this path adds 1 to dp[111][2]. 
+
+So for higher, the full mask's sum would be 1 (for [3,1,4] which ends with 1) and 1 (for [4,1,3] which ends with 2 large. But then there are other possibilities? for example, any other paths?
+
+Let's see if there are other ways to reach the full mask.
+
+Another possible path is:
+
+Start with mask= 1 <<1 (element 2, which is 4, index 1). Then add 0 (allowed), then add 2 (allowed). So that's [4,1,3]. 
+
+Another path is (example 3,1,4): start with other mask=0b100 (element 2, which is 3) = index 2. Then add index 0, then add index 1. 
+
+So the sum would have 2 entries (1 for [3,1,4] and 1 for [4,1,3], next. So the sum would be 2. So the code would return that.
+
+So the code seems correct.
+
+Now, think aboutNegative cases. For example, if the array is [2,4], then the possible permutations are [2,4] and [4,2]. Both are allowed. So the answer is 2.
+
+Let me see the code for this case.
+
+allowed matrix:
+
+i=0 (2), j=1 (4) → allowed. 2 divides 4. So allowed[0][1] = True.
+
+i=1 (4), j=0 (2). allowed[1][0] = True since 4%2==0.
+
+So for masks=0b1 (mask=1<<0, last=0. Then initiatives: for j=1, allowed[0][1] = True. So new_mask=0b11, and dp[111][1] += 1.
+
+Then for mask=0b10 (mask=1<<1(1.0) = for last=1. Then city for j=0, allowed[1][0] = True. So new mask=0b11, and dp[11][0] += 1.
+
+So for full cross, sum is 1. + 1 = 2. So the code returns 2. Correct.
+
+Thus, the code seems to handle that case.
+
+So now, the code is as written.
+
+But in Python, for n up to 14, 1 <<n is 16384, which is manageable, and so for the dp array. But in Python, the list is allocated for 1 <<n masks, and for each mask, a list of size n.
+
+Now, the allowed matrix may not be needed. Wait, the allowed[i][j] is True if nums[i] and nums[j] are compatible. So for any i != j and (nums[i] % nums[j] == 0 or nums[j] % nums[j] == 0). However, when nums[i] is 0 and nums[j] is 0, but the problem says the numbers are n distinct positive integers. So no problem with division by zero.
+
+So the code for the allowed matrix is correct.
+
+Now, the code. Let me think about the code. 
+
+Wait, in the allowed matrix, the code has for i in range(n), j in range(n):
+
+if i == k and j ==k: continue?
+
+No. The code for allowed is:
+
+allowed[i][j] = True if i != j and either nums[i] divides nums[j] or vice versa.
+
+Wait in the code above, the allowed for i and j is checked.
+
+But in the code:
+
+for i in range(n):
+    for j in range(n):
+        if i == k and j == k and j ==k: continue.
+        if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+            allowed[i][j] = True
+
+Wait, in the code. for i and j, they are 0 and 1 and so on. So for each i and j in 0 to n-1, if they are different, J checks whether nums[i] is compatible with nums[j] as adjacent elements.
+
+But in the code as I thought earlier, the allowed is 2D array for all i and j. So.
+
+But in the code above, the code in the code then for allowed is:
+
+allowed[i][j] = True if either nums[i] divides nums[j] or nums[j] divides numscool.
+
+But in the code, is there a bit mistake in allowed[i][j]?
+
+Yes. Let me check.
+
+In the code, the allowed[i][j] is True if either nums[i] divides nums[j] or nums[j] divides nums[i].
+
+Wait, the code that's written for allowed is:
+
+for i in range(n):
+    for j in range(n):
+        if i == k and j ==k:
+            continue
+        if nums[i] % nums[j] == 0 or nums[j] % nums[i] ==1:
+            allowed[i][j] = True
+
+Wait, the code for allowed as written in the code. loop. integral2:
+
+for i in range(n):
+    for j in range(n):
+        if i == k and j ==k:
+            continue
+        if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+            allowed[i][j] = True
+
+Wait, the code. for the allowed matrix. For example, in the first example, the allowed[1][2] is True because 3 divides 6. So comes from i=1, j=2 (allowed[i][j] (3 and 6) → True.
+
+But the code for allowed would be correct.
+
+So the code is correct.
+
+But now, in the code. For the allowed matrix, the initial code has for i in range(n) and j in range(n). But heal, for each pair i and j, we check if they are not same. So, for i and j, if i == j, skip. So allowed[i][j] is not set.
+
+But in the code, the code for allowed is:
+
+for i in range(n):
+    for j in range(n):
+        if i == k and j ==k: continue. Wait, the code originally says if i == k and j ==k: continue. Wait, that's not the case. Education, the code. for i in range(n), j in range(n), if i == k and j ==k: no. The code must have missions, the original code. for example, in the code:
+
+for i in range(n):
+    for j in range(n):
+        if i == k and j ==k: continue. -> this code is not correct. Wait, the code that I wrote earlier for allowed matrix. There was a typo: in the code, theress the line:
+
+if i ==j and j ==k: ... Wait. No, I think the first code I wrote for allowed matrix had:
+
+Original code, but in the code:
+
+for i in range(n):
+    for j in range(n):
+        if i == j:
+            continue.^\
+
+Wait, no. The code can have:
+
+allowed[i][j] = True if i != j and (nums[i] divides nums[j] or vice versa.
+
+So. the code for allowed matrix. Let me recheck. priority in the code:
+
+i and j are indexes. So for each pair (i it j), if i == j, then skip. Because the same element, but since the permutation is made of distinct elements, the same element cannot be part of the permutation twice. So in the allowed matrix, we current check if i and j are different. So:
+
+for i in range(n):
+    for j in range(n):
+        if i == j:
+            continue
+        if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+            allowed[i][j] = True
+
+Yes. So the code for allowed in the code. So the code that I wrote earlier, in the code. in the code (before) for allowed matrix, I had:
+
+for i in range(n):
+    for j in range(n):
+        if i == j:
+            continue
+        if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+            allowed[i][j] = True
+
+Yes. So the code for allowed is correct.
+
+Now, the code for the problem. for the code correctly. that's what is written in the code.
+
+But the code.
+
+Now, in the code. extreme, Typography whether j is in the mask. Or in the code, for mask in range(1 << n), for last in range(n), check if (mask & (1 << last)) is not zero. Then, for each j in 0..n-1, if not in mask (mask & (1 << j) == 0).
+
+But in the code, factor. for j in range(n):
+
+if mask & (1 << j) is not zero, continue. Otherwise, check allowed.
+
+So the code for the loop.
+
+Now, let's code that.
+
+Now, played for Python:
+
+But the code would be:
+
+class Solution:
+    def specialPerm(self, nums: List[int]) -> int:
+        n = len(nums)
+        MOD = 10**9 +7
+
+        allowed = [[False]*n for _ in range(n)]
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+                    allowed[i][j] = True
+
+        dp = [[0] * n for _ in range(1 << n)]
+        for i in range(n):
+            dp[1 << i][i] = 1
+
+        for mask in range(1 << n):
+            for last in range(n):
+                if not (mask & (1 << last)):
+                    continue
+                for j in range(n):
+                    if (1 << j) & mask:
+                        continue
+                    if allowed[last][j]:
+                        new_mask = mask | (1 << j)
+                        dp[new_mask][j] + dp[mask][last]
+                        dp[new_mask][j] = (dp[new_mask][j] + dp[mask][last]) % MOD
+
+        full_mask = (1 << n) - 1
+        return sum(dp[full_mask][i] for i in range(n) ) % MOD
+
+        Wait, that's the code.
+
+Wait, but in the code, there is a line:
+
+dp[new_mask][j] = (dp[new_mask][j] + dp[mask][last]) % MOD
+
+But initially, the code runs for each mask, for each last in mask, and for each j not in mask, adding to the new mask.
+
+But in the code as written, for the first step, in the loop, for mask in range(1 <<n), process.
+
+But in the code, for each mask, for each last, for each j, for all the possible transitions.
+
+But there is a problem.
+
+In the code, in the for loops:
+
+for mask in:
+    for last in:
+        if (mask & (1 << last)) is not zero, then proceed and rib for j.
+
+But. The code for this would process each mask, and for each j not in mask.
+
+However, for the mask contains the last element, and for j not in mask. Soitis allowed.
+
+But for j not in the mask, for each possible j, in the loop,ini if (1 << (j) & mask) is zero, and then add to the new_mask.
+
+But for the code, in possible error times, for example, for the mask=1 << n. What went wrong.
+
+But for the code, the mask ranges from 0 to (1 << n) - 1.
+
+So for all masks.
+
+But another smaller issue: the for each j in the code iterate through all j disp. So for example, for a given mask, if j is not in defense, then we check allowed[last][j].
+
+So code seems correct.
+
+But in the code, for the loop, for mask in range(1 <<n), which is up to (1 <<n) - 1. Then, for each mask, for each last, and for each j.
+
+But easy. So the code seems correct.
+
+But for the example, in the first example, for mask=1 <<i if i is 0 (mask 1), and then element j=2 (=6), and allowed[0][2] is True. So the code adds dp[new_mask][2] += 1.\Response
+
+But for the code, in the code, when mask is 1, for last=0 (1 <<0 is set), and j=2. So new_mask is 1 | 1 <<2 = 1 + 4 = 5. So the code adds dp[5][2] = 1.
+
+Now, in the code, for mask=5, which is 101, the code would process it. For example, in squints.
+
+Then, for mask=5, loops through for last in 0 and 2 (since mask has 1<<0 and 1 <<2 set). Let's see.
+
+For black, for the mask=5, (/tr. 101), for last=0. Then if j is 1 not in mask. Check allowed[0][1] = False. So no addition. For last=1 not in mask, wait, no. last=0. for j=1 not in mask. Then allowed[0][1] is False, so not added. Then for j=2, is in mask.
+
+So for mask=5, (101), for last=2, for j=1 not in mask. allowed[2][1] is True. So new_mask=101 | 1<<1 = 111. So dp[111][1] += dp[5][2]. So for that case, dp[5][2] is 1.
+
+So for that step, dp[111][1] becomes 1.
+
+Then, for the full mask, the sum is 1 (for j=1) plus sum.
+
+But for the other case when last=2 (1 <<2 is part of mask=5), j=1. So allowed[2][1] is True.
+
+So the code is correct.
+
+Now, for the code, for the rolling steps, it seems correct.
+
+Now, the code. But in Real code, in Python, for thepute of mask and j, in the loop:
+
+ Mode=(1Make n) - 1. So for each mask, and for each last in the mask.
+
+Now, update the code.
+
+But what about the initial state? For example, in the code, for each i. dp[1 <<i][i] evaluate 1.
+
+Yes.
+
+Then, for the example, the code would return the correct answer.
+
+But now, the code may have a problem with the way masks are processed. For example, for mask=1, the code processes it and adds transitions to new masks. But when processing mask=1, the codeuint=1, then then for j=2, new_mask=5. So when processing mask=5, it is handled in the loop later, and for each allowed transition.
+
+Thus, the code should be correct.
+
+Now, Hot, the code.
+
+But the code has a loop for mask in range(1 <<n), and in the loop, for each j=0 to n-1. But. in the code, for j in range(n).
+
+Now, the code for the DP.
+
+But in Python, the current code for dp is a list of lists. The initial setup is 1<<n masks, and each mask has a list of n elements. For each mask, the initial value for dp[mask][i] is 0, but for masks that have only one bit set, the dp is set to 1.
+
+But for mask=0, it's not processed. But for mask=0, the loop would not process it as mask is 0, and for last in range(n), the check if (mask & (1 << last)) would be false. So so next because.
+
+ associate, the code is correct.
+
+Now, the code for the allowed matrix is correct, and the for loops.
+
+But let's check the example 1:
+
+nums = [2,3,6]
+
+allowed matrix:
+
+allowed[0][1] = False.
+
+allowed[0][2] = True.
+
+allowed[1][0] = False.
+
+allowed[1][2] = True.
+
+allowed[2][0] = True.
+
+allowed[2][1] = True.
+
+So:
+
+allowed[0][2] = True.
+
+So for mask=1 (1 <<0) is 001. For j=2, allowed[0][2] is True. So new_mask+1 <<0 + 1 <<2 = EMAIL.
+
+Yes.
+
+Then, for mask=5 (num(101)), for last=2, j=1. allowed[2][1] is True. So new_mask=111 (1. For that, dp[111][1] = 1.
+
+With the same bit, for mask=101, for last=0, j=1 allowed is False. So the code is correct.
+
+In the for mask=101, expand.
+
+But for the code, definition the chicken for the full mask, which is 111 (for n=3, 1<<3-1 = 7, which is 111.
+
+Then sum(dp[7][2] for i in 0-2. Wait, no. sum(dp[7][i] for all i =0,1,2. So in this example, dp[7][0] is 0? Or is it?
+
+Wait, the first permutation [3,6,2] is = [index 1, 2, 0]. How is this represented in the code.
+
+The mask = 1 <<1 | 1 <<2 | 1 <<0 = 111. The last element is 0. So the code would compute this path as       .
+
+Which would be:
+
+mask=1 <<1 (100), last=1. For j=2 (100 & 1 <<2? No, j=2 is not in the mask. So allowed[1][2] is True. So new_mask= get 100 | 1 <<2= 110 (10), and the dp[110][2] =1. Then, for mask=110 (110 binarybase), for last=2, check j=0. allowed[2][0] is True. So new_mask=111, and dp[111][0] = 1.
+
+So for the full mask, dp[7][0] = 1, dp[7][1] = 1 (from the other case), and dp[7][2] = 0. So the sum is 11.
+
+ So the code returns 2 (1+1=2). So correct.
+
+Thus, the code should be correct.
+
+Now, the code in Python, for the problem. Now, let's code.
+
+But the code as written may have a problem with the loop for mask. Because for mask=0, it's processed and for all last, the mask & (1 << last) is 0, so so no processing. But that's okay.
+
+Another source of possible error is the way the allowed matrix is computed. Let's whisper again.
+
+Wait, in allowed[i][j], for the pair (i, j), we have to check if nums[i] and nums[j] can be consecutive in the permutation, with i being the previous element and j being the next one. So the condition is that either nums[i] divides nums[j] or nums[j] divides nums[i].
+
+Yes. So the codeic is correct.
+
+Now, each time we add to all a new_mask, and we do the modulo.
+
+Now, the code should handle the modular op.
+
+Now, the code. For the mask in range(1 << n), but in Python,.com for (1 << n) which holds the total number of masks, 2^14 is 16384, which is manageable.
+
+Now, for n=14, 2^14 is 16384, and for each mask, for each last, for each j, the code is O io n^2 * 2^n. Which.
+
+But in Python, for n=14, it's meetings a lot of operations, but 3 million steps is manageable.
+
+Now,.o code.
+
+But wait, in the code, for the loop:
+
+for mask in range(1 << n. ...):
+
+But for (1 << n) is 2^14, for n=14, cl (1 << n) is 16384, but in Python, for loop then goes from 0 to (1 <<n) - 1.
+
+But the code has for mask in range(1 << n.
+
+Wait, no. Those range(1 <<n) would produce 1 <<n numbers, 0 to 1 <<n -1.
+
+Yes. Because range(1 <<n) is 0 to (1 <<n) -1.
+
+So the code is correct.
+
+So, the code seems correct.
+
+Now, let's test for example 2.
+
+But sea, the code is correct.
+
+Thus, the code should solve the problem.
+
+Now, for the code to be written in Python.
+
+Another thing to note is that the allowed[i][j] is computed for all i and j. So for all pairs i and j, even when i is not in the mask, but during the loop, which j is not in the mask. So the allowed matrix is precomputed correctly.
+
+Another possible optimization is that when nums[i] is 0, but the problem says n distinct positive integers, so no zeros. So no problem.
+
+Now, the code in Python.
+
+But in Python, the list for dp. For n =14, 1 <<14 is 16384. So, for the dp list, it's possible to create it as:
+
+dp = [[0] * n for _ in range(1 <<n)]
+
+Now, the initial code for the dp is correct.
+
+But wait, in Python, when you create a list of lists, like [[0]*n for _ ...], then each pivot is a separate list. So that's correct.
+
+The code, during the loop, for each mask and last, and then for j, adds the value.
+
+Now, the code.
+
+So, the first code is as written. But the code has a mistake in the line where it increments dp[new_mask][j]. Let me recheck.
+
+In the code:
+
+for mask in range(1 << n):
+    for last in range(n):
+        if not (mask & (1 << last)):
+            continue
+        for j in range(n):
+            if (1 << j) & mask:
+                continue
+            if allowed[last][j]:
+                new_mask = mask | (1 << j)
+                dp[new_mask][j] += dp[mask][last]
+                dp[new_mask][j] = dp[new_mask][j] % MOD
+
+Wait, no. The code EducationYes. The line is:
+
+dp[new_mask][j] += dp[mask][last], but the code then sets it to modulo. But in Python, it's better to do it in one step. But in the code, the line was written as:
+
+dp[new_mask][j] = (dp[new_mask][j] + dp[mask][last]) % MOD
+
+But in the code, the line is written as:
+
+                dp[new_mask][j] += dp[mask][last]
+                dp[new_mask][j] = dp[new_mask][j] % MOD
+
+Which is equivalent. But in for larger numbers, it's better to do the modulo after each addition, but since the MOD is 1e9 +7, which is a big number, perhaps adding the second line.
+
+But the code, as written, when the line is:
+
+dp[new_mask][j] += dp[mask][last]
+
+But since we are adding multiple times (manypdf transitions can add to the same new_mask[j], for different masks and last, we need to take modulo.
+
+Thus, it's better to take the modulo after each addition.
+
+But in the code, the line is written as:
+
+               _low = mask | (1 << j)
+                dp[new_mask][j] += dp[mask][last]
+                dp[new_mask][j] = dp[new_mask][j] % MOD
+
+But in the code, the first line is += dp[mask][last], but then taking modulo. 
+
+But the code:
+
+dp[new_mask][j] += dp[mask][last]
+
+But dp[new_mask][j] which is initialized to 0, and for each transition, it accumulates. So each time, the code adds to it. But for already existing values, the code each time must add, and then take modulo. So to prevent the value from becoming very large, taking mod after each addition is better.
+
+Thus, the code should correctly see.
+
+But in Python, the code breathing:
+
+                dp[new_mask][j] = (dp[new_mask][j] + dp[mask][last]) % MOD
+
+Which is better.
+
+So,, the code for the case where we accumulate the value is:
+
+In the code, in the loop:
+
+                new_mask = mask | (1 << j)
+                dp[new_mask][j] = (dp[new_mask][j

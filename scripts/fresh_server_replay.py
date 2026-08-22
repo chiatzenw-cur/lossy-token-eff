@@ -384,7 +384,22 @@ def ensure_patch_applied(method: str) -> None:
     if label != hashes_label and label is not None and label != "upstream":
         # A different patch is installed; reverse it first via the label's
         # own patch file (label == the method name apply.sh/HASHES.txt use).
-        other_patch = REPO_ROOT / "patches" / f"vllm-0.26.0-{label}.patch"
+        #
+        # mentored-dec is special-cased to its V1-only patch (same reason
+        # and same file as apply.sh's own fresh-install path -- see its
+        # 2026-08-20 comment): the original two-file vllm-0.26.0-mentored-
+        # dec.patch's V2 hunk was written against a pristine V2, but V2 has
+        # permanently carried the consolidated 5-method logic since earlier
+        # that session and is never touched per-method any more, forward OR
+        # reverse. Reversing the full patch here failed the same way
+        # apply.sh's forward-install did (4/4 V2 hunks FAILED), blocking
+        # every mentored-dec->other-method switch in an unattended sweep --
+        # a real, later find, since this reversal path wasn't touched by
+        # the first fix.
+        if label == "mentored-dec":
+            other_patch = REPO_ROOT / "patches" / "vllm-0.26.0-mentored-dec-v1only.patch"
+        else:
+            other_patch = REPO_ROOT / "patches" / f"vllm-0.26.0-{label}.patch"
         sp = pathlib.Path(args_python_purelib())
         reverse = subprocess.run(
             ["patch", "-p1", "-R", "-d", str(sp)],

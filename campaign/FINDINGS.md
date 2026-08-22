@@ -155,3 +155,124 @@ are calibrated on the correct side of strict.
 `humaneval` is the first code dataset and already shows `cactus` collapsing
 for the first time -- worth checking whether `livecodebench` (also code)
 repeats that, or whether it's humaneval-specific.
+
+*(Note added 2026-08-19: all 6 GPT-OSS-20B datasets finished after this
+section was written; the section above still reflects the 3-dataset state
+it was written at and hasn't been re-audited against the final 6. The
+cross-model section below is current as of the same date.)*
+
+## ⚠️ RETRACTED (2026-08-19, same day): the section below was a sampling-config bug, not a real finding
+
+Root cause found after this section was written: every Qwen3-8B server in
+the run this section describes was silently serving at
+temperature=0.6/top_k=20/top_p=0.95 (the model's own `generation_config.json`
+defaults) instead of the campaign's actual `--temperature 1.0 --top-p 1.0`
+-- vLLM only warns about this (`--generation-config vllm` fixes it), never
+refuses to start, so it went unnoticed. A follow-up probe at cactus/
+r_fuzzy's ORIGINAL (non-widened) alpha=0.03, same case, same everything
+else, with only that one flag added: real divergence from strict
+(L=1108 vs L=743) -- the alpha grids were fine all along. See
+`campaign/JOURNAL.md`'s 2026-08-19 "i cant use those results" entry for the
+full diagnostic trail. The entire `runs/*_qwen3/` tree + `campaign/{calibration,
+results,tables}/*_qwen3.*` + `campaign/graphs/*_qwen3*` this section
+describes have been deleted (kept would have silently contaminated a
+re-run via skip-if-done) and the campaign relaunched under the fix. Once
+that lands, replace this whole section with a fresh writeup -- don't just
+patch the numbers below, the underlying story ("4 of 5 methods architecturally
+dead on Qwen3-8B") is very likely WRONG, not just imprecise.
+
+## Qwen3-8B + drafter: the alpha grids that move GPT-OSS-20B don't move Qwen3-8B at all (2026-08-19, RETRACTED -- see note above)
+
+Running the identical campaign (same 6 datasets, same prompts, same alpha
+grids, same taxonomy) against `Qwen/Qwen3-8B` + `Tengyunw/qwen3_8b_eagle3`
+surfaced something the GPT-OSS run never showed: **4 of the 5 relaxation
+methods produce zero measurable effect on Qwen3-8B, at any alpha in their
+calibration grid, on every one of the 6 datasets.**
+
+This isn't a chosen-alpha artifact (see "chosen-alpha collapse" above for
+that *different* phenomenon on GPT-OSS) -- it's the full 4-point probe grid
+itself, before any target-selection happens:
+
+```
+gsm8k_qwen3      cactus/spec_casc_opt/r_fuzzy/spec_casc_tok: l̄ = 1.715 at EVERY alpha
+aime24_qwen3     "                                    "    : l̄ = 1.434 at EVERY alpha
+humaneval_qwen3  "                                    "    : l̄ = 1.632 at EVERY alpha
+livecodebench_qwen3 "                                 "    : l̄ = 1.409 at EVERY alpha
+longbench_v2_qwen3  "                                 "    : l̄ = 0.702 at EVERY alpha
+mtbench_qwen3       "                                 "    : l̄ = 1.373 at EVERY alpha
+```
+
+Confirmed by reading `campaign/calibration/<dataset>_qwen3.json`'s raw
+`grid_results` directly (not just the 2-3 chosen points that make it into
+`campaign/results/`) -- every single one of cactus/spec_casc_opt/r_fuzzy/
+spec_casc_tok's 4 grid alphas lands on the exact same l̄ as every other
+alpha for that method, on all 6 datasets, no exceptions. Their behavior is
+indistinguishable from `strict` (lossless) at every tested setting --
+`mean_l_bar`, `mean_completion_length`, and `accuracy` in
+`campaign/results/*_qwen3.csv` are literally identical across every
+alpha *and* the strict row, for those 4 methods, on every dataset.
+
+**`mentored_dec` is the one exception, everywhere**: it shows real,
+monotonic alpha-dependence on Qwen3-8B just like it does on GPT-OSS-20B
+(e.g. gsm8k_qwen3: l̄ 1.795 -> 1.863 -> 1.951 -> 2.095 across its own grid).
+
+**Why this is architecturally meaningful, not a bug**: `mentored_dec` is
+the one method in this taxonomy whose knob directly interpolates the
+acceptance probability (`min(1, p/q)` blended toward `1` by `alpha`,
+Xia et al.'s own formulation) -- alpha changes the accept probability by
+construction, at any model scale. The other four (`cactus`,
+`spec_casc_opt`, `r_fuzzy`, `spec_casc_tok`) all gate relaxation behind a
+*threshold test* on some derived quantity (a probability-ratio band, a
+JS-divergence cutoff, a trusted-token-set check) tuned, via these exact
+alpha grids, to sit in the range where GPT-OSS-20B's own p/q distributions
+actually cross the threshold sometimes. Qwen3-8B + its own EAGLE3 drafter
+apparently has a differently-shaped p/q distribution at this task set (see
+the l̄ gap below) such that these same absolute threshold values never get
+crossed -- the relaxation logic is technically active but never actually
+fires. Re-running with per-model-recalibrated grids (not attempted here)
+would be needed to tell whether these methods are dead on Qwen3-8B at any
+alpha or just at the range GPT-OSS-20B happened to need.
+
+**A likely contributing signal**: Qwen3-8B's own strict l̄ is 30-55% lower
+than GPT-OSS-20B's on every dataset (this drafter pair accepts fewer
+speculative tokens per verification round to begin with):
+
+| dataset | GPT-OSS-20B strict l̄ | Qwen3-8B strict l̄ | strict accuracy (GPT-OSS / Qwen3) | strict completion length (GPT-OSS / Qwen3) |
+|---|---|---|---|---|
+| gsm8k | 2.69 | 1.78 | 1.000 / 0.917 | 273 / 1290 |
+| aime24 | 2.22 | 1.39 | 0.750 / 0.667 | 9090 / 17354 |
+| humaneval | 2.50 | 1.68 | 1.000 / 0.917 | 674 / 2886 |
+| livecodebench | 2.19 | 1.47 | 0.083 / 0.083 | 3747 / 8636 |
+| longbench_v2 | 1.81 | 1.07 | 0.750 / 0.750 | 1470 / 2318 |
+| mtbench | 2.30 | 1.60 | n/a (ungraded) | 1689 / 2322 |
+
+Two things worth separating in that table:
+- **l̄ and accuracy** are a fair like-for-like comparison (same decoding
+  settings otherwise) -- Qwen3-8B's weaker drafting (lower l̄ everywhere)
+  and generally lower accuracy vs. GPT-OSS-20B are consistent with the
+  8B-vs-20B capability gap, except livecodebench (both near-floor: 0.083
+  either way -- this benchmark is hard for both at this scale) and
+  longbench_v2 (exactly tied at 0.750).
+- **Completion length is NOT a fair comparison as configured**: Qwen3-8B
+  ran with `enable_thinking=True` (full `<think>...</think>` chain-of-
+  thought), GPT-OSS-20B with `reasoning_effort=medium` -- these are
+  different verbosity settings by construction, not a model capability
+  difference, and it shows: Qwen3 is 1.6x-4.7x longer than GPT-OSS on every
+  dataset (most extreme on gsm8k: 273 -> 1290, a trivial task GPT-OSS
+  answers almost immediately at medium effort but Qwen3's thinking mode
+  still reasons through at length). Do not cite the completion-length
+  column as a cross-model efficiency claim without controlling for this.
+
+**Caveat for the paper**: this is one alpha-grid choice (GPT-OSS-20B's own
+`campaign/PLAN.md` grids, reused as-is for Qwen3-8B, by design -- see
+`campaign/JOURNAL.md`'s 2026-08-17 entry) against one model pair. It shows
+these specific grids don't transfer, not that the methods themselves can't
+work on smaller/dense models -- that would need a fresh per-model
+calibration sweep (wider or shifted alpha ranges) to distinguish "dead at
+this scale" from "just needs different numbers," and hasn't been run.
+
+**Reproduce**: `campaign/calibration/<dataset>_qwen3.json`'s `grid_results`
+field has the full 4-point-per-method probe data directly; `python3 -c`
+one-liner used to confirm this across all 6:
+`json.load(open(f'campaign/calibration/{ds}.json'))['grid_results']`, check
+`len(set(round(p['mean_l_bar'],3) for p in pts)) == 1` per method.

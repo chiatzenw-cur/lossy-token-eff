@@ -284,10 +284,25 @@ def vllm_install_info() -> dict[str, Any]:
     v2_label = hash_to_label.get(v2_hash) if v2_hash else None
     info["v1_label"] = v1_label
     info["v2_label"] = v2_label
+    # UPDATED 2026-08-20: spec.touches_v2 used to mean "only mentored-dec
+    # patches V2, everyone else needs it pristine" -- true for GPT-OSS-20B,
+    # false since Qwen3-8B was found to route rejection sampling through V2
+    # exclusively (see patches/HASHES.txt's long comment). V2 was
+    # consolidated into ONE always-present file (registered under the
+    # "mentored-dec" hash label) that carries every method's contribution
+    # and is never re-patched per method any more, forward or reverse.
+    # "mentored-dec" labeled is now the correct, expected V2 state for
+    # every method, not a mentored-dec-only state -- the old per-method
+    # touches_v2 branch always demanded v2_label=="upstream" for the other
+    # four methods, which can now never be true, so patch_applied[method]
+    # was always False for them even when correctly installed. Found live
+    # when a real campaign run's spec_casc_opt requests failed with
+    # "the spec_casc_opt patch is not applied" despite V1's hash matching
+    # spec-casc-opt exactly.
     patches_applied: dict[str, bool] = {}
     for name, spec in METHODS.items():
         v1_ok = v1_label == spec.hashes_label
-        v2_ok = (v2_label == spec.hashes_label) if spec.touches_v2 else (v2_label == "upstream")
+        v2_ok = v2_label in ("mentored-dec", "upstream")
         patches_applied[name] = v1_ok and v2_ok
     info["patch_applied"] = patches_applied
     info["v1_is_pristine"] = v1_label == "upstream"

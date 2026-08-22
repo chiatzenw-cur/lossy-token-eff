@@ -73,9 +73,31 @@ TOKEN_BUDGETS.update({f"{name}_qwen3": budget for name, budget in list(TOKEN_BUD
 # MAX_MODEL_LEN itself is one fixed value across all 6 GPT-OSS datasets:
 # one serving config per model family, not tuned per-dataset.
 QWEN3_ROPE_SCALING = '{"rope_type":"yarn","factor":1.6,"original_max_position_embeddings":40960}'
+# Drafter swapped 2026-08-20 (Tengyunw/qwen3_8b_eagle3 -> RedHatAI/Qwen3-8B-
+# speculator.eagle3). With the original drafter, cactus/spec_casc_opt/
+# r_fuzzy/spec_casc_tok were bit-identical to strict at every alpha tested,
+# from 0.001 to 2.0 (well past their real calibration grids) -- genuinely
+# flat, not noise (confirmed via repeated deterministic runs). mentored_dec
+# alone stayed alpha-sensitive throughout, both before and after the
+# --generation-config vllm sampling-parameter fix (kept; real and correct on
+# its own, just not the explanation here). Root cause not conclusively
+# isolated (draft_probs-is-None was the leading hypothesis but the vLLM
+# config conditions that would force that all checked out fine on paper;
+# live instrumentation to confirm directly got tangled in vLLM's
+# multi-process architecture and a patch hash-safety check without a clean
+# answer -- see campaign/JOURNAL.md's 2026-08-19/20 entries for the full
+# trail). Empirically: swapping to RedHatAI's speculator (73k downloads,
+# published by the team that builds vLLM-optimized speculators, vs.
+# Tengyunw's own smaller-community upload) immediately produced real
+# divergence from strict on the same case/alpha that was previously
+# bit-identical -- confirmed the server actually read each distinct alpha
+# value (not a threading bug) via each run's own "[CACTUS PATCH...] alpha=X"
+# startup line. Trusting campaign_run.py's own calibration stage (which
+# probes 3 cases per method, not just one) to find where real alpha-
+# sensitivity shows up, rather than more manual single-case probing.
 MODEL_FAMILIES: dict[str, tuple[str, str, str, str]] = {
     "gpt_oss_20b": ("openai/gpt-oss-20b", "nebius/EAGLE3-gpt-oss-20b", "gpt-oss-20b", ""),
-    "qwen3": ("Qwen/Qwen3-8B", "Tengyunw/qwen3_8b_eagle3", "qwen3-8b", QWEN3_ROPE_SCALING),
+    "qwen3": ("Qwen/Qwen3-8B", "RedHatAI/Qwen3-8B-speculator.eagle3", "qwen3-8b", QWEN3_ROPE_SCALING),
 }
 
 
@@ -111,22 +133,29 @@ def case_list(n: int) -> list[str]:
 
 
 def clean_partial_runs(runs_root: pathlib.Path, dataset: str) -> int:
-    """Remove any seed_N/ run directory that exists but has no run.json --
-    i.e. a case that started (run_experiment_vllm.py already wrote
-    config.json/request.json) and then never finished (server killed,
-    process crashed, host restarted, timeout, ...).
+    """Remove any seed_N/ run directory that exists but either has no
+    run.json (a case that started -- run_experiment_vllm.py already wrote
+    config.json/request.json -- and then never finished: server killed,
+    process crashed, host restarted, timeout, ...) OR has a run.json whose
+    status is not "ok" (the request itself completed and got a response,
+    but it was an error -- e.g. an HTTP 500 from a server-side crash).
 
     Load-bearing for resumability: run_experiment_vllm.py's run_one()
     refuses to write into a directory that already exists
     (`FileExistsError` unless --overwrite), and fresh_server_replay.py's own
-    skip-if-done check only looks for run.json. Without this cleanup, a
-    half-finished run directory left over from an interrupted process would
-    make every future retry of that exact (method, alpha, case) fail the
-    same way forever -- a silent permanent gap, not a visible one, since
-    fresh_server_replay.py logs the failure and moves on rather than
-    stopping. Confirmed reproducing this exact shape in the gsm8k smoke test
+    skip-if-done check only looks for run.json EXISTING, not its status.
+    Without this cleanup, either shape -- missing run.json, or a real one
+    recording status="error" -- would make every future retry of that exact
+    (method, alpha, case) silently skip forever, not just fail loudly once.
+    Confirmed reproducing the missing-run.json shape in the gsm8k smoke test
     (a `timeout 300`-killed run left `alpha0.35/case_001/seed_0/` with
-    config/request/server_info.json but no run.json).
+    config/request/server_info.json but no run.json); confirmed the
+    status="error" shape for real on 2026-08-18 (longbench_v2_qwen3
+    strict/case_007: a CUDA device-side assert crashed that one server mid-
+    request, run_experiment_vllm.py's own exception handler wrote
+    `{"status": "error", ...}` before re-raising, and the next dataset-wide
+    rerun silently treated it as done until this function grew a status
+    check).
     """
     dataset_root = runs_root / dataset
     if not dataset_root.is_dir():
@@ -135,8 +164,19 @@ def clean_partial_runs(runs_root: pathlib.Path, dataset: str) -> int:
     for seed_dir in dataset_root.glob("*/*/*/seed_*"):
         if not seed_dir.is_dir():
             continue
-        if not (seed_dir / "run.json").is_file() and any(seed_dir.iterdir()):
-            print(f"cleaning up partial run dir (no run.json): {seed_dir}")
+        run_json = seed_dir / "run.json"
+        needs_cleanup = False
+        if not run_json.is_file():
+            needs_cleanup = any(seed_dir.iterdir())
+        else:
+            try:
+                status = json.loads(run_json.read_text(encoding="utf-8")).get("status")
+            except (OSError, json.JSONDecodeError):
+                status = None  # unreadable run.json is as good as no run.json -- redo it
+            needs_cleanup = status != "ok"
+        if needs_cleanup:
+            reason = "no run.json" if not run_json.is_file() else f"run.json status={status!r}"
+            print(f"cleaning up partial/errored run dir ({reason}): {seed_dir}")
             for child in seed_dir.iterdir():
                 child.unlink()
             seed_dir.rmdir()

@@ -64,9 +64,23 @@ elif [[ "$v1_label" == "upstream" ]]; then
   trap 'rm -rf "$work"' EXIT
   mkdir -p "$work/vllm"
   cp "$V1" "$work/vllm/$V1_REL" 2>/dev/null || { mkdir -p "$(dirname "$work/vllm/$V1_REL")"; cp "$V1" "$work/vllm/$V1_REL"; }
-  mkdir -p "$(dirname "$work/vllm/$V2_REL")"
-  cp "$V2" "$work/vllm/$V2_REL"
-  patch -p1 -d "$work" < "$here/vllm-0.26.0-$METHOD.patch"
+  # V2 is now permanently in the consolidated "mentored-dec" (or pristine)
+  # state regardless of which V1 method is active -- see the V2 pristine-
+  # check block below and HASHES.txt's long comment. mentored-dec's own V1
+  # hunk is applied from vllm-0.26.0-mentored-dec-v1only.patch (the V1-only
+  # first 131 lines of the original two-file patch) rather than the
+  # original combined patch: the original's V2 hunk was written against a
+  # PRISTINE V2 file and now always fails, because V2 already carries
+  # mentored-dec's contribution baked into the consolidated file --
+  # re-applying it is both unnecessary and impossible against the changed
+  # base. Discovered 2026-08-20 when a real campaign run's automatic
+  # cactus->mentored-dec switch started failing this exact way.
+  if [[ "$METHOD" == "mentored-dec" ]]; then
+    patch_file="$here/vllm-0.26.0-mentored-dec-v1only.patch"
+  else
+    patch_file="$here/vllm-0.26.0-$METHOD.patch"
+  fi
+  patch -p1 -d "$work" < "$patch_file"
   new_v1_hash="$(hash_of "$work/vllm/$V1_REL")"
   new_v1_label="$(label_for_hash x "$new_v1_hash")"
   if [[ "$new_v1_label" != "$METHOD" ]]; then
@@ -78,9 +92,6 @@ elif [[ "$v1_label" == "upstream" ]]; then
   # cached wheel for every other venv (including the sibling repo's) built
   # from it.
   cp --remove-destination "$work/vllm/$V1_REL" "$V1"
-  if [[ "$METHOD" == "mentored-dec" ]]; then
-    cp --remove-destination "$work/vllm/$V2_REL" "$V2"
-  fi
   echo "installed $METHOD"
 elif [[ -n "$v1_label" ]]; then
   echo "$v1_label is currently applied to $V1, not $METHOD" >&2
@@ -92,17 +103,20 @@ else
   exit 1
 fi
 
-# Every method except mentored-dec needs no V2 change; confirm V2 is still
-# either pristine or (for mentored-dec) correctly patched.
+# UPDATED 2026-08-20: this used to assume only mentored-dec ever touches
+# V2 (true for GPT-OSS-20B) -- Qwen3-8B was found to route through V2
+# exclusively, so cactus/spec-casc-opt/r-fuzzy/spec-casc-tok were ported
+# into V2 too (consolidated into ONE always-present file under the
+# "mentored-dec" hash label, not five separate mutually-exclusive V2
+# patch files the way V1 still works -- see HASHES.txt's own long comment
+# on this for the full story). V2 no longer changes per-method AT ALL,
+# including for mentored-dec itself: "mentored-dec" labeled is now the
+# correct, expected V2 state for every method, not a mentored-dec-only
+# state. Only a truly unrecognized V2 hash is a real problem.
 v2_hash="$(hash_of "$V2")"
 v2_label="$(label_for_hash x "$v2_hash")"
-if [[ "$METHOD" == "mentored-dec" ]]; then
-  if [[ "$v2_label" != "mentored-dec" ]]; then
-    echo "V2 file ($V2_REL) does not match the recorded mentored-dec hash -- half-patched install" >&2
-    exit 1
-  fi
-elif [[ "$v2_label" != "upstream" ]]; then
-  echo "V2 file ($V2_REL) is not pristine (label: ${v2_label:-unknown}) -- $METHOD does not touch it, so this is unexpected" >&2
+if [[ "$v2_label" != "mentored-dec" && "$v2_label" != "upstream" ]]; then
+  echo "V2 file ($V2_REL) matches neither the consolidated mentored-dec state nor pristine (label: ${v2_label:-unknown}) -- unexpected" >&2
   exit 1
 fi
 
