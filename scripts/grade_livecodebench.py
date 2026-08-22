@@ -1,16 +1,40 @@
 #!/usr/bin/env python3
-"""Grade archived LiveCodeBench runs by execution (stdin/stdout), not text
-matching.
+"""Grade archived LiveCodeBench runs by execution, not text matching.
 
-Extraction mirrors grade_humaneval.py's convention (split on the Harmony
-final-channel marker, take the LAST fenced ```python block), but the
-harness itself is different: LiveCodeBench problems are "read from stdin,
-write to stdout" competitive-programming programs, not a single function
-called against a `check()` harness, so grading runs the candidate as a
-whole program with each test case's `input` piped to stdin and compares
-stdout against `output` (line-by-line, trailing-whitespace-insensitive --
-a correct solution that differs only in trailing spaces/newlines is not a
-meaningful failure for this campaign's purposes).
+Two harnesses, chosen per test case by its own `testtype` field -- **not**
+a single stdin/stdout harness for every problem, which was this script's
+own bug until 2026-08-22 (see below):
+
+- `testtype == "stdin"` (Codeforces/AtCoder-style problems): run the
+  candidate as a whole program, `input` piped to stdin, compare stdout
+  against `output` (line-by-line, trailing-whitespace-insensitive -- a
+  correct solution that differs only in trailing spaces/newlines is not a
+  meaningful failure for this campaign's purposes).
+- `testtype == "functional"` (LeetCode-style problems): the prompt asks
+  the model to "Complete the following function" against a `class
+  Solution:` stub (see `prompts/livecodebench/<case>/rendered_prompt.txt`),
+  not write an I/O program. `input` is one JSON-literal argument per line
+  (in the starter code's own parameter order), `output` is one
+  JSON-literal return value. Grading imports the candidate's `Solution`
+  class, calls `getattr(Solution(), func_name)(*args)`, and compares the
+  JSON-decoded return value against the JSON-decoded expected output.
+  `func_name` comes from `test_cases.json`'s own `metadata.func_name`
+  field (`{"func_name": "doesValidArrayExist"}` for that problem).
+
+**Bug found and fixed 2026-08-22**: this script used to run every problem
+through the stdin harness regardless of `testtype`. 10 of this campaign's
+12 livecodebench cases are `leetcode`-platform ("functional") problems --
+a candidate that correctly implements the requested function has no
+stdin/stdout I/O of its own, so it produced empty stdout and was marked
+"failed" no matter how correct the logic was. Confirmed by hand: extracted
+one "failed" candidate (case with question_id 2792, "neighboring-bitwise-
+xor"), ran it directly against the LeetCode calling convention rather than
+piping stdin to it -- correct, textbook solution (XOR of the whole array
+must be 0). Every prior accuracy number this grader ever produced for
+livecodebench (both GPT-OSS-20B and Qwen3-8B) undercounts real accuracy by
+an unknown amount up to this fix; re-run grading and update
+`campaign/results/livecodebench*.csv` + `campaign/FINDINGS.md` after this
+fix lands, don't trust the old numbers.
 
 **Public test cases only, by design, not an oversight**: LiveCodeBench's
 `private_test_cases` field is a base64+zlib+**pickle** blob. Unpickling
@@ -25,10 +49,10 @@ use. See campaign/JOURNAL.md for how the 12 needed rows were fetched
 test.jsonl is ~1.25GB, this campaign only ever needed 12 specific rows'
 worth of it).
 
-Candidate code runs in its own subprocess (not exec()) with a wall-clock
-timeout and a memory cap, for the same reason grade_humaneval.py does:
-this repo studies decoding pathologies (repetition loops) that can produce
-code that hangs.
+Candidate code runs in its own subprocess (not exec() in this process)
+with a wall-clock timeout and a memory cap, for the same reason
+grade_humaneval.py does: this repo studies decoding pathologies
+(repetition loops) that can produce code that hangs.
 """
 
 from __future__ import annotations
@@ -46,7 +70,7 @@ from typing import Any
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from answer_extraction import final_segment  # noqa: E402 -- covers both Harmony (GPT-OSS) and Qwen3's </think> convention
 
-CODE_BLOCK = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
+CODE_BLOCK = re.compile(r"```(?:\w+)?\s*\n(.*?)```", re.DOTALL)
 
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_MEMORY_LIMIT_MB = 1024
@@ -56,6 +80,22 @@ import resource
 resource.setrlimit(resource.RLIMIT_AS, ({mem_bytes}, {mem_bytes}))
 """
 
+# Pre-imported into the functional worker's globals before the candidate is
+# exec'd: LeetCode starter-code signatures reference List/Optional/etc. and
+# many candidates don't repeat the import themselves (the starter snippet
+# they're completing doesn't show one) -- harmless to import twice for the
+# candidates that do.
+FUNCTIONAL_WORKER_TEMPLATE = """
+import json, sys
+from typing import *
+
+{candidate_code}
+
+_args = [json.loads(_line) for _line in sys.stdin.read().splitlines()]
+_result = Solution().{func_name}(*_args)
+sys.stdout.write(json.dumps(_result))
+"""
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -63,7 +103,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prompt-root", type=pathlib.Path, default=pathlib.Path("prompts/livecodebench"))
     parser.add_argument(
         "--test-cases", type=pathlib.Path, default=None,
-        help="Defaults to <prompt-root>/test_cases.json (question_id -> row with public_test_cases).",
+        help="Defaults to <prompt-root>/test_cases.json (question_id -> row with public_test_cases + metadata.func_name).",
     )
     parser.add_argument("--tags", nargs="+", default=None, help="Restrict to these run tags.")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
@@ -95,7 +135,7 @@ def normalize(output: str) -> list[str]:
 
 
 def run_one_case(candidate_path: str, stdin_text: str, timeout: float, mem_bytes: int) -> tuple[str, str]:
-    """Return (verdict, detail) for a single test case: ok, wrong, timeout, or error."""
+    """Return (verdict, detail) for a single stdin/stdout test case: ok, timeout, or error."""
     worker = WORKER_PREAMBLE.format(mem_bytes=mem_bytes)
     try:
         proc = subprocess.run(
@@ -110,19 +150,58 @@ def run_one_case(candidate_path: str, stdin_text: str, timeout: float, mem_bytes
     return "ok", proc.stdout
 
 
-def execute(candidate_code: str, test_cases: list[dict], timeout: float, mem_bytes: int) -> tuple[str, str]:
-    """Return (verdict, detail). verdict in: passed, failed, timeout, error."""
+def run_one_functional_case(
+    candidate_code: str, func_name: str, input_text: str, timeout: float, mem_bytes: int,
+) -> tuple[str, str]:
+    """Return (verdict, detail) for a single functional (LeetCode-style) test case."""
+    worker = WORKER_PREAMBLE.format(mem_bytes=mem_bytes) + FUNCTIONAL_WORKER_TEMPLATE.format(
+        candidate_code=candidate_code, func_name=func_name,
+    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", worker],
+            input=input_text, capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return "timeout", f"exceeded {timeout}s"
+    if proc.returncode != 0:
+        tail = proc.stderr.strip().splitlines()
+        return "error", (tail[-1] if tail else f"exit={proc.returncode}")[:200]
+    return "ok", proc.stdout
+
+
+def execute(
+    candidate_code: str, func_name: str | None, test_cases: list[dict], timeout: float, mem_bytes: int,
+) -> tuple[str, str]:
+    """Return (verdict, detail). verdict in: passed, failed, timeout, error, grader_error."""
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as handle:
         handle.write(candidate_code)
         candidate_path = handle.name
     try:
         for i, case in enumerate(test_cases):
-            verdict, detail = run_one_case(candidate_path, case["input"], timeout, mem_bytes)
+            testtype = case.get("testtype", "stdin")
+            if testtype == "functional":
+                if not func_name:
+                    return "grader_error", f"case {i}: functional test case but no func_name in metadata"
+                verdict, detail = run_one_functional_case(candidate_code, func_name, case["input"], timeout, mem_bytes)
+            elif testtype == "stdin":
+                verdict, detail = run_one_case(candidate_path, case["input"], timeout, mem_bytes)
+            else:
+                return "grader_error", f"case {i}: unknown testtype {testtype!r}"
+
             if verdict == "timeout":
                 return "timeout", f"case {i}: {detail}"
             if verdict == "error":
                 return "error", f"case {i}: {detail}"
-            if normalize(detail) != normalize(case["output"]):
+
+            if testtype == "functional":
+                try:
+                    matches = json.loads(detail) == json.loads(case["output"])
+                except json.JSONDecodeError:
+                    matches = False
+            else:
+                matches = normalize(detail) == normalize(case["output"])
+            if not matches:
                 return "failed", f"case {i}: output mismatch"
         return "passed", f"{len(test_cases)}/{len(test_cases)} public cases"
     finally:
@@ -130,7 +209,7 @@ def execute(candidate_code: str, test_cases: list[dict], timeout: float, mem_byt
 
 
 def grade(
-    run_dir: pathlib.Path, prompt_root: pathlib.Path, test_cases_by_qid: dict[str, list[dict]],
+    run_dir: pathlib.Path, prompt_root: pathlib.Path, test_cases_by_qid: dict[str, dict[str, Any]],
     timeout: float = DEFAULT_TIMEOUT_SECONDS, memory_limit_mb: int = DEFAULT_MEMORY_LIMIT_MB,
 ) -> dict[str, Any] | None:
     run = read_json(run_dir / "run.json")
@@ -142,7 +221,9 @@ def grade(
     method = run_dir.parent.parent.parent.name
     meta = read_json(prompt_root / case / "metadata.json")
     question_id = meta.get("question_id")
-    test_cases = test_cases_by_qid.get(question_id)
+    entry = test_cases_by_qid.get(question_id) or {}
+    test_cases = entry.get("cases")
+    func_name = entry.get("func_name")
     try:
         text = (run_dir / "output.txt").read_text(encoding="utf-8")
     except OSError:
@@ -154,7 +235,7 @@ def grade(
     elif not test_cases:
         verdict, detail = "grader_error", f"no public test cases for question_id={question_id!r}"
     else:
-        verdict, detail = execute(candidate_code, test_cases, timeout, memory_limit_mb * 1024 * 1024)
+        verdict, detail = execute(candidate_code, func_name, test_cases, timeout, memory_limit_mb * 1024 * 1024)
 
     return {
         "case": case,
@@ -175,14 +256,20 @@ def grade(
     }
 
 
-def load_test_cases(path: pathlib.Path) -> dict[str, list[dict]]:
+def load_test_cases(path: pathlib.Path) -> dict[str, dict[str, Any]]:
     raw = read_json(path)
     out = {}
     for qid, row in raw.items():
         cases = row.get("public_test_cases")
         if isinstance(cases, str):
             cases = json.loads(cases)
-        out[qid] = cases or []
+        meta = row.get("metadata")
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except json.JSONDecodeError:
+                meta = {}
+        out[qid] = {"cases": cases or [], "func_name": (meta or {}).get("func_name")}
     return out
 
 
@@ -227,14 +314,12 @@ def main() -> int:
     for row in rows:
         by_tag[row["tag"]].append(row)
 
-    print("\n| tag | runs | passed | failed | timeout | error | no answer |")
-    print("|---|---:|---:|---:|---:|---:|---:|")
+    verdicts = ("passed", "failed", "timeout", "error", "no_answer", "grader_error")
+    print("\n| tag | runs | " + " | ".join(verdicts) + " |")
+    print("|---|---:|" + "|".join("---:" for _ in verdicts) + "|")
     for tag, group in sorted(by_tag.items()):
-        counts = {v: sum(1 for r in group if r["verdict"] == v) for v in ("passed", "failed", "timeout", "error", "no_answer")}
-        print(
-            f"| {tag} | {len(group)} | {counts['passed']} | {counts['failed']} | "
-            f"{counts['timeout']} | {counts['error']} | {counts['no_answer']} |"
-        )
+        counts = {v: sum(1 for r in group if r["verdict"] == v) for v in verdicts}
+        print(f"| {tag} | {len(group)} | " + " | ".join(str(counts[v]) for v in verdicts) + " |")
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

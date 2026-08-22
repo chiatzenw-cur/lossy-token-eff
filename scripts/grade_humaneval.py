@@ -214,17 +214,17 @@ def main() -> int:
     for row in rows:
         by_tag[row["tag"]].append(row)
 
-    print("\n| tag | runs | pass@1 | passed | failed | timeout | no answer |")
-    print("|---|---:|---:|---:|---:|---:|---:|")
+    print("\n| tag | runs | pass@1 | passed | failed | timeout | no answer | grader error |")
+    print("|---|---:|---:|---:|---:|---:|---:|---:|")
     for tag, group in sorted(by_tag.items()):
         counts = {
             verdict: sum(1 for r in group if r["verdict"] == verdict)
-            for verdict in ("passed", "failed", "timeout", "no_answer")
+            for verdict in ("passed", "failed", "timeout", "no_answer", "grader_error")
         }
         pass_at_1 = counts["passed"] / len(group) if group else 0.0
         print(
             f"| {tag} | {len(group)} | {pass_at_1:.3f} | {counts['passed']} | "
-            f"{counts['failed']} | {counts['timeout']} | {counts['no_answer']} |"
+            f"{counts['failed']} | {counts['timeout']} | {counts['no_answer']} | {counts['grader_error']} |"
         )
 
     seeds = {row["seed"] for row in rows}

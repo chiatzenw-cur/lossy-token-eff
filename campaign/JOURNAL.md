@@ -951,3 +951,68 @@ Append-only. One entry per work session. See `campaign/PLAN.md` for the design.
     Relaunching `campaign_run.py --dataset longbench_v2_qwen3` directly
     (not the whole `campaign_all_qwen3.sh` wrapper -- the other 5
     datasets are already done and shouldn't be re-touched).
+
+- **2026-08-22, later: found and fixed a real bug in `grade_livecodebench.py`
+  itself -- a fifth real bug tonight, in the scoring pipeline this time,
+  not the patch/serving stack.** User asked "why is livecodebench accuracy
+  so low? maybe there is a bug with the checker?" after seeing it stand
+  out as the one dataset where even `strict` scored near-floor on both
+  models (8.3% GPT-OSS-20B, 16.7% Qwen3-8B, vs. 75-100% everywhere else).
+  - **Root cause**: the grader ran every candidate through a single
+    stdin/stdout harness (pipe `input` to the program, compare stdout).
+    That's correct for Codeforces-style problems, but LiveCodeBench also
+    includes LeetCode-style problems where the prompt asks the model to
+    "Complete the following function" against a `class Solution:` stub --
+    no stdin/stdout I/O at all. **10 of this dataset's 12 cases are
+    LeetCode-format** (confirmed via each case's own `metadata.json`
+    `platform` field). A correct LeetCode-style solution produces no
+    stdout when run as a bare script, so it was marked "failed" no matter
+    how correct the logic was. `test_cases.json`'s own per-case
+    `testtype` field (`"stdin"` vs `"functional"`) already recorded which
+    harness each case needed -- the grader never read it.
+  - **Verified by hand before touching the grader**: extracted a "failed"
+    GPT-OSS-20B candidate (question_id 2792, "neighboring-bitwise-xor"),
+    confirmed the prompt was genuinely LeetCode-format (starter code +
+    "Complete the following function"), and confirmed the candidate's
+    logic is a correct, textbook solution (XOR of the whole array must be
+    0) -- it only "fails" because it was never actually called.
+  - **Fix**: `grade_livecodebench.py` now branches on each test case's own
+    `testtype`. `functional` cases import the candidate's `Solution`
+    class in a subprocess and call `getattr(Solution(), func_name)(*args)`,
+    with `args` parsed as one JSON-literal-per-line from `input` (the
+    documented LiveCodeBench functional convention) and the return value
+    compared via JSON equality against a JSON-parsed `output`. `func_name`
+    comes from `test_cases.json`'s own `metadata` field, previously
+    discarded entirely by `load_test_cases()` along with `starter_code`.
+    `stdin` cases are graded exactly as before (unchanged).
+  - **A second, smaller bug found while re-reading the file**: the
+    summary table's verdict tally only counted 5 of the grader's own 6
+    possible verdicts (`grader_error` -- emitted when a question_id has
+    no test cases -- was silently missing from every breakdown column,
+    though it still counted toward the row's total). Fixed by counting
+    all 6.
+  - **Verified the fix directly** before trusting it: re-ran the fixed
+    grader against GPT-OSS-20B's `strict` arm and watched the previously-
+    "failed" question_id 2792 case flip to "passed" with 3/3 public cases;
+    spot-checked several `error`-verdict cases that appeared post-fix to
+    confirm they're genuine candidate bugs (aggressive-alpha lossy
+    completions producing syntactically broken or wrong-format code --
+    exactly the pathology this whole campaign studies), not artifacts of
+    the new functional-call worker.
+  - **Scale of the fix**: `strict` accuracy on `livecodebench` jumped
+    1/12 -> 10/12 (GPT-OSS-20B) and 1/12 -> 9/12 (Qwen3-8B) once the
+    checker was corrected -- an order of magnitude, not a small
+    correction. Re-ran `campaign_report.py --dataset livecodebench` and
+    `--dataset livecodebench_qwen3` to regenerate
+    `campaign/{results,tables}/livecodebench*.csv` and
+    `campaign/graphs/livecodebench*.png` from the fixed grader.
+    `livecodebench` is now an unremarkable dataset on GPT-OSS-20B
+    (matches the other 5 datasets' shape, several methods reach a free
+    win). On Qwen3-8B the "no method gets a free win" finding survives
+    the fix (still true at the corrected 75% strict baseline) but the
+    explanation changes completely: not "the benchmark is too hard," but
+    "lossy relaxation costs more accuracy on this specific task than on
+    every other dataset tested" -- a real, now-correctly-grounded finding
+    instead of a checker artifact. Updated both `FINDINGS.md` sections
+    (GPT-OSS-20B's lossless-reference table + Qwen3-8B's livecodebench
+    paragraph) to match.

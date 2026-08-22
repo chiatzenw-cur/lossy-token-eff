@@ -180,7 +180,7 @@ not causally identical the way "more accepted per round -> fewer rounds
 | gsm8k | 2.69 | 273 | 1.000 |
 | aime24 | 2.22 | 9090 | 0.750 |
 | humaneval | 2.50 | 674 | 1.000 |
-| livecodebench | 2.19 | 3747 | 0.083 |
+| livecodebench | 2.19 | 3747 | 0.833 |
 | mtbench | 2.30 | 1689 | n/a (ungraded, no LLM-judge infra) |
 | longbench_v2 | 1.81 | 1470 | 0.750 |
 
@@ -190,14 +190,35 @@ the "gentlest" relaxation tested for most methods already accepts more
 than lossless verification does, which is the expected direction
 (relaxation exists to raise acceptance) and holds as a sanity check that
 the grids are calibrated on the correct side of strict, on all 6.
-`livecodebench`'s accuracy floor (0.083, 1/12) is the one dataset where
-even the lossless baseline struggles -- a real property of the benchmark
-at this scale, not something the lossy methods introduce (see the
-Qwen3-8B section below for the same benchmark showing the identical
-pattern on a different model).
+
+**`livecodebench`'s accuracy column corrected 2026-08-22**: an earlier
+version of this table showed 0.083 (1/12), read at the time as "even the
+lossless baseline struggles" -- that number was a `grade_livecodebench.py`
+bug, not a real model limitation. The grader ran every problem through a
+stdin/stdout harness regardless of platform, but 10 of this dataset's 12
+cases are LeetCode-format ("functional": call a `class Solution` method
+and compare the return value, per each case's own `testtype` field, which
+the grader ignored). A correct LeetCode-style solution has no stdin/stdout
+I/O of its own, so it produced empty output and was marked wrong no matter
+how correct the logic was -- confirmed by hand-extracting a "failed"
+solution and finding it a correct, textbook implementation. Fixed by
+branching on `testtype`: functional cases now import the candidate's
+`Solution` class and call `getattr(Solution(), func_name)(*args)` (both
+`func_name` and the argument/return encoding come from `test_cases.json`'s
+own `metadata` and per-case `input`/`output` fields, previously discarded
+by `load_test_cases()`). Strict jumped from 1/12 to 10/12 once fixed --
+`livecodebench` is now an unremarkable dataset, matching every other
+GPT-OSS-20B dataset's shape (`mentored_dec`, `spec_casc_opt`, and
+`spec_casc_tok` all reach a free win here now, same as elsewhere; only
+`cactus` and `r_fuzzy` don't, also consistent with their profile
+everywhere else in this document). See the Qwen3-8B section below for the
+same fix's effect on that model (1/12 -> 9/12 there).
 
 *(Note added 2026-08-22: both this section and the Qwen3-8B section below
-are now current against their respective complete 6-dataset runs.)*
+are now current against their respective complete 6-dataset runs, and
+both were re-verified again the same day after a real bug was found and
+fixed in `grade_livecodebench.py` itself -- see the corrected paragraph
+above and the rewritten livecodebench paragraph in the Qwen3-8B section.)*
 
 ## Qwen3-8B + drafter: full 6-dataset campaign, real per-method behaviour (2026-08-22)
 
@@ -263,15 +284,28 @@ trades accuracy for l̄ the whole way up, unlike `mentored_dec`/
 frequently coincide.
 
 **`livecodebench_qwen3`: no method gets a free win, on any dataset-method
-pair.** `strict` itself only reaches 2/12 (16.7%) on this benchmark --
-investigated directly (independent grader cross-check, per-case failure
-tracing) and confirmed genuine: LiveCodeBench is hard enough at this model
-scale and 12000-token budget that several cases never finish reasoning in
-budget, and several more produce code that runs but is simply wrong. Every
-lossy method's own accuracy sits at or below `strict`'s already-low floor
--- there's no "safe" alpha to recommend here, on any method, at this
-budget. Worth revisiting with a larger token budget before concluding the
-methods themselves are the problem.
+pair -- but the reason is different from what an earlier version of this
+paragraph said.** That earlier version reported `strict` at 2/12 (16.7%)
+and read it as "LiveCodeBench is hard enough at this scale that the model
+genuinely struggles." Investigating that low number properly (independent
+grader cross-check, per-case failure tracing) found a real bug instead: 10
+of this dataset's 12 cases are LeetCode-format problems that need a
+function called and its return value compared, not a stdin/stdout
+program, and `grade_livecodebench.py` ran every case through the
+stdin/stdout harness regardless -- so a correct LeetCode-style solution
+produced no output and was marked wrong no matter how right the logic
+was. Fixed 2026-08-22 (see the GPT-OSS-20B section above for the full
+mechanism). Once fixed, `strict` jumps to 9/12 (75%) -- a completely
+ordinary result, not a floor. **The "no free win" finding itself survives
+the fix**: even at the corrected baseline, every lossy method's own best
+accuracy (mentored_dec 58.3%, spec_casc_tok 66.7%, spec_casc_opt 33.3%,
+r_fuzzy 0%, cactus 25%) still sits below `strict`'s 75% -- so this is now
+a real, interesting result rather than an artifact: on Qwen3-8B, code
+generation under lossy verification loses more accuracy relative to
+strict than gsm8k/aime24/humaneval/longbench_v2 do, where at least one
+method reliably matches or beats strict. Not "the benchmark is
+unsolvable" (it isn't -- strict handles it fine) but "this model's lossy
+methods cost more here than everywhere else tested."
 
 **`mtbench_qwen3` has no accuracy grader** (needs an LLM-judge; no
 infrastructure for one exists yet, a known, documented gap -- see
