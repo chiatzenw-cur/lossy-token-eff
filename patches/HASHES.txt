@@ -557,7 +557,59 @@ bc1b5c9c374bbf0941ec2fcf122750d679eea9bfc4249ef82d92a7e3120b4240  spec-casc-tok-
 # file for detail. A real per-method .patch-file split (matching V1's own
 # convention) is follow-up work, not done here under time pressure.
 bfaec14e220cf669ddfd2b3ef6d2c556dc8fae60ef71e65a2e7ae068fb386a2a  upstream
-f0772ebb0122d48d02a423564aeeea2e9ce15346484d8e0c8d9952f615384193  mentored-dec
+# 2026-08-22: added spec-casc-tok-hsr-guard's own V2 actuator (its own
+# alpha file + guard-mask override of casc_tok_top1/in_top_set, composed
+# with plain spec-casc-tok's alpha via max() since the two are mutually
+# exclusive -- see the file's own _SPEC_CASC_TOK_HSR_GUARD_ALPHA comment).
+# Old hash (still "mentored-dec" labeled, from before this addition):
+# f0772ebb0122d48d02a423564aeeea2e9ce15346484d8e0c8d9952f615384193
+#
+# 2026-08-23: fixed a real bug in that same actuator, found via live debug
+# logging after a Qwen3-8B radical-parameter test came back bit-identical
+# to baseline despite the tracker firing 1364/6350 times in one run. The
+# actuator's remaining-file read was gated on
+# `_SPEC_CASC_TOK_HSR_GUARD_ALPHA > _SPEC_CASC_TOK_ALPHA` (intended as "did
+# hsr-guard's own alpha win the max() above"), but a TIE also wins max(),
+# and every hsr-guard run in this whole investigation -- this session's
+# Qwen3-8B port AND the original GPT-OSS-20B calibration work it was
+# ported from -- passes --spec-casc-tok-alpha and
+# --spec-casc-tok-hsr-guard-alpha as the SAME value (0.3 == 0.3, matching
+# analysis/semantic_guard's own documented reproduce command). The strict
+# `>` was therefore always False and the actuator NEVER actually applied,
+# regardless of whether the tracker triggered -- meaning the ENTIRE prior
+# Qwen3-8B "guard never fires" conclusion in campaign/JOURNAL.md was
+# testing a guard whose actuator was unconditionally disabled, not a
+# genuine model-specific finding. Fixed to check
+# `_SPEC_CASC_TOK_HSR_GUARD_ALPHA > float("-inf")` instead -- "is
+# hsr-guard the active method at all" -- mirroring model_runner.py's own
+# already-correct _hsr_guard_is_active(). Old hash (still "mentored-dec"
+# labeled, from just before this fix):
+# 0992ab58e3e413e1e82d11e09ee18c2cff755cd7c0b54f064a405c90c7b39846
+#
+# 2026-08-23, continued: added temporary gated live-debug prints (marker
+# file /tmp/lossy-token-eff-hsr-guard-live-debug-enable-<uid>) right at
+# the actuator's remaining-file read and mask application, to root-cause
+# why the fix above STILL produced bit-identical output on a live re-test
+# despite the tracker firing 1364 times -- diagnostic only, safe to strip
+# once resolved. Old hash (just the alpha-gate fix, before this):
+# 8233a02a75f1ed2e5fced01b575e144055b1e38e063f088db6f5a8ba7359b90c
+#
+# 2026-08-23, continued: the actuator debug prints above found the REAL
+# bug -- idx_mapping_c is a row index INTO draft_logits (which
+# request-block a position's data comes from), not a 0-based request id;
+# for a single real request its value is whatever persistent slot vLLM
+# assigned (observed: 466, never 0), so `hsr_guard_mask = (idx_mapping_c
+# == 0) & ...` was unconditionally all-False regardless of
+# hsr_remaining_before -- the guard's tracker fired constantly (1364/6350
+# on one case) but the mask that was supposed to act on it could never be
+# True. Fixed to `idx_mapping_c == idx_mapping_c[0]` (this request's own
+# actual id, correct under the whole system's single-real-request-per-
+# process invariant). THIS is the bug that made the earlier alpha-gate
+# fix alone insufficient -- both had to be fixed together for the
+# actuator to actually do anything. Old hash (alpha-gate fix + debug
+# prints, mask bug still present):
+# c62c6a4a220e4d805d70882c0b0e72d289b9277f516509a43bf247d5943b0caf
+68d0a904230a82d7aa90916e9ed60297e3c725eeb0188b633893e03fb5b9f938  mentored-dec
 #
 # gpu_model_runner.py (the FLAT file -- vLLM's "V1" model runner, confirmed
 # active by default in this config; NOT vllm/v1/worker/gpu/model_runner.py

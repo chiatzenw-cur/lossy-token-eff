@@ -143,12 +143,28 @@ def test_s32_matches_fair_reference() -> None:
     z = z / np.linalg.norm(z, axis=-1, keepdims=True)
     sims = z @ z.T
 
+    # BUG FIXED 2026-08-23: this "fair" reference used to search the
+    # ENTIRE prior history (j from k-1 up to t-min_gap, no window bound)
+    # -- which only ever matched the live code by coincidence, because
+    # every window value tested here up to now (the production default
+    # 600, and this investigation's own radical-parameter candidates 600/
+    # 300) was >= n=300, so the live code's OWN window-bounded candidate
+    # pool (added as the fix for Bug #1 in the original GPT-OSS-20B
+    # calibration -- see analysis/semantic_guard/README.md's "self-
+    # inclusion + unbounded candidate pool" section) never actually
+    # differed from an unbounded search. A radical-parameter test at
+    # window=150 (< n=300) genuinely exercises the bound for the first
+    # time in this test's history and correctly produces a DIFFERENT
+    # value than this unbounded reference -- not a live-code bug, a test-
+    # reference gap. Mirrors _compute_s32's own j_lo bound exactly.
     fair = np.full(n, np.nan)
     for t in range(n):
         if t + 1 < k:
             continue
+        j_max = t - min_gap
+        j_lo = max(k - 1, j_max - m._HSR_WINDOW + 1)
         best = None
-        for j in range(k - 1, t - min_gap + 1):
+        for j in range(j_lo, j_max + 1):
             if j < 0:
                 continue
             s = float(np.mean([sims[t - r, j - r] for r in range(k)]))

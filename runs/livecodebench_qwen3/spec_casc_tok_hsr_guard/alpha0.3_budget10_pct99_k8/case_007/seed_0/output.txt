@@ -1,0 +1,569 @@
+<think>
+Okay, I need to solve this problem where I have to find the number of special permutations of a given array of distinct positive integers. The condition for a permutation to be special is that for every consecutive pair, one divides the other. Let me think about how to approach this.
+
+First, the constraints say that the length of nums is up to 14. Hmm, 14 elements. The total number of permutations is 14! which is way too big to check each one by one. So brute force is definitely out of the question. I need a smarter approach.
+
+What's the maximum possible number of permutations here? Well, for n=14, 14! is around 87 billion. That's way too large. So I need a dynamic programming approach here. Maybe using bitmasking to represent the state of used elements and track the last element in the permutation.
+
+Right, because for a permutation, the order matters. So the idea is that for each state (which elements have been used so far, and what's the last element in the permutation), we can track the number of ways to reach that state. Then, we can build up the solution by adding elements one by one, ensuring that the new element satisfies the divisibility condition with the previous one.
+
+So the DP state can be represented as a bitmask (to track which elements are used) and the last element's index. For example, dp[mask][i] represents the number of ways to form a permutation using the elements in 'mask' and ending with the element at index i. Then, for each state, we can try adding a new element that hasn't been used yet and check if it satisfies the divisibility condition with the last element.
+
+Let me think about the steps:
+
+1. Precompute for all pairs of elements whether they can be adjacent. For example, for any two elements nums[i] and nums[j], check if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0. But since in the permutation, the order matters, for each pair (i,j), we need to know if they can be adjacent. However, in our DP transitions, when we add a new element to the permutation, we need to check if the new element is compatible with the previous one (the last element in the current permutation).
+
+So, for the DP transitions: suppose we have a mask that includes some elements, and the last element is at index i. Then, for each element j not in the mask, we check if nums[i] and nums[j] are compatible. If they are, then we can add j to the permutation, updating the mask and setting the new last element to j.
+
+The base case would be when the mask has only one element. For each element, there's exactly one way to have a permutation of length 1. So for all masks with exactly one element, dp[mask][i] = 1.
+
+Then, the final answer is the sum of all dp[full_mask][i] for all i, where full_mask is the mask with all elements included.
+
+But how do I represent the mask? Since n can be up to 14, a bitmask of 14 bits is manageable. Each bit represents whether an element is used or not.
+
+So, the steps would be:
+
+- Precompute a 2D array for compatibility between all pairs of elements. Let's call it can_place, where can_place[i][j] is True if nums[i] and nums[j] can be adjacent (i.e., one divides the other).
+
+Wait, but in the DP transitions, when adding a new element j to a permutation ending with i, we need to check if nums[i] and nums[j] are compatible. So yes, can_place[i][j] would be True if nums[i] and nums[j] can be adjacent.
+
+Wait, but for the permutation, the order matters. So if the current permutation ends with i, and we add j, then the pair (i, j) must be compatible. So the can_place[i][j] would be True if nums[i] divides nums[j] or vice versa.
+
+So, for all i and j, compute this compatibility.
+
+Once that is precomputed, then for the DP.
+
+The DP can be implemented with memoization or iteratively. Since the mask can be up to 2^14 = 16384, and for each mask, there are up to 14 possible last elements, the total number of states is 16384 * 14 = around 229376. That's manageable.
+
+So for each mask, and each possible last element, we can compute the number of ways.
+
+So the approach is:
+
+Initialize a DP table where dp[mask][i] is the number of ways to form a permutation using the elements in mask, ending with nums[i].
+
+Then, for each mask, for each i in mask, we can look for all j not in mask, and if can_place[i][j] is True, then we can add j to the permutation. So:
+
+For each mask in all possible masks:
+
+   for each i in mask:
+
+      for each j not in mask:
+
+          if can_place[i][j] is True:
+
+              new_mask = mask | (1 << j)
+
+              dp[new_mask][j] += dp[mask][i]
+
+But how do we iterate through the masks? Well, we can iterate through all masks in order of increasing number of bits. Because to build a mask with k+1 bits, we need masks with k bits.
+
+So, for example, the base case is masks with one bit set. Then, for each mask, we process all possible transitions.
+
+The initial state is for each i, mask with only the i-th bit set, and dp[mask][i] = 1.
+
+Then, for each mask, we iterate through all possible i's in the mask, and for each possible j not in the mask, check if i and j are compatible. If so, then add to the new mask's dp entry.
+
+Once all masks are processed, the answer is the sum of all dp[full_mask][i] for each i.
+
+Yes, that makes sense.
+
+Let me think about the example given.
+
+Take example 1: nums = [2,3,6]
+
+The full mask is 0b111 (binary for 7). For each i in 0,1,2, we check dp[7][i].
+
+In the example, the answer is 2. Let's see how the DP works.
+
+For mask 0b001 (only element 0, which is 2), dp[1][0] = 1.
+
+Similarly for mask 0b010 (element 1, 3) and mask 0b100 (element 2, 6).
+
+Now, for masks with two bits:
+
+For mask 0b011 (elements 0 and 1). For each i in the mask (0 and 1), check if they can be adjacent. For 0 and 1 (2 and 3), neither divides the other. So can_place[0][1] is False. So no transitions here. So mask 0b011 would have no entries except for transitions that are allowed.
+
+Wait, but how do you get to mask 0b011? For example, when you start with mask 0b001 (element 0), then you can add element 1 if compatible. But since 2 and 3 are not compatible, that's not possible. So mask 0b011 would have no ways except if there's a transition from mask 0b010 (element 1) adding element 0. But again, same problem.
+
+So for mask 0b011, there are no ways. Similarly for mask 0b101 (elements 0 and 2?), wait let me think:
+
+Wait, mask is 0b101 (bits 0 and 2 set) for elements 0 and 2. So for example, when you have mask 0b100 (element 2 is 6), then adding element 0 (2) would require that 6 and 2 are compatible. Since 6%2 == 0, that's allowed. So for mask 0b101, the last element can be 0 (2) or 2 (6). Let's think.
+
+Wait, for the mask 0b101, the possible transitions are when you add element 0 to mask 0b100 (element 2). So the previous last element is 2 (element 2), and adding element 0. So check if nums[2] (6) and nums[0] (2) are compatible. Yes, because 6%2 is 0. So dp[0b101][0] would be incremented by dp[0b100][2], which is 1. Similarly, if mask 0b001 (element 0) adds element 2, then check if nums[0] (2) and nums[2] (6) are compatible. Yes, because 6%2 ==0. So dp[0b101][2] would be incremented by dp[0b001][0], which is 1. So mask 0b101 has two entries: dp[0b101][0] =1 and dp[0b101][2] =1.
+
+Then, for mask 0b111 (all elements), we can look for transitions from masks with two bits. For example, mask 0b101 (elements 0 and 2) can add element 1 (3). For that, we check if the last element (0 or 2) can be adjacent to element 1.
+
+Let's see:
+
+For the case where the last element is 0 (2), adding element 1 (3). Check if 2 and 3 are compatible. No. So that transition is not allowed.
+
+For the case where the last element is 2 (6), adding element 1 (3). Check if 6 and 3 are compatible. Yes, 6%3 is 0. So dp[0b111][1] += dp[0b101][2]. Which is 1. So this contributes 1 way.
+
+Similarly, for other masks. For example, mask 0b011 (elements 1 and 2) is possible? Let me think. Let's take mask 0b010 (element 1, 3) and add element 2 (6). Check if 3 and 6 are compatible. Yes. So dp[0b011][2] =1. Then, when adding element 0 (2) to this mask, check if 6 and 2 are compatible (yes). So for mask 0b111, the entry for last element 0 would be added from mask 0b011 (last element 2) adding 0. So that's 1 way. So dp[0b111][0] =1.
+
+So total sum would be dp[0b111][0] + dp[0b111][1] + dp[0b111][2] = 1 + 1 + 0? Wait, in the example, the answer is 2. So maybe in this case, there are two valid permutations. Let's see.
+
+The two valid permutations are [3,6,2] and [2,6,3]. Let's see how they would be counted.
+
+For [3,6,2], the order is 3, then 6, then 2. So the transitions would be:
+
+- Start with 3 (mask 0b010), then add 6 (mask 0b110) with 3 and 6 compatible. Then add 2 (mask 0b111) with 6 and 2 compatible. So the dp entry for mask 0b111 with last element 2 (index 0? Wait, the indexes are 0,1,2. Let me check the example again. nums is [2,3,6]. So index 0 is 2, index 1 is 3, index 2 is 6.
+
+Wait, for [3,6,2], the permutation is [3,6,2], which is indexes 1, 2, 0. So the last element is 0. So in the dp, mask 0b111 with last element 0 would have 1 way. And for [2,6,3], which is indexes 0, 2, 1. So the last element is 1. So dp[0b111][1] would be 1. So sum is 1+1=2. Which matches the example.
+
+So the approach seems correct.
+
+So the plan is:
+
+- Precompute can_place[i][j] for all i, j.
+
+- Initialize DP table. Since n can be up to 14, we can use a 2D array (or dictionary) where for each mask, we have an array of size n.
+
+- Iterate through all masks. For each mask, iterate through all possible i (elements in the mask), and for each j not in the mask, check if can_place[i][j] is True. If so, then add dp[mask][i] to dp[new_mask][j].
+
+- Finally, sum all dp[full_mask][i] for all i.
+
+Now, how to implement this in Python.
+
+Let me think about the data structures.
+
+First, precompute can_place. For each i and j, check if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0. Note that i and j can be same? Well, since the problem says the array contains distinct elements, but in the permutation, each element is used once. So in the DP, for j not in mask, which implies that j is not in mask. So i and j are different. So for the can_place matrix, we can precompute for all i != j.
+
+But during the DP transitions, when considering adding j to a mask that has i, the i and j are different.
+
+So for can_place[i][j], it's True if nums[i] and nums[j] are compatible.
+
+Now, for the DP, since the maximum mask is 2^14 = 16384, and n is up to 14, we can represent the DP as a list of dictionaries or a 2D array. But for Python, perhaps using a list of lists. Let's think.
+
+The mask can be from 0 to 2^n - 1. For each mask, we have a list of size n, where dp[mask][i] is the number of ways.
+
+But for masks with some bits set, we need to check if the i-th element is in the mask. So, for each mask, for each i, if the mask has the i-th bit set, then it's possible to have dp[mask][i] as some value. Otherwise, it's 0.
+
+So in code, for each mask, we can iterate over all possible bits (i) that are set in the mask, and for each of those, we can process transitions.
+
+But how to iterate through all masks? Well, we can use a loop from 0 to 2^n - 1. For each mask, we can check which bits are set. But for efficiency, perhaps we can iterate masks in order of increasing number of bits. Because when processing a mask, all masks with fewer bits have already been processed.
+
+Alternatively, we can iterate through all masks, and for each mask, check for all possible i and j. But for the DP, since the transitions are from masks with k bits to masks with k+1 bits, we can process masks in order of their bit count.
+
+But in practice, for code, perhaps it's easier to iterate all masks, and for each mask, check which bits are set, and then for each of those bits, check for possible j's.
+
+So let's proceed.
+
+Implementing this in code:
+
+We can precompute the can_place matrix as a 2D array of size n x n.
+
+Then, initialize a dp array. Since n is up to 14, and masks up to 2^14, we can have a 2D array of size (2^14) x n. But for Python, even 16384 * 14 is manageable. Let's think about the size. For 14 elements, 2^14 is 16384, and 16384 * 14 is around 229376. So that's acceptable.
+
+But for Python, initializing a 2D list with 16384 rows and 14 columns. Each row is a list of size 14. So for each mask, for each i, dp[mask][i] is the count.
+
+But for masks that don't have the i-th bit set, the value is 0. So we can initialize all dp entries to 0, and then set the base cases.
+
+So:
+
+Initialize dp as a 2D list. For each mask, for each i, dp[mask][i] = 0.
+
+Then, for each i in 0..n-1, set dp[1 << i][i] = 1.
+
+Then, for each mask in all possible masks:
+
+   for each i in 0..n-1:
+
+      if mask has bit i set:
+
+          for each j in 0..n-1:
+
+              if j not in mask:
+
+                  if can_place[i][j] is True:
+
+                      new_mask = mask | (1 << j)
+
+                      dp[new_mask][j] += dp[mask][i]
+
+                      (modulo 1e9+7)
+
+But how to iterate through masks. Wait, but for the transitions, we need to process masks in order of increasing number of bits. Because when you add a new element, the mask's bit count increases by 1. So for example, masks with 1 bit are processed first, then masks with 2 bits, etc. So that when processing a mask, all the smaller masks have already been processed.
+
+So, for code, perhaps we can loop through all masks from 0 to 2^n - 1, but for each mask, we check the number of set bits. However, for efficiency, perhaps we can loop through masks in order of their bit counts. But for n up to 14, even a brute force approach of looping through all masks and checking for each possible i and j would be manageable.
+
+But in code, how to check for each mask, which bits are set.
+
+But for each mask, we can iterate through all bits i that are set. Then, for each of those bits, we can try adding each j not in the mask.
+
+So here's the code outline:
+
+n = len(nums)
+
+can_place = [[False] * n for _ in range(n)]
+
+for i in range(n):
+    for j in range(n):
+        if i == j:
+            continue
+        if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+            can_place[i][j] = True
+
+Then, initialize dp as a 2D array:
+
+MOD = 10**9 +7
+
+dp = [[0] * n for _ in range(1 << n)]
+
+for i in range(n):
+    dp[1 << i][i] = 1
+
+Then, iterate through all masks:
+
+for mask in range(1 << n):
+    for i in range(n):
+        if not (mask & (1 << i)):
+            continue
+        # current i is in the mask
+        # iterate through all j not in mask
+        for j in range(n):
+            if mask & (1 << j):
+                continue
+            if can_place[i][j]:
+                new_mask = mask | (1 << j)
+                dp[new_mask][j] = (dp[new_mask][j] + dp[mask][i]) % MOD
+
+Once this is done, the answer is sum(dp[full_mask][i] for i in range(n)) % MOD.
+
+Wait, but wait. The full_mask is (1 << n) - 1. So for example, for n=3, full_mask is 0b111.
+
+Yes.
+
+So in code, after filling the dp table, the answer is sum(dp[(1 << n) - 1][i] for i in range(n)) % MOD.
+
+But wait, let me check with the example.
+
+In the first example, nums = [2,3,6], n=3. So full_mask is 0b111 (7). The sum of dp[7][0], dp[7][1], dp[7][2]. According to earlier example, dp[7][0] is 1 (from [2,6,3] which ends at 3?), wait no. Let me re-examine.
+
+Wait, the permutation [3,6,2] is i=1, j=2, then j=0. So in dp[full_mask][0] (since the last element is 0) would be 1. And [2,6,3] would end at 1 (element 3). So dp[full_mask][1] is 1. And dp[full_mask][2] would be 0. So sum is 2.
+
+Yes. So the code seems to handle that.
+
+But in the code, during the loop, for each mask, and for each i in the mask, and for each j not in the mask, check can_place[i][j], and add to new_mask.
+
+But in the code above, for each mask, the code checks for all i in the mask, and for all j not in the mask. So that would work.
+
+But how to loop through all masks? Well, for mask in range(0, 1 << n). But for some masks, there's no way to reach them. But the code will process them anyway. However, since the initial masks are set, and for each mask, the code processes transitions, this should be okay.
+
+But let me think about the order. Suppose a mask is processed before all masks that have fewer bits. For example, mask 0b11 (bits 0 and 1 set) would be processed when mask is 0b11. But when we process mask 0b11, we are trying to add elements to it. However, for the transitions, the mask is processed, and for each i in the mask, and j not in mask. But when mask is 0b11, the code would add j's to it. But for masks that have higher bits, they are processed later. However, the order of mask processing is not important here, because when a mask is processed, it's possible that some of its transitions are being added. But for example, if a mask has two bits, and another mask has three bits, then the mask with three bits will be processed later. However, in the code, for each mask, regardless of the order, we process it. So for example, when mask is 0b11, the code will process transitions to 0b111 (if j is 2). But when mask is 0b111, it's processed, but since there are no j's not in the mask, no transitions are made. So the code would work regardless of the order. But in reality, the order of processing masks might not matter. Because for a mask, when you process it, you can add transitions to masks with higher bits. But for masks that have higher bits, they are processed later. So even if you process a mask with higher bits first, when you process it, you may not have processed the masks that are required to reach it. Wait, but the code is for all masks, and for each mask, it's adding transitions to larger masks. So for example, when you process mask 0b100 (which is 1 << 2), then you process transitions to new masks. But when you process mask 0b100, it's possible that the mask 0b100 is processed before mask 0b101, which is larger. But in that case, when mask 0b101 is processed, it would have already been processed in the transitions from mask 0b100. So the code is correct as long as all masks are processed, regardless of the order. Because, for example, when you have a mask that has k bits, and you process it, you add transitions to masks with k+1 bits. But when processing mask with k+1 bits, you may have transitions to masks with k+2 bits. So regardless of the order in which masks are processed, the code would accumulate the counts correctly. Because when a mask is processed, all possible transitions from it are added. But the order of processing masks may not affect the correctness. For example, if a mask is processed first, and then another mask that could have contributed to it, but since the mask is processed once, the code would have already added the transitions. Wait, no. Because for mask A, which is a subset of mask B, when mask B is processed, it can add transitions from mask B to mask C. But mask A may have been processed earlier, and mask B may have been processed later. However, when mask B is processed, the code would process transitions from mask B, but mask B's value was built from previous transitions. So the order of processing masks does not affect the correctness. Because for each mask, when it is processed, the dp[mask] is already filled with all possible ways to reach it, and transitions are added to larger masks. So even if masks are processed in arbitrary order, as long as all masks are processed, the code should work.
+
+Wait, but how is the mask processed in the code? For example, mask can be processed in any order. For example, mask 0b100 is processed first, and when we process it, we generate transitions to larger masks. Then, when mask 0b101 is processed, we can generate transitions from that mask to higher masks. But when mask 0b101 is processed, the dp[mask][...] is already filled with the ways to reach it. So the code is correct.
+
+Therefore, the code can process all masks in any order. But in practice, perhaps processing masks in order of increasing number of bits is more efficient. But in code, for Python, it's easier to loop through all masks in order from 0 to 2^n - 1.
+
+So the code is:
+
+Initialize can_place as discussed.
+
+Then, for each mask, for each i in the mask, check for j not in the mask, and if can_place[i][j], add dp[mask][i] to dp[new_mask][j].
+
+But in Python, for each mask, how to check for i in the mask? Well, for each i in 0..n-1, check whether mask has the bit set.
+
+So, the code outline is correct.
+
+Now, let's think about the example.
+
+Now, for the example 2: nums = [1,4,3]. The answer is 2. Let's see how the code would handle it.
+
+n=3, nums are [1,4,3].
+
+The can_place matrix:
+
+for i=0 (1), j=1 (4): 1 divides 4. So yes.
+
+i=0 and j=2 (3): 1 divides 3. yes.
+
+i=1 (4) and j=0 (1): 4 % 1 ==0. yes.
+
+i=1 and j=2 (3): 4 and 3. Neither divides the other. So no.
+
+i=2 and j=0: 3 and 1: yes.
+
+i=2 and j=1: 3 and 4: no.
+
+So can_place[i][j] is True for:
+
+i=0, j=1; i=0, j=2; i=1,j=0; i=2,j=0.
+
+Now, the initial masks are for each single element.
+
+Then, for mask 0b001 (i=0, which is 1), then for each j not in mask (j=1 and 2), check if can_place[i][j] is True. So j=1 and j=2 are allowed. So new_mask for j=1 is 0b011, and dp[0b011][1] += 1. Similarly for j=2, new_mask is 0b101, dp[0b101][2] += 1.
+
+Similarly for mask 0b010 (element 1, which is 4), check j=0 and j=2. For j=0, can_place[1][0] is True (since 4 and 1 are compatible). So new_mask 0b011, and dp[0b011][0] += 1. For j=2, can_place[1][2] is False. So no.
+
+For mask 0b100 (element 2, 3), check j=0 and j=1. For j=0: can_place[2][0] is True. So new_mask 0b101, dp[0b101][0] += 1. For j=1: can_place[2][1] is False.
+
+So after processing masks with 1 bit, masks with 2 bits are:
+
+mask 0b011 (bits 0 and 1): dp[mask][0] =1 (from mask 0b010 + j=0?), no, let me think.
+
+Wait, let me think again for mask 0b011. How is it built?
+
+It's built from mask 0b001 (element 0) adding j=1 (element 1). So in that case, when mask 0b001 is processed, for i=0, j=1 is not in mask. Check can_place[0][1] which is True. So new_mask = 0b001 | 0b10 = 0b011. dp[new_mask][j] (which is j=1) is incremented by dp[old_mask][i] (dp[0b001][0] =1). So dp[0b011][1] = 1.
+
+Similarly, mask 0b011 can also be built from mask 0b010 (element 1) adding j=0. Since can_place[1][0] is True. So dp[0b011][0] = 1.
+
+So for mask 0b011, dp[0b011][0] is 1, and dp[0b011][1] is 1.
+
+Similarly for mask 0b101 (elements 0 and 2). Let's say when mask 0b001 (i=0) adds j=2 (element 2), can_place[0][2] is True. So dp[0b101][2] += 1. When mask 0b100 (i=2) adds j=0, can_place[2][0] is True. So new_mask 0b101 and dp[0b101][0] += 1. So mask 0b101 has dp[0b101][0] =1 and dp[0b101][2] =1.
+
+Then, for masks with 2 bits, we process their transitions to 3 bits.
+
+For example, mask 0b011 (elements 0 and 1) can be processed. For each i in mask (i=0 and i=1):
+
+i=0: check j not in mask (j=2). can_place[0][2] is True. So new_mask 0b111. dp[0b111][2] += dp[0b011][0] =1.
+
+i=1: check j not in mask (j=2). can_place[1][2] is False. So no transition.
+
+So for mask 0b011, adding j=2 gives dp[0b111][2] = 1.
+
+Then, mask 0b101 (elements 0 and 2). For each i in the mask (0 and 2):
+
+i=0: j=1 is not in mask. Check can_place[0][1] is True. So new_mask is 0b111. dp[0b111][1] += dp[0b101][0] =1.
+
+i=2: j=1 not in mask. Check can_place[2][1] is False. So no.
+
+So for mask 0b101, adding j=1 gives dp[0b111][1] =1.
+
+Then, mask 0b110 (elements 1 and 2) would be processed. How is it built? Let's see. For example, when mask is 0b010 (element 1) adds j=2? can_place[1][2] is False, so not. Or mask 0b100 (element 2) adds j=1? can_place[2][1] is False. So mask 0b110 (elements 1 and 2) may not have any transitions. So dp[0b110][...] would be 0.
+
+So for mask 0b111, the dp entries would be:
+
+dp[0b111][0] is 0 (no transitions leading to it), dp[0b111][1] is 1 (from mask 0b101 adding j=1), dp[0b111][2] is 1 (from mask 0b011 adding j=2). So sum is 1+1=2, which matches the example.
+
+Yes. So the code seems to handle this correctly.
+
+So the code is correct.
+
+Now, considering the constraints, for n=14, 2^14 is 16384, and for each mask, for each i, n steps, and for each j, n steps. So total time complexity is O(2^n * n^2). For n=14, this would be 16384 * 14^2 = 16384 * 196 = 3,211, 264 operations. Which is acceptable.
+
+Now, in Python, for n=14, the code should run efficiently.
+
+Now, the code:
+
+Implementing in Python.
+
+But for the DP, in Python, initializing a 2D list of size 2^14 by 14. For n=14, 16384 * 14 is 229376 elements. So in Python, it's manageable.
+
+But how to handle the mask loop. Let me code:
+
+class Solution:
+    def specialPerm(self, nums: List[int]) -> int:
+        MOD = 10**9 +7
+        n = len(nums)
+        # Precompute can_place
+        can_place = [[False]*n for _ in range(n)]
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+                    can_place[i][j] = True
+        # Initialize DP
+        dp = [[0]*n for _ in range(1<<n)]
+        for i in range(n):
+            dp[1<<i][i] = 1
+        # Iterate through all masks
+        for mask in range(1<<n):
+            for i in range(n):
+                if not (mask & (1 << i)):
+                    continue
+                # i is present in the mask
+                for j in range(n):
+                    if mask & (1 << j):
+                        continue
+                    # j is not in mask
+                    if can_place[i][j]:
+                        new_mask = mask | (1 << j)
+                        dp[new_mask][j] = (dp[new_mask][j] + dp[mask][i]) % MOD
+        full_mask = (1 << n) -1
+        return sum(dp[full_mask][i] for i in range(n)) % MOD
+
+Wait, but in the code, for each mask, for each i in the mask, and for each j not in mask, check can_place[i][j], and add to new_mask. But in the code above, the loops are:
+
+for mask in all masks:
+
+   for i in 0..n-1:
+
+      if mask has i:
+
+          for j in 0..n-1:
+
+              if j not in mask:
+
+                  if can_place[i][j]:
+
+                      new_mask = mask | (1 <<j)
+
+                      dp[new_mask][j] += dp[mask][i]
+
+But for each mask, for each i in the mask, and for each j not in mask, we check can_place[i][j], and add.
+
+Yes. So this seems correct.
+
+But in Python, the mask loop is for mask in range(1 << n). However, for the mask=0, which has no bits set, the code skips processing because for all i, mask & (1 <<i) is 0. So no processing happens.
+
+Now, testing the first example:
+
+nums = [2,3,6]. n=3.
+
+The code would generate for the full_mask 0b111, sum of dp[7][i] for i=0,1,2. Which is 1 (from [3,6,2] ending in 0) and 1 (from [2,6,3] ending in 1) and 0 (others). So sum is 2. Correct.
+
+Another test case: nums = [1,4,3]. The code returns 2. Correct.
+
+Now, what about when the same element is added multiple times? But the problem states that nums contains distinct elements, so each j not in mask is unique. So no issues.
+
+But what about the case where nums has elements that can be arranged in multiple ways. Let me think of another example.
+
+For example, nums = [1,2]. The possible permutations are [1,2] and [2,1]. Both are valid since 1 divides 2 and 2 divides 1 (wait, no. 2%1 ==0, so yes. 1%2 is 1, but 2%1 is 0. So for permutation [1,2], the condition holds. For [2,1], 2%1 ==0. So both valid. So answer is 2.
+
+Let me check the code:
+
+n=2.
+
+can_place:
+
+i=0 (1) and j=1 (2): yes.
+
+i=1 and j=0: yes.
+
+So for mask 0b01 (i=0):
+
+for j=1, can_place[0][1] is True. So new_mask is 0b11, and dp[0b11][1] += 1.
+
+for mask 0b10 (i=1):
+
+for j=0, can_place[1][0] is True. So new_mask is 0b11, and dp[0b11][0] += 1.
+
+So dp[0b11][0] =1, dp[0b11][1] =1. sum is 2. Correct.
+
+So code works.
+
+Another example: nums = [2,4]. Possible permutations:
+
+[2,4] and [4,2].
+
+Check if they are valid:
+
+For [2,4], 2 divides 4. Yes.
+
+For [4,2], 4 % 2 is 0. Yes. So answer is 2.
+
+Let me check code:
+
+can_place for i=0 (2), j=1 (4): yes. can_place[i=1][j=0] is yes.
+
+So dp for mask 0b01 (i=0) and j=1. new_mask 0b11, dp[0b11][1] =1.
+
+mask 0b10 (i=1) adding j=0: new_mask 0b11, dp[0b11][0] =1. sum is 2. Correct.
+
+Yes.
+
+Now, let's think about the code in terms of efficiency. For n=14, 1<<14 is 16384. Then for each mask, for each i (up to 14), and for each j (up to 14). So 16384 * 14 * 14 = 3,211, 264 operations. That's acceptable for Python.
+
+But in Python, for loops can be slow. However, for n=14, it's manageable.
+
+Now, let me think about possible optimizations. For example, for each mask, instead of checking all i and j, we can find the set bits in the mask, and for each of those i, iterate through j not in mask. But that's what the code is already doing.
+
+Another possible optimization is to precompute the list of available bits for each mask. But for code brevity, perhaps it's easier to proceed as is.
+
+Now, what about when the mask is 0? It's handled correctly, since for mask 0, the loops for i would not trigger.
+
+Now, the code seems correct. So let me write it as per the starter code.
+
+But in Python, the list of lists for dp may be a problem. Because for each mask, the dp is initialized as a list of n elements. For example, for mask in 0 to 2^14-1, and for each, a list of n elements.
+
+But in Python, initializing a list of 1<<n elements, each being a list of n elements, is feasible.
+
+So the code should be correct.
+
+Now, check the code for the sample input.
+
+Now, in code, the mask is processed in order. Let me think about the code again. But for mask in range(1<<n), which in Python is 0 to 2^n-1.
+
+But when processing mask, the code is adding transitions to new_mask. Which is mask | (1 <<j). So for example, mask 0b001 (1) is processed, and new_mask can be 0b001 | (1<<j) for j not in mask. So for j=1, new_mask is 0b011. Then, when mask=0b011 is processed, the code will process transitions from that mask.
+
+Yes.
+
+So I think the code is correct. Let me code it as per the given starter code.
+
+Wait, the code uses 1 << i for the mask. For n=14, 1<<14 is 16384, which is manageable.
+
+So, the code as written should work.
+
+Now, testing for the sample input.
+
+Another test case: nums = [1,1]. But the problem says that nums contains distinct elements. So that's not allowed. So the code doesn't have to handle that.
+
+So the code should be correct.
+
+Now, about the modulo. The code applies modulo after each addition, which is correct, to avoid integer overflow.
+
+So the code should be correct.
+
+Thus, the solution is to use dynamic programming with bitmasking, tracking the last element in the permutation and the set of elements used so far.
+</think>
+
+To solve this problem, we need to determine the number of special permutations of a given array of distinct positive integers. A permutation is considered special if, for every consecutive pair of elements, one element divides the other. Given the constraints, a brute-force approach is infeasible, so we use dynamic programming with bitmasking to efficiently explore all possible permutations.
+
+### Approach
+1. **Precompute Compatibility**: First, we precompute a matrix `can_place` where `can_place[i][j]` is `True` if `nums[i]` and `nums[j]` can be adjacent in a special permutation (i.e., one divides the other).
+
+2. **Dynamic Programming with Bitmasking**: We use a dynamic programming (DP) table where `dp[mask][i]` represents the number of ways to form a permutation using the elements indicated by the bitmask `mask` and ending with the element at index `i`.
+
+3. **Initialization**: Initialize the DP table for all single-element permutations. Each single element permutation is valid and thus starts with a count of 1.
+
+4. **DP Transitions**: For each bitmask `mask`, iterate through all possible elements `i` that are included in the permutation (as indicated by the bitmask). For each such element, try adding each element `j` that is not yet included in the permutation. If `can_place[i][j]` is `True`, update the DP table for the new bitmask formed by including `j`.
+
+5. **Result Calculation**: The result is the sum of all valid permutations that include all elements, which is found in the DP table entry for the bitmask with all bits set (i.e., `full_mask`).
+
+### Solution Code
+```python
+from typing import List
+
+class Solution:
+    def specialPerm(self, nums: List[int]) -> int:
+        MOD = 10**9 + 7
+        n = len(nums)
+        # Precompute the can_place matrix
+        can_place = [[False] * n for _ in range(n)]
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    if nums[i] % nums[j] == 0 or nums[j] % nums[i] == 0:
+                        can_place[i][j] = True
+        
+        # Initialize DP table
+        dp = [[0] * n for _ in range(1 << n)]
+        for i in range(n):
+            dp[1 << i][i] = 1
+        
+        # Iterate through all masks
+        for mask in range(1 << n):
+            for i in range(n):
+                if not (mask & (1 << i)):
+                    continue
+                # i is in the mask, try to add j not in the mask
+                for j in range(n):
+                    if mask & (1 << j):
+                        continue
+                    if can_place[i][j]:
+                        new_mask = mask | (1 << j)
+                        dp[new_mask][j] = (dp[new_mask][j] + dp[mask][i]) % MOD
+        
+        full_mask = (1 << n) - 1
+        return sum(dp[full_mask][i] for i in range(n)) % MOD
+```
+
+### Explanation
+- **Precompute Compatibility**: We create a matrix to check if any two elements can be adjacent. This helps in quickly validating transitions between elements during the DP process.
+- **DP Initialization**: Each single-element permutation is valid, so we initialize the DP table for each individual element.
+- **DP Transitions**: For each bitmask representing a subset of elements, we check each element that can be extended by adding another element. If the new element is compatible with the current last element, we update the DP table for the new bitmask.
+- **Result Calculation**: After processing all masks, the result is the sum of all valid permutations that use all elements, which is found in the DP table entry for the bitmask with all elements included.
+
+This approach efficiently explores all possible permutations using dynamic programming and bitmasking, ensuring we only consider valid transitions and avoid redundant checks, leading to an optimal solution.
