@@ -1,0 +1,393 @@
+<|channel|>analysis<|message|>We need find longest substring of word that does not contain any forbidden string as substring. Forbidden length <=10. word length up to 1e5, forbidden count up to 1e5 (big). need efficient. Approach: sliding window maintain last start index such that current substring [start, i] contains no forbidden. For each forbidden pattern, we find occurrences in word. But naive scanning all forbidden each time is expensive.
+
+Could build automaton Aho-Corasick to find all occurrences of all forbidden patterns in O(word length + sum pattern lengths + occurrences). Then for each position j (ending index), we have all patterns that end at j. We need to ensure in current window none of them fully inside window. Equivalent: when we encounter pattern ending at j with length L, we cannot extend window to include its entire pattern; we must move start to after pattern's start or after its start? Actually if window currently start <= j-L+1 then pattern is fully within window. So we must move start to j-L+2 (past start of pattern). In other words, maintain variable 'bad' = maximum left boundary that invalidates window.
+
+We can process scanning from left to right, maintain variable 'start' as the leftmost index of current valid substring: initially 0. For each position i, we look at all patterns ending at i. For each pattern of length l, compute begin = i - l +1. If begin >= start then pattern entirely inside window, so we must shift start = begin+1. Use max over all patterns to get new start.
+
+We should also maintain maxLen.
+
+Implementation: Build Aho-Corasick automaton for patterns. Node: goto dict, fail link, output list of pattern lengths. Build automaton BFS, compute fail, merge output.
+
+Then traverse word: state = goto on char, follow fail chain to terminal nodes; for each found pattern length got from output list, compute shift. Complexity O(len(word) + number of matches). matches may be high if many patterns overlap; but total number of matches <=? In worst case each position could match many patterns. For example patterns all length 1 char 'a', 'b', 'c' etc but each word char 'a', each match 1 pattern. That's up to 1e5 matches. Acceptable.
+
+Edge: patterns may be duplicates; we can keep lengths only. Use sets? but duplicates not harm.
+
+We need to be careful with outputs collecting all pattern lengths. We'll store pattern lengths in node.output list.
+
+Implementation steps in Python:
+
+- Build Trie:
+    nodes list of dict: children mapping char to node idx
+    fail list
+    output list
+
+- Insert patterns: for each pattern, traverse, create nodes. At end, append length of pattern to outputs[node].
+
+- Build fail (BFS). For each child, set fail to root's child if exists else root; append outputs of fail node to child output.
+
+- Then scan word: state=0. For each char c:
+    while state not root and no child c: state = fail[state]
+    if child c: state = child
+    else state remains root
+    For each len in outputs[state]:
+        start = max(start, i - len +2)
+
+- update ans = max(ans, i - start +1)
+
+Edge: start variable 'start' is 0-index. shift 'i-l+2' essentially after start of bad pattern: begin = i-l+1, shift to begin+1.
+
+Test with examples.
+
+Complexities: O(word_len + total patterns length + total matches). With constraints up to 10^5, fine.
+
+Time to code.
+
+Implement node as dict; but using arrays for children size 26 may be efficient.
+
+We'll build arrays: children as list of size 26 each holding next idx or -1. For convenience use list of lists.
+
+Pseudo:
+
+root=0
+children=[[-1]*26]
+output=[[]]
+fail=[0]
+
+Insert pattern p:
+    node=0
+    for ch in p:
+        idx=ord(ch)-97
+        if children[node][idx]==-1:
+            children[node][idx]=len(children)
+            children.append([-1]*26)
+            output.append([])
+            fail.append(0)
+        node=children[node][idx]
+    output[node].append(len(p))
+
+Build fail using queue:
+    from collections import deque
+    q=deque()
+    for c in range(26):
+        nxt=children[0][c]
+        if nxt!=-1:
+            fail[nxt]=0
+            q.append(nxt)
+        else:
+            children[0][c]=0   # set missing to root for fast transitions (optional)
+    while q:
+        r=q.popleft()
+        for c in range(26):
+            nxt=children[r][c]
+            if nxt!=-1:
+                fail[nxt]=children[fail[r]][c]
+                output[nxt].extend(output[fail[nxt]])
+                q.append(nxt)
+            else:
+                children[r][c]=children[fail[r]][c]  # for failure transitions
+
+After building we have automaton where children gives next state even for missing as root chain - facilitating O(1) transitions.
+
+Now scanning word: state=0; start=0; ans=0
+for i, ch in enumerate(word):
+    state=children[state][ord(ch)-97]
+    if output[state]:
+        for l in output[state]:
+            begin=i-l+1
+            if begin>=start:
+                start=begin+1
+    current_len=i-start+1
+    if current_len>ans: ans=current_len
+
+Return ans
+
+Edge case: start can exceed i? then current_len negative? but since we shift start to begin+1 <= i+1, could exceed i if pattern start > i? but we only shift when begin>=start, so start <= begin+1 <= i+1. If start=i+1 then current_len=0. Accept.
+
+Return ans.
+
+Let's test quickly by mental.
+
+Example 1: word "cbaaaabc" forb ["aaa","cb"]. Build automaton. Distinguish patterns.
+
+Scan: i0 'c': state children[0]['c'] -> node for c. outputs? none. start 0 length1.
+
+i1 'b': state moves to node for "cb". output contains "cb" length2. begin=1-2+1=0>=start=0 => start=0+1=1. current len=1-1+1=1.
+
+i2 'a': state... maybe "b"?? not. but handle. start remains 1 len=2.
+
+i3 'a': pattern "aaa" may occur at positions 2-4? Wait pattern at i=4 ends after 3? Actually pattern "aaa" ends at i=4. So until i=4, no pattern. start remains 1 length 3.
+
+i4 'a': now pattern "aaa" ends at i=4 length3. begin=4-3+1=2>=start=1 => start=3. current len=4-3+1=2.
+
+i5 'a': new pattern "aaa" ends at i=5 length3. begin=5-3+1=3>=start=3 => start=4. etc. The longest window maintained before this start maybe 4? let's check at i=4 we had current_len=2. earlier at i=3 window [1,3] length=3. Did we earlier get length 4 at maybe i=7? Let's trust.
+
+Works.
+
+Edge Cases: empty word? constraints min 1.
+
+Complexities satisfied.
+
+Need to import List from typing.
+
+Let's craft final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a substring of `word` to be **valid** it must not contain any string from
+`forbidden` as a (contiguous) substring.
+
+```
+word          =  c b a a a a b c
+forbidden     =  aaa ,  cb
+```
+
+The longest valid substring has length `4` (``aabc``).
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* The length of every forbidden word is at most `10`.  
+  Thus a forbidden word can be fully tested only when it *finishes* while
+  scanning the main string.
+* While we scan `word` from left to right we want to keep the longest
+  **currently possible** window `[start … i]` that is still valid.
+  When a forbidden word that ends at `i` lies completely inside this window
+  we must move `start` one position after the **beginning** of that forbidden
+  word.
+
+The problem reduces to:
+
+```
+for all positions i
+        find every forbidden word that ends at i
+        if its beginning >= start       // the word is inside the current window
+               start = beginning + 1
+```
+
+Hence two tasks are necessary
+
+1. **find all occurrences of all forbidden words while scanning once**  
+   →   Aho–Corasick automaton
+2. **maintain the sliding window with the rule above**
+
+
+--------------------------------------------------------------------
+
+#### 2.  Aho–Corasick Automaton
+
+All forbidden words are inserted in a Trie.
+For each node we store:
+
+* `next[26]` – transitions for every lowercase letter  
+  (unneeded transitions are filled with the transition of its failure link,
+  making lookup `O(1)`)
+* `fail` – failure link
+* `out`  – list of lengths of forbidden words that end in this node
+
+Building the automaton is standard:
+
+```
+BFS over the trie
+   for every existing child `v` of node `u` on character `c`
+          fail[v] = next[ fail[u] ][c]
+          out[v]  += out[ fail[v] ]
+```
+
+The whole construction costs  
+`O( Σ |forbidden[i]| )`, at most `1e6` operations.
+
+
+
+--------------------------------------------------------------------
+
+#### 3.  Scanning the main string
+
+```
+start = 0                       # left end of the current window
+ans   = 0
+state = 0                       # current node of the automaton
+
+for i , ch in enumerate(word):
+        state = next[ state ][ ch ]
+
+        # every forbidden word which ends here
+        for l in out[state]:
+                begin = i - l + 1          # 0‑based index of its first char
+                if begin >= start:        # it is inside the window
+                        start = begin + 1
+
+        current_len = i - start + 1
+        ans = max(ans , current_len)
+```
+
+`start` never moves to the left, therefore the whole scan is `O(|word| + #matches)`  
+(`#matches` ≤ total number of occurrences of all forbidden words – still
+`≤ 1e7` in the worst case, far below the limits).
+
+The algorithm uses only linear memory.
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the length of the longest valid substring.
+
+---
+
+##### Lemma 1  
+During the scan, `start` is always the smallest index such that the current
+window `word[start … i]` contains **no** forbidden word fully inside it.
+
+**Proof.**
+
+Induction over `i`.
+
+*Base* – `i = -1` (before the first character).  
+`start = 0` and the window is empty, trivially valid.
+
+*Induction step* – assume the lemma true for position `i-1`.  
+At step `i` a set of forbidden words that end at `i` is known.
+For each such word of length `l`
+
+```
+begin = i - l + 1
+```
+
+If `begin < start` the word starts left of the current window → it cannot
+be inside the window, nothing changes.
+If `begin ≥ start` the entire word lies inside `[start … i]`.  
+To make the window valid we must move `start` to `begin + 1`; any smaller
+index would still contain the whole forbidden word.
+
+The update rule in the algorithm applies *all* such shifts, therefore after
+processing position `i` the new `start` is the *smallest* index giving a
+valid window. ∎
+
+
+
+##### Lemma 2  
+At every position `i` the variable `ans` equals the maximum length of a
+valid substring that ends at or before `i`.
+
+**Proof.**
+
+By Lemma&nbsp;1 the window `[start … i]` is the longest *valid* window that
+ends exactly at `i`.  
+Its length is `i - start + 1` and the algorithm assigns this value to
+`current_len`.  
+`ans` is updated with `max(ans, current_len)`.  
+Thus `ans` is always the maximum among all valid windows ending at any
+previous position. ∎
+
+
+
+##### Theorem  
+`ans` returned by the algorithm equals the length of the longest valid
+substring of the entire string `word`.
+
+**Proof.**
+
+Let `L` be the length of the longest valid substring of `word`.  
+Consider its rightmost character at position `r`.  
+During processing character `r` the algorithm obtains the window
+`[start … r]` that is the longest valid window ending at `r`
+(Lemma&nbsp;1).  
+Its length is at most `L` (`, because no longer valid window ends at `r`).
+Therefore `ans` after processing position `r` is at least `L`
+(Lemma&nbsp;2).
+
+Conversely, `ans` is never larger than `L` because it is always the length
+of some valid window (Lemma&nbsp;2).  
+Thus after the whole scan `ans = L`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+```
+building automaton :  O( Σ |forbidden[i]| )  ≤ 1e6
+building fail links : O( number_of_nodes )   ≤ 1e6
+scanning word        : O( |word| + #matches ) ≤ 1e5 + 1e7
+memory               : O( number_of_nodes )  ≤ 1e6
+```
+
+All limits satisfy the problem constraints.
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+from collections import deque
+
+class Solution:
+    def longestValidSubstring(self, word: str, forbidden: List[str]) -> int:
+        # ---------- build Aho–Corasick automaton ----------
+        # each node: children[26], fail, out (list of pattern lengths)
+        children = [[-1] * 26]          # node 0 = root
+        fail = [0]
+        out = [[]]                      
+
+        # insert forbidden words
+        for pat in forbidden:
+            node = 0
+            for ch in pat:
+                c = ord(ch) - 97
+                if children[node][c] == -1:
+                    children[node][c] = len(children)
+                    children.append([-1] * 26)
+                    fail.append(0)
+                    out.append([])
+                node = children[node][c]
+            out[node].append(len(pat))
+
+        # bfs to set fail links and propagate outputs
+        q = deque()
+        for c in range(26):
+            nxt = children[0][c]
+            if nxt != -1:
+                fail[nxt] = 0
+                q.append(nxt)
+            else:
+                children[0][c] = 0          # missing transition goes to root
+
+        while q:
+            r = q.popleft()
+            for c in range(26):
+                nxt = children[r][c]
+                if nxt != -1:
+                    fail[nxt] = children[fail[r]][c]
+                    out[nxt].extend(out[fail[nxt]])
+                    q.append(nxt)
+                else:
+                    children[r][c] = children[fail[r]][c]
+
+        # ---------- scan the main word ----------
+        start = 0
+        ans = 0
+        state = 0
+
+        for i, ch in enumerate(word):
+            state = children[state][ord(ch) - 97]
+
+            # adjust start for every forbidden word that ends here
+            for l in out[state]:
+                begin = i - l + 1
+                if begin >= start:
+                    start = begin + 1
+
+            cur_len = i - start + 1
+            if cur_len > ans:
+                ans = cur_len
+
+        return ans
+```
+
+The implementation follows exactly the algorithm proven correct above
+and satisfies all time and memory constraints.

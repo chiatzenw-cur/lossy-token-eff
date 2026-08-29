@@ -1,0 +1,218 @@
+<|channel|>analysis<|message|>We need a DP problem similar to Weighted Interval Scheduling but with intervals sequential on a line 0..n-1. We can choose some intervals that do not overlap (disjoint). Want max sum of gold. n up to 1e5, offers up to 1e5. Standard DP with sorting by end index; compute prev non-overlapping interval using binary search.
+
+But houses are numbered 0..n-1. No overlapping if intervals disjoint (end < start next). We can sort offers by end. For each interval i sorted by end, compute dp[i] = max(dp[i-1], gold_i + dp[p]), where p = maximum j < i with end_j < start_i. Precompute ends array; apply binary search over ends list to find last end < start_i.
+
+Edge: dp[0] case.
+
+Because n 1e5 offers 1e5, O(m log m) fine.
+
+Return dp[last].
+
+Implementation details: convert offers list of lists; sort by end. ends = [end for offer]. Use bisect_right(ends, start_i-1, hi=i) to find index of last end <= start_i-1. Actually we want end < start_i. So bisect_left(ends, start_i) gives index of first end >= start_i; index-1 gives last end < start_i. Then dp index accordingly.
+
+Edge when index becomes 0: dp_prev =0.
+
+Let's produce code.
+
+Test with examples.
+
+Time complexity: O(m log m). Memory O(m).
+
+Let's produce final solution.
+
+Also note: Offers may have same end, but sorted accordingly; works.
+
+Return 0 if offers empty? but constraints offers len>=1.
+
+Let's code.
+
+<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+We have a line of houses numbered `0 … n‑1`.  
+`offers[i] = [l, r, g]` means a buyer wants all houses from `l` to `r` (inclusive) for `g`
+gold.  
+Different buyers can’t share a house – the chosen intervals must be *disjoint*.
+We want the maximum total gold.
+
+The problem is the classic **weighted interval scheduling** on a 1‑D line.
+
+--------------------------------------------------------------------
+
+#### 1.  Sorting by finishing position
+
+If we sort all offers by increasing `end` (`r`) only the following property is needed:
+
+*All intervals that finish before the current one start from indices `< current.start`*.
+
+With that order we can build a DP that scans the intervals once.
+
+```
+idx          0   1   2   ...   m-1
+interval[i]  [l,r,g]
+end[i]                r
+```
+
+--------------------------------------------------------------------
+
+#### 2.  Previous non‑overlapping interval
+
+For an interval `i` we need the last interval `p` (with `p < i`) that ends **strictly**
+before `i` starts:
+
+```
+end[p] < start[i]            (1)
+```
+
+Because `end` is sorted, we can find `p` by binary search:
+
+```
+p = bisect_left(end, start[i]) - 1
+```
+
+`bisect_left` gives the first index with `end >= start[i]`.  
+Subtracting one yields the last index with `end < start[i]`.  
+If the result is `-1` none exists → treat its value as `0`.
+
+--------------------------------------------------------------------
+
+#### 3.  DP recurrence
+
+Let `dp[i]` be the optimal gold using only the first `i+1` intervals
+(I.e. intervals `0 … i` of the sorted list).
+
+When considering interval `i` two options exist:
+
+* skip it  
+  `value = dp[i-1]`
+* take it  
+  `value = g[i] + dp[p]`  ( `p` from step 2, `dp[-1]` is considered `0`)
+
+```
+dp[i] = max( dp[i-1] , g[i] + dp[p] )
+```
+
+Base case: `dp[-1] = 0` (before the first interval).
+
+The answer is `dp[m-1]`.
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove by induction that the algorithm returns the maximum achievable gold.
+
+---
+
+##### Lemma 1  
+For every interval `i`, the binary search returns the largest index `p < i`
+such that `end[p] < start[i]`.  
+
+**Proof.**  
+`end` is sorted ascending.  
+`bisect_left(end, start[i])` returns the smallest index `q` with `end[q] >= start[i]`.  
+All indices `< q` satisfy `end < start[i]`; all indices `≥ q` satisfy `end ≥ start[i]`.  
+Thus the largest index with property (1) is `q-1`. ∎
+
+
+
+##### Lemma 2  
+`dp[i]` equals the optimum gold obtainable from the first `i+1` intervals.
+
+**Proof by induction over** `i`.
+
+*Base (`i = 0`):*  
+Only interval `0` is available.  
+If we take it we get `g[0]`; if we skip we get `0`.  
+`dp[0] = max(0, g[0]+0)` – the optimum.
+
+*Induction step:*  
+Assume statement holds for all indices `< i`.  
+Consider the optimal solution for intervals `0 … i`.  
+Two cases:
+
+1. **Interval `i` not used.**  
+   Then the optimum gold equals the optimum for intervals `0 … i-1`,
+   which by induction is `dp[i-1]`.
+
+2. **Interval `i` used.**  
+   Because `i` uses houses from `start[i]` to `end[i]`, the interval
+   immediately preceding it must end before `start[i]`.  
+   By Lemma&nbsp;1 the latest such interval is `p`.  
+   The remaining part `0 … p` is independent of interval `i` and yields at most
+   `dp[p]` (induction hypothesis).  
+   Total gold `= g[i] + dp[p]`.
+
+No other solution can exceed the maximum of these two amounts.  
+The DP recurrence sets `dp[i]` exactly to that maximum, so it equals the
+optimal value for intervals `0 … i`. ∎
+
+
+
+##### Theorem  
+`dp[m-1]` (the algorithm’s output) is the maximum total gold that can be earned
+from all offered intervals.
+
+**Proof.**  
+By Lemma&nbsp;2 the DP value `dp[m-1]` equals the optimum for intervals
+`0 … m-1`, i.e. for the entire set of offers. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+*Sorting intervals:* `O(m log m)`  
+*DP processing (each interval once, binary search):* `O(m log m)`  
+Total time: `O(m log m)` where `m = len(offers) ≤ 10^5`.
+
+All arrays have length `m`; memory usage `O(m)`.
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+import bisect
+
+class Solution:
+    def maximizeTheProfit(self, n: int, offers: List[List[int]]) -> int:
+        """
+        Weighted interval scheduling to maximise gold.
+        """
+        if not offers:
+            return 0
+
+        # Sort offers by ending house
+        offers.sort(key=lambda x: x[1])
+
+        ends = [r for _, r, _ in offers]     # sorted array of end indices
+        m = len(offers)
+
+        dp = [0] * m                         # dp[i] stores optimum up to interval i
+
+        for i in range(m):
+            l, r, g = offers[i]
+
+            # Find last interval ending before l
+            idx = bisect.bisect_left(ends, l) - 1
+            best_with_current = g + (dp[idx] if idx >= 0 else 0)
+
+            best_without_current = dp[i-1] if i > 0 else 0
+            dp[i] = max(best_with_current, best_without_current)
+
+        return dp[m-1]
+
+
+# --- optional testing (uncomment to validate) ---
+if __name__ == "__main__":
+    sol = Solution()
+    print(sol.maximizeTheProfit(5, [[0,0,1],[0,2,2],[1,3,2]]))  # 3
+    print(sol.maximizeTheProfit(5, [[0,0,1],[0,2,10],[1,3,2]])) # 10
+    print(sol.maximizeTheProfit(4, [[0,1,5],[2,3,6]]))          # 11
+```
+
+The code follows exactly the algorithm proven correct above.

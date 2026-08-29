@@ -1,0 +1,657 @@
+<|channel|>analysis<|message|>We need to compute sum over all subarrays of imbalance number defined as number of gaps >1 in sorted subarray.
+
+Given constraints up to 1000, O(n^3) might be 1e9 too slow. We need smarter.
+
+Observation: Imbalance number counts number of open gaps in the set of values when sorted. Equivalent to (max - min +1) - number of distinct elements? Wait.
+
+Given a sorted array sarr. Count of i where sarr[i+1]-sarr[i]>1. This counts gaps between consecutive distinct elements that exceed 1. If we count distinct elements D, gaps count = (# of intervals missing numbers). Not equal to distances.
+
+We could think of imbalance number as: For the multiset of values, consider the set of distinct values sorted. For each adjacent distinct value, if difference >1, add 1.
+
+Hence, imbalance number = number of "missing number intervals" between distinct values. In terms of distinct values, regardless of multiplicities.
+
+Thus imbalance number = (number of distinct values) - 1 - (# of adjacent distinct values with difference exactly 1). Wait. Actually count gaps >1 between distinct sorted values. So e.g., distinct values sorted: v1 < v2 < ... < vk. Gaps count = count of j such that v_{j+1} - v_j >1. Equivalent to k-1 minus count of j with difference==1.
+
+But easier: We can compute imbalance by counting missing between min and max? Example: values 1,3,4. Distinct sorted:1,3,4. Gaps: 1->3 diff 2>1 yes, 3->4 diff1 not >1. So imbalance=1. Meanwhile max-min=3. But missing numbers: 2 is missing. So gaps = missing count? Not necessarily. For 1,4: distinct 1,4 diff3>1 imbalance=1 though missing numbers 2,3 count2 >1. So not equal.
+
+Thus we need to compute per subarray.
+
+Constraints: n<=1000. Subarrays = O(n^2)=1e6. For each subarray we need O(length) or O(logn)? O(n^3) too big. We can possibly process incremental building of subarray and maintain imbalance increment changes.
+
+Because subarray contiguous, we can extend from left: For each l, iterate r from l to n-1, adjust structure that maintains imbalance for arr[l..r]. Each step we add an element. Need to compute imbalance change efficiently.
+
+We need maintain distinct values counts and gaps >1 etc.
+
+We can maintain: multiset of values in current window, but we need counts of distinct values and track adjacency differences: we can keep sorted unique values in balanced BST or use array of bool size up to n? Since nums[i] <= n. n<=1000. So values small <=1000. We can maintain freq array of size n+2. And maintain sorted distinct list? We can maintain a boolean array of presence; and maintain a Fenwick tree for order. Since n small, maybe simpler: maintain current set of values as sorted list; insertion O(n). But per subarray for each l we expand up to n times, overall O(n^3). Need better.
+
+Alternative: For each l, maintain current imbalance value as we extend r. When adding a new value x, we need to update imbalance of window [l..r]. The imbalance change depends on frequencies around x in the value set. If inserting a value that already present, multiplicity increases but distinct values unchanged, so imbalance stays same. If it's a new distinct value that wasn't present before, we need to check its neighbor distinct values to update gaps crosses. Let the set of distinct values currently sorted be S. Insert x. Need to find predecessor and successor among distinct values. If both exist, we check previous gap contributions and adjust.
+
+Algorithm: maintain a boolean array present[1..n] and also maintain current set of distinct values maybe via tree; but we can use a linked list of presence by scanning? Since values <= n (max 1000). While inserting removing, we can search predecessor and successor by scanning downwards/upwards until found. That could be O(n) per operation worst-case. But per subarray expansion, operations n times per l, so O(n^3). Can't.
+
+We need faster. Since n small 1000, maybe acceptable? Let's consider: n=1000. For each l (1000), we iterate r from l to n-1 (average 500). So 500k iterations. For each insertion, we might scan up to n=1000 to find prev and next. That's up to 500M operations, borderline maybe high but still might be okay in Python? 500M > too slow.
+
+We need O(log n) or O(1) per insertion. Since values bounded <= n (<=1000), we can precompute for each value, next present greater than it: maybe maintain sorted set as bitset with operations to find next bit? Python's built-in 'bisect' on sorted list; insertion O(k). Using 'sortedcontainers' not allowed. We can use array of size n+2 plus maintain a bitset and use bit_length to find next set bit efficiently.
+
+We can maintain a bitset as int with bits for values. n <=1000, so we can use python int with bits 0..n-1. For each insertion, set the bit. To find predecessor: use bitmask of lower bits. For value x (1-indexed), we can shift bits: lower_bits = bitset & ((1<<x)-1). To get predecessor, we find highest set bit in lower_bits. We can get using lower_bits.bit_length()-1 gives index. Similarly for successor: higher_bits = bitset >> x; find lowest set bit: (higher_bits & -higher_bits). Then compute index difference. But note indices shift.
+
+Let's formalize: Values are 1..n. We'll map to 0..n-1 for bit positions.
+
+For insertion of value v (1-based). bit_pos = v-1. Define lower_mask = bitset & ((1<<bit_pos)-1). Predecessor exists if lower_mask !=0: pred = lower_mask.bit_length()-1. So pred_value = pred+1. Similarly higher_mask = bitset >> bit_pos; if higher_mask !=0: succ = (higher_mask & -higher_mask).bit_length()-1? Wait. Let's find lowest set bit of higher_mask: succ_rel = (higher_mask & -higher_mask).bit_length()-1. Then succ_value = succ_rel + bit_pos +1? Actually higher_mask bits correspond to values > v, shifted. So succ_value = bit_pos +1 + succ_rel. Because succ_rel offset from v.
+
+Hence we can find pred_value and succ_value quickly O(1) (bit_length on int). This is efficient.
+
+Now we maintain imbalance count. When inserting new distinct value:
+
+- If no predecessor and no successor: set of distinct becomes 1. No gaps, imbalance remains 0.
+- If only one neighbor: before insertion, nothing new gap >1 may be created. Let's see: before insertion, there might have been an existing gap between pred and succ? Not possible as only one neighbor. After insertion, we may create or break a gap. But need to update imbalance accordingly: If neighbor exists, and difference to v >1, new gap created. Does it alter previous gap if neighbor had gap before? There is only that neighbor, so if one neighbor, no previous gap to alter. So just add 1 to imbalance if diff>1.
+
+- If two neighbors (pred and succ): before insertion, there was a gap between pred and succ? Actually before insertion, pred and succ were separate distinct values, so there was potential gap counted between them if diff>1. After insertion, that gap between pred and succ will be removed, and new gaps between pred-x and x-succ may be counted.
+
+So we need to update imbalance: imbalance -= (pred_succ_diff>1 ? 1 : 0); then imbalance += (pred_x_diff>1 ? 1:0) + (x_succ_diff>1?1:0). Where differences computed.
+
+Thus we can update imbalance in O(1). Additionally, we must handle multiplicity: when inserting value that already present (freq>0), nothing changes; but we should increment frequency.
+
+And for each l, we start with empty set and freq zero. Expand r, updating imbalance. For each subarray [l..r], we add current imbalance to answer.
+
+Complexities: For each l we reset bitset and freq array. Then we iterate r.
+
+Time: For each insertion (up to n). Each operation O(1). For ~500k operations => fine.
+
+Memory: Good.
+
+Edge Cases: When value already present, freq>0, we don't modify imbalance. But duplicates could affect? No, duplicates don't change distinct set or gaps. So OK.
+
+Implementation details:
+
+- Use freq array of size n+1 (1-indexed). Maybe bigger if values <= n? Provided by constraints. We'll just allocate size n+2.
+
+- bitset: int.
+
+- For convenience, define function add_value(v):
+
+    if freq[v]==0: # new distinct
+        compute predecessor and successor on current bitset.
+
+        Update imbalance.
+
+        Insert bit: bitset |= 1<<(v-1)
+
+    freq[v]+=1
+
+    return new imbalance.
+
+- For each l, set bitset=0, freq all 0, imbalance=0. We'll also maintain answer.
+
+But we might need to clear freq efficiently. Since for each l we iterate O(n) over window, resetting freq array each time can be O(n^2). But n=1000, 1e6 resets acceptable. We'll just create new list each l: freq=[0]*(n+1). That's fine.
+
+Alternatively, we could maintain freq array and update as we move l, but we are resetting each l due to contiguous subarray start.
+
+Implementation straightforward.
+
+Let's test with examples.
+
+Example1: nums=[2,3,1,4], n=4.
+
+We'll compute. Use zero-based bitset.
+
+We should confirm logic.
+
+Simulate quickly.
+
+Start l=0:
+
+bitset=0, imbalance=0.
+
+r=0 v=2 -> new distinct, pred none succ none; imbalance stays0; answer+=0.
+
+r=1 v=3 -> new distinct: pred=2 succ none; diff=1 -> no count; imbalance still0; answer+=0.
+
+r=2 v=1 -> new distinct: pred none succ=2? Wait current bits: 2 and3 bits set. bit 0: (value 1). succ will be the next set bit >1. For higher_mask bitset >>0 (since bit_pos 0). bitset >>0 = bits 2 and3 etc. lowest set bit = 1? bits positions: value2 pos1, value3 pos2. So succ_rel bit is 1? Wait lower shift? Actually bit_pos=0. higher_mask=bitset>>0. higher_mask bits: positions relative 1 and 2. The lowest set bit is at position 0 (value2? Wait shift 0, so lowest set bit is bit0 corresponds to value2). So succ_rel=0. succ_value= bit_pos+1 + succ_rel=1+0=1? That gives succ_value=1 which is wrong. Let's reevaluate mapping.
+
+Better to compute successor using bitset operations: we can find next set bit after position pos. We can compute: mask = bitset >> pos+1. If mask==0: none. else relative = (mask & -mask).bit_length()-1. succ_value = pos+1+1 + relative? Wait if pos indexes 0-based, then next set bit after pos means bit position pos+1 or higher. Suppose we shift bitset >> (pos+1) to drop bits up to pos. The first set bit in mask corresponds to the offset relative to pos+1. So succ_value = (pos+1) + (relative). And values are original +1. Because pos 0 corresponds to value1. So succ_value = (pos+1) + relative +1? Check: If pos=0 (value 1). higher bits contain value2 (pos 1) and value3 (pos2). mask >>1 = integer where bit0 corresponds to old pos1. The lowest set bit in mask is at position 0. relative =0. Then succ_value = (pos+1) + relative +1? Let's compute:
+
+pos=0 => value 1. pos+1=1. succ_value = (pos+1) + relative =1 + 0 =1? That's wrong. Need 2.
+
+Maybe off by one. Let's figure mapping precisely.
+
+We store value v (1-based). bit position p = v-1.
+
+Set bitset.
+
+To find predecessor (<v): lower_mask = bitset & ((1<<p)-1). Highest set bit index q = lower_mask.bit_length()-1. Then predecessor value pred = q+1 (since bit index q corresponds to value q+1). Works.
+
+To find successor (>v): higher_mask = bitset >> (p+1). This discards bits <= p. If higher_mask==0: none. Else, lowest set bit relative offset r = (higher_mask & -higher_mask).bit_length()-1. Then the bit index in original is (p+1)+r. Thus successor value succ = ((p+1)+r)+1 = p+2+r.
+
+Simplify: succ = p+2+r. Example: p=0 (value1). higher_mask = bitset >>1. Suppose bitset has bit1 set (value2). Then higher_mask = 0b1. r=0. succ = 0+2+0=2 correct.
+
+Now for predecessor: we need to compute highest bit index q. If lower_mask !=0: pred = q+1.
+
+With this mapping we can compute differences: pred_value, succ_value.
+
+Now test with example.
+
+Initially bitset has 2,3 bits set. value2 => pos1, value3 => pos2.
+
+Add v=1 pos0.
+
+lower_mask = bitset & ((1<<0)-1)=0 => no pred.
+
+higher_mask = bitset >> (0+1)= bitset >>1. bitset before had bits at pos1 and pos2. shift >>1 => bits 0 and 1. Suppose bitset bits: pos1->1, pos2->1. shift >>1 gives 0b11? Wait bitset = 0b110? pos1:1 pos2:1 pos0:0. In binary: bits positions: pos2=1 (value3), pos1=1 (value2). So bitset = 0b110. shift right by 1: 0b110 >>1 = 0b11. lowest set bit r=0. succ_value = p+2+r = 0+2+0=2. Works.
+
+Now diff pred? none. diff x-succ = 2-1=1 => not >1. So no new gap. imbalance remains 0. That matches expectation: subarray [2,3,1] in sorted: [1,2,3] all consecutive, imbalance0.
+
+Now r=3 v=4 pos3. lower_mask = bitset & ((1<<3)-1) = bitset & 0b111 = 0b110 => pred is highest set bit q=1? Wait bitset before now has bits 0,1,2 set (1,2,3). low_mask=0b110. highest set bit index q=1? 0b110 highest bit index1? But bitset 0b110 has bits 2 and1 set. Highest index is 2? Let's compute: bit_length() -> bit_length of 0b110 is 3 => highest index=2. So pred= q+1 =3. Correct predecessor value 3.
+
+higher_mask = bitset >> (3+1)= bitset >>4 =0 => no succ.
+
+So only pred exists.
+
+Diff = 4-3=1 -> not >1. So no new gap. So imbalance remains 0. This matches expected.
+
+Now sum over subarrays: l=0 produce imbalance values: [0,0,0,0] sum 0.
+
+l=1 start new.
+
+l=1: r=1 v=3. set; imbalance0 sum0.
+
+r=2 v=1. Insertion: predecessor? bitset has only 3. pred? previous 3 has pos2. lower_mask=0b110& ((1<<0)-1)=0? Wait v=1 pos0. lower_mask=0. higher_mask=0b110 >>1 =0b11. r=0 => succ=0+2+0=2 => succ value 2? But value 2 not present. But 3 is value 3. Wait we mis compute, because higher_mask includes bits from pos1 and pos2 (values 2 and 3) but pos0 bits not present. But input subarray [3,1] has distinct 1 and3. But we think succ value should be 3. Let's see: bitset had only 3 => bitset binary with bit2 set: 0b100. shift >>1 => 0b10. lower bit index r=1? Wait 0b10 lowest set bit r=1? (since 0b10&-0b10=0b10, .bit_length()-1=2-1=1). r=1. succ= p+2+r=0+2+1=3 => value 3. correct.
+
+Now diff pred? none, diff succ=3-1=2>1 => add gap=1. imbalance=1. sum 1? subarray [3,1] imbalance=1.
+
+r=3 v=4. Insert: current bitset has 1 and3. bitset bits pos0 and pos2.
+
+lower_mask = bitset & ((1<<3)-1) = bitset & 0b111 (7) = 0b101. Highest set bit q=2? Wait 0b101 has bits0 and2. bit_length=3 => q=2. pred=3. succ none? higher_mask= bitset >>4 =0. So only pred. diff = 4-3=1 => no new gap. imbalance remains 1. Subarray [3,1,4] imbalance1. So sum adds 1+1=2.
+
+l=2 start new: subarray [1,4] etc. Works.
+
+Total sum 3 matches example.
+
+Edge Cases: duplicates: because when inserting duplicate, freq[v]>0, just increment freq no change to imbalance. For removals due to moving l? We don't need removals because each l fresh.
+
+We need to predefine bit_length of zeros? bit_length(0)=0.
+
+Implementation steps:
+
+def sumImbalanceNumbers(self, nums):
+
+    n=len(nums)
+
+    ans=0
+
+    for l in range(n):
+
+        freq=[0]*(n+1)
+
+        bitset=0
+
+        imbalance=0
+
+        for r in range(l,n):
+
+            v=nums[r]
+
+            if freq[v]==0:
+
+                p=v-1
+
+                # predecessor
+                lower_mask = bitset & ((1<<p)-1)
+
+                pred = None
+
+                if lower_mask:
+
+                    pred_value = lower_mask.bit_length()
+
+                    pred = pred_value  # because bit_length gives highest index+1
+
+                # successor
+                higher_mask = bitset >> (p+1)
+
+                succ = None
+
+                if higher_mask:
+
+                    r_rel = (higher_mask & -higher_mask).bit_length()-1
+
+                    succ_value = p+2+r_rel
+
+                    succ = succ_value
+
+                # Update imbalance
+                if pred is not None and succ is not None:
+                    if succ - pred >1:
+                        imbalance -=1
+                    if v - pred >1:
+                        imbalance +=1
+                    if succ - v >1:
+                        imbalance +=1
+                elif pred is not None:
+                    if v - pred >1:
+                        imbalance +=1
+                elif succ is not None:
+                    if succ - v >1:
+                        imbalance +=1
+                # else no neighbors: nothing
+
+                bitset |= 1<<p
+
+            freq[v]+=1
+
+            ans += imbalance
+
+    return ans
+
+Check bit_length mapping: For pred: lower_mask.bit_length() gives index of highest set bit +1. Since bit index = bit_length-1. So pred_value = lower_mask.bit_length()?? Wait example: lower_mask = 0b10 (bit1 set). lower_mask.bit_length()=2 => pred_value=2? But we want value2. Indeed correct. For 0b100, bit_length()=3, value=3.
+
+Thus pred_value = lower_mask.bit_length().
+
+Thus we saved that formula.
+
+Now test logic quickly with example using actual python mentally.
+
+Potential bug: when only one neighbor, we add imbalance accordingly but we'll double-check no double-add.
+
+Case 2 neighbors: we subtract previous gap if pred & succ diff>1 then add new gaps.
+
+Case pred only: Add if v - pred >1.
+
+Case succ only: Add if succ - v >1.
+
+Edge: Suppose pred exists but succ also but v is adjacent to one neighbor but not other. Works.
+
+Now we test example2: [1,3,3,3,5].
+
+Let's run quickly: l=0.
+
+r=0 v=1: imbalance0.
+
+r=1 v=3: new distinct, pred=1 diff=2>1 => imbalance=1. r=2 v=3 duplicate => imbalance remains1. r=3 v=3 duplicate same. r=4 v=5: new distinct, pred=3 diff2>1 => imbalance+=1 =>2? Wait check pred=3? We currently have distinct {1,3}. pred=3? higher_mask? Let's compute: bitset before adding 5 has bits 0 and2. v=5 p=4. lower_mask=bitset & ((1<<4)-1)=bits positions 0 &2 => 0b101. highest=2 => pred=3. succ none. diff =5-3=2>1 => +1. So imbalance=1+1=2. Good.
+
+Thus cumulative ans: for [1] 0, [1,3] 1, [1,3,3] 1, [1,3,3,3] 1, [1,3,3,3,5] 2 => sum=1+1+1+2=5? Wait also 0 counted? They add all subarrays; we sum imbalance for each subarray. For [1] 0; [1,3]1; [1,3,3]1; [1,3,3,3]1; [1,3,3,3,5]2 => cumulative 0+1+1+1+2 =5 so far.
+
+Now next l=1 start at index1 value 3:
+
+subarrays: [3]:0; [3,3]:0; [3,3,3]:0; [3,3,3,5]: diff: distinct {3,5} diff>1 => imbalance=1. sum add 1.
+
+l=2 start frame 3 at index 2:
+
+[3]:0; [3,3]:0; [3,3,5]: imbalance 1. add 1.
+
+l=3: start 3 at index3:
+
+[3]:0; [3,5]: diff2>1 imbalance=1 => add1.
+
+l=4: start 5: [5]:0.
+
+Total sum = previous 5 + 1 +1 +1 =8. matches.
+
+Edge case: when duplicate becomes new distinct? No.
+
+Implementation complexity O(n^2) loops (~500k) each O(1). Works.
+
+Testing bit extraction functions: The formula for pred_value: lower_mask.bit_length() gives index+1. For shift: (mask & -mask).bit_length()-1 gives index of lowest set bit. Wait using bit_length -1 is good.
+
+But we used r_rel = (higher_mask & -higher_mask).bit_length()-1
+
+But we need r_rel as offset from 0. We'll compute high = higher_mask & -higher_mask; r_rel = high.bit_length()-1. Then succ_value = p+2+r_rel.
+
+Edge: high must be >0. If higher_mask==0: none.
+
+Check for bit_length with zero? it's 0.
+
+All good.
+
+Corner-case: When new distinct value x with both neighbors equal difference exactly 1; then we subtract old gap only if old gap diff>1. Example: distinct values 1,3,4. If we add 3? Actually adding 3 had neighbors 1 and4. pred=1, succ=4 diff 3>1 => counted old gap. After insertion, gaps between 1-3 diff2>1? 3-4 diff1 not >1. So new imbalance should be 1-1? Wait compute. Initially distinct {1,4} gap 1. New value 3: old gap 1 removed, new gaps: 1-3 diff2>1 -> count 1, 3-4 diff1 not >1 -> 0. So imbalance remains 1 same. Our update subtract 1 if succ - pred >1 subtract 1. Then add if v - pred >1 add1 and if succ - v >1 add1. succ - pred >1 yes subtract1. v - pred = 2>1 add1. succ - v = 1 => not add. Net change 0. Works.
+
+Case where both neighbors diff >1, and new value diff >1 to both: old gap removed earlier counted 1; new gaps each >1 count 2 => net +1. Example: distinct {1,4}. Add 3: v-pred=2>1 add1, succ-v=1? not >1. Wait succ diff to v=4-3=1 -> add0. So net +0? Actually answer same as before. But expectation? [1,4] had gap 1. After insertion [1,3,4] differences 1-3=2>1 -> count1; 3-4=1 ->0 => total imbalance 1. So unchanged. Good.
+
+Case: distinct {1,4,6}. Suppose adding 5. Old gaps: 1-4 diff3>1 count1; 4-6 diff2>1 count1 => imbalance2. Adding 5: neighbors 4 and6. Old gap 4-6 diff2>1 remove1. new gaps: 4-5 diff1 not count; 5-6 diff1 not. imbalance becomes1? Wait but missing col? Distinct becomes {1,4,5,6}. Sorted: gaps >1: 1-4 diff3>1 count1; 4-5 diff1 none; 5-6 diff1 none => imbalance1. So net change -1. Our update: subtract if succ-pred>1 yes subtract1; v-pred=1? 5-4=1 not add; succ-v=6-5=1 not add. So imbalance=2-1=1 correct.
+
+Thus logic good.
+
+Now ensure we use freq, but freq array may be large each l. Ok.
+
+Implement quickly. Complexity fine.
+
+We also should consider that values maybe up to n, but may also exceed n? But constraint says 1 <= nums[i] <= nums.length (n). So OK.
+
+Let's produce final code.
+
+Additionally, we can micro-opt: Use local variables for speed.
+
+Also we must import List.
+
+Ok.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a subarray `sub`
+
+```
+sub = [x1 , x2 , … , xk]
+```
+
+let
+
+```
+sorted(sub) = [y1 , y2 , … , yk]          ( yi are the elements of sub in non‑decreasing order )
+```
+
+The **imbalance number** of `sub` is the number of indices `i`
+(`0 ≤ i < k-1`) for which
+
+```
+y[i+1] – y[i] > 1
+```
+
+i.e. the number of “gaps larger than one” between adjacent *different*
+values in the sorted order.  
+If `sub` contains only equal values the imbalance number is `0`.
+
+For the whole array we have to add the imbalance numbers of **all**
+contiguous subarrays.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* When a value that is already present in the current subarray is added
+  again, the set of distinct values does not change → imbalance number
+  stays the same.
+
+* Let the set of **distinct** values of the current subarray be
+
+```
+v1 < v2 < … < vt     (t = number of distinct values)
+```
+
+  For every pair of neighbours `vi , vi+1`
+
+```
+gap(vi , vi+1) = 1   if vi+1 – vi  > 1   ( contributes one to the imbalance )
+```
+
+  Therefore only the neighbours of the *new* value matter when the set of
+  distinct values changes.
+
+* We only need to know
+
+  * the current imbalance number,
+  * which distinct values are present,
+  * for a new value `x` the nearest smaller value (`predecessor`)  
+    and the nearest larger value (`successor`).
+
+  All of the above can be maintained in **O(1)** time.
+
+
+
+--------------------------------------------------------------------
+
+#### 2.  Data structures
+
+* `freq[1 … n]` – how many times a value appears inside the current
+  subarray.  
+  `freq[v] == 0` means that `v` is *not* present yet.
+
+* `bitset` – an integer that keeps a bit for every possible value  
+  (`value 1` → bit position `0`, …).  
+  With `bitset` we can find the predecessor / successor by bit tricks
+  (operations `&`, `>>`, `bit_length()`).
+
+  *Predecessor* of value `v` (bit position `p = v‑1`):
+
+  ```text
+  lower = bitset & ((1 << p) - 1)          # only bits below p
+  if lower != 0 : pred = lower.bit_length()          # value of predecessor
+  ```
+
+  *Successor* of value `v` :
+
+  ```text
+  higher = bitset >> (p + 1)                # only bits above p
+  if higher != 0 :
+        r = (higher & -higher).bit_length() - 1  # distance of first bit
+        succ = p + 2 + r                       # real value
+  ```
+
+  All operations above are **O(1)**.
+
+
+
+--------------------------------------------------------------------
+
+#### 3.  Updating the imbalance number
+
+When a new *distinct* value `x` is inserted into the current window
+
+```
+pred – the closest smaller distinct value, or None
+succ – the closest larger distinct value, or None
+```
+
+Only these cases matter
+
+| pred | succ | action |
+|------|------|--------|
+| none | none | nothing (window now has one distinct value) |
+| only | pred | if `x – pred > 1` increase imbalance by 1 |
+| only | succ | if `succ – x > 1` increase imbalance by 1 |
+| both | pred & succ |  |  
+  * remove old gap `pred‑succ` (if it existed)  
+  * add gaps `pred‑x` and `x‑succ` (count only if > 1)
+
+The formulas are
+
+```
+if pred is not None and succ is not None:
+        if succ - pred > 1: imbalance -= 1
+        if x - pred > 1:    imbalance += 1
+        if succ - x > 1:    imbalance += 1
+elif pred is not None:
+        if x - pred > 1:    imbalance += 1
+elif succ is not None:
+        if succ - x > 1:    imbalance += 1
+```
+
+If the value already existed (`freq[x] > 0`) nothing changes.
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Algorithm
+
+```
+answer = 0
+for l from 0 to n-1:                 # left end of subarray
+        reset freq, bitset, imbalance = 0
+        for r from l to n-1:         # extend subarray to the right
+                x = nums[r]
+                if freq[x] == 0:     # new distinct value
+                        update imbalance as described above
+                        add bit for x to bitset
+                freq[x] += 1
+                answer += imbalance
+return answer
+```
+
+The outer loop iterates over all possible left ends.
+For every left end we build all subarrays that start there, keeping
+the current window and imbalance number in constant time.
+The total number of iterations is
+
+```
+n + (n-1) + … + 1 = n*(n+1)/2  ≤ 5·10⁵  (for n = 1000)
+```
+
+So the whole algorithm runs in **O(n²)** time and uses **O(n)** extra
+memory.
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Correctness Proof  
+
+We prove that the algorithm returns the sum of imbalance numbers of all
+subarrays.
+
+---
+
+##### Lemma 1  
+During the processing of a fixed left end `l` the variable
+`imbalance` always equals the imbalance number of the current window
+`nums[l … r]`.
+
+**Proof.**
+
+*Initialization:*  
+Before the inner loop starts we have an empty window (`r = l-1`).
+No distinct values → imbalance `0`, correct.
+
+*Induction step:*  
+Assume the invariant holds for window `[l … r-1]`.  
+Now element `x = nums[r]` is added.
+
+*Case 1 – `x` already present (`freq[x] > 0`)*  
+The set of distinct values stays the same, consequently the imbalance
+does not change. The algorithm leaves `imbalance` unchanged – invariant
+holds.
+
+*Case 2 – `x` a new distinct value*  
+Let `[l … r-1]` contain the distinct values
+
+```
+… , pred , (gap) , succ , …
+```
+
+where `pred` (respectively `succ`) is the closest smaller (resp. larger)
+distinct value if it exists.
+
+The imbalance contribution of the window `[l … r]` changes only in
+relation to these neighbours.
+
+* The old gap between `pred` and `succ` (if both exist) is no
+  longer a gap.  
+  The algorithm removes `1` from `imbalance` *iff*
+  `succ - pred > 1` – exactly the old gap that was counted.
+
+* New gaps `pred – x` and `x – succ` may be created.  
+  Each is counted by the algorithm if and only if its difference is
+  larger than one.
+
+All other neighbouring pairs stay unchanged.  
+Thus the updated `imbalance` equals the imbalance number of the new
+window `[l … r]`.
+
+Hence by induction the lemma holds for every `r`. ∎
+
+
+
+##### Lemma 2  
+For every subarray `[l … r]` the algorithm adds its imbalance number
+exactly once to `answer`.
+
+**Proof.**
+
+By construction the inner loop visits each pair `(l,r)` exactly once.
+Because of Lemma&nbsp;1 the variable `imbalance` at this moment equals
+the imbalance number of `[l … r]`.  
+The algorithm performs `answer += imbalance`, therefore the contribution
+of this subarray is added once, never omitted or duplicated. ∎
+
+
+
+##### Theorem  
+`answer` returned by the algorithm equals the sum of imbalance numbers
+of all subarrays of the input array.
+
+**Proof.**
+
+All `n(n+1)/2` subarrays are visited exactly once (Lemma&nbsp;2) and
+their imbalance numbers are summed into `answer`.
+Therefore `answer` is precisely the required sum. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Complexity Analysis
+
+```
+Outer loop   :  n  times
+Inner loop   :  1 + 2 + … + n  = n(n+1)/2  iterations
+Per iteration: constant work (bit operations, few arithmetic)
+
+Time   :  O(n²)     (≤ 5·10⁵ operations for n = 1000)
+Memory :  O(n)      (frequency array + small constants)
+```
+
+Both limits easily satisfy the constraints.
+
+
+
+--------------------------------------------------------------------
+
+#### 7.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def sumImbalanceNumbers(self, nums: List[int]) -> int:
+        n = len(nums)
+        ans = 0
+
+        for l in range(n):
+            freq = [0] * (n + 1)      # values are 1..n
+            bitset = 0
+            imbalance = 0
+
+            for r in range(l, n):
+                x = nums[r]
+                if freq[x] == 0:     # new distinct value
+                    p = x - 1        # bit position for x
+
+                    # predecessor
+                    lower_mask = bitset & ((1 << p) - 1)
+                    pred = None
+                    if lower_mask:
+                        pred = lower_mask.bit_length()   # value of predecessor
+
+                    # successor
+                    higher_mask = bitset >> (p + 1)
+                    succ = None
+                    if higher_mask:
+                        r_rel = (higher_mask & -higher_mask).bit_length() - 1
+                        succ = p + 2 + r_rel            # actual value
+
+                    # update imbalance
+                    if pred is not None and succ is not None:
+                        if succ - pred > 1:
+                            imbalance -= 1
+                        if x - pred > 1:
+                            imbalance += 1
+                        if succ - x > 1:
+                            imbalance += 1
+                    elif pred is not None:
+                        if x - pred > 1:
+                            imbalance += 1
+                    elif succ is not None:
+                        if succ - x > 1:
+                            imbalance += 1
+
+                    # add the bit for this new distinct value
+                    bitset |= 1 << p
+
+                freq[x] += 1
+                ans += imbalance
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

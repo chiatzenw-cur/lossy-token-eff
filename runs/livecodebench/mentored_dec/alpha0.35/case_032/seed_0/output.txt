@@ -1,0 +1,565 @@
+<|channel|>analysis<|message|>We need to compute sum over all subarrays of imbalance number. Imbalance number equals number of gaps >1 in sorted subarray. Equivalent to the number of distinct elements pairs with difference >1? Let's analyze.
+
+Given array subarray of length m. After sorting, we count increments by >1 between consecutive sorted elements. Observed that only gaps between unique sorted values? Not exactly: If duplicates, sorted duplicates produce zero gap. So gap only considered between distinct sorted values. Suppose sorted subarray has distinct values v1 ≤ v2 ≤ ... ≤ vk. Then imbalance number equals number of indices where vi+1 - vi > 1. That is (k - 1) - (# of consecutive values where diff=1). i.e., number of missing numbers between distinct values.
+
+We need efficient enumeration for all subarrays up to length 1000 array size n=1000. O(n^2) subarrays, each could compute imbalance using sorting maybe O(n log n) for each would be heavy (n^3). But we can do O(n^2) overall by incremental addition of elements. Maybe we can compute imbalance number incrementally for sliding window.
+
+Observation: For a subarray, imbalance number depends on distinct sorted values. We can maintain multiset of values and number of gaps >1. When we extend subarray by adding new element at right end, the data structure changes: adding a value x may create new gaps or connect gaps. Let's think of maintaining sorted order and track number of adjacent pairs with diff>1. This is similar to "missing difference" count.
+
+Key: For each pair of distinct values that appear, we care if there is a difference >1. That's equivalent to count of adjacency between distinct sorted values with diff>1. But what about multiple duplicates? They don't affect.
+
+Hence we can maintain a sorted multiset of distinct values present in current subarray. Then imbalance number is number of gaps between adjacent distinct values where diff>1. We need to update when we add a new value x.
+
+Let's maintain sorted set of unique values. Initially empty. imbalance = 0.
+
+When adding new value x:
+- If x already present: no change to unique set; imbalance unchanged.
+- If x new: need to insert it into sorted set; find predecessor and successor (nearest lower and higher). 
+- If predecessor pred exists: if x - pred > 1, this is a new gap; otherwise not increasing.
+- If successor succ exists: if succ - x > 1, this is a new gap; otherwise not.
+- Additionally, adding x may fill an existing gap between pred and succ? That happens when pred and succ were adjacent in sorted set and diff>1. But after insertion, we remove that gap (since previously there was a gap between pred and succ). So we need to adjust: if pred and succ exist and succ - pred > 1, then before inserting, that gap counted as 1. After insertion, we will have gaps (pred,x) and (x,succ). If both x-pred >1 and succ-x >1, then we will have two gaps; the old gap replaced by two. So net change = (+increase of gaps) - 1. If one of the new gaps is not >1, we could reduce gain. Let's compute.
+
+Let gapPred = pred exists and (x - pred > 1)
+gapSucc = succ exists and (succ - x > 1)
+gapBefore = pred and succ exist and (succ - pred > 1)
+So new imbalance = imbalance - gapBefore + gapPred + gapSucc.
+
+If pred or succ doesn't exist, gapBefore=0.
+
+Similarly when removing element from left side (for sliding window), we need to handle removal of element value x: if its count becomes zero, we remove from unique set, adjust gaps similarly reversing logic.
+
+We need to iterate over all subarrays; O(n^2) with each addition O(log n) for set operations. Use sortedcontainers? But can't rely on external libs. We can use bisect with a sorted list of unique values. Insertion O(n) per operation would be O(n^3). But we can plan to use balanced BST via built-in `bisect` plus array of counts but we can maintain an array of references by index maybe use "Fenwick tree" for order-statistics? Could store presence and count of gaps via difference array? Wait n <= 1000, O(n^2 log n) 1e6 log 1e3 ~ 1e6*10=1e7 fine. But we need to maintain sorted set with O(log n) operations. Use Python's `bisect` on a list; insertion O(n) worst-case 1000 (small). Each subarray building up will use at most n additions; but we may have many subarrays. But we can use two-pointer with incremental updates: For each left index i, we extend right pointer j from i to n-1 and maintain the data structure. For each step, we update a balanced BST. Complexity O(n^2) operations, each insertion O(log n), but we can maintain sorted list in O(log n) using bisect plus insertion may need O(n) shifting; but n <= 1000, O(n^2 * n) = 1e9 still maybe high but not unrealistic? Let's compute worst-case: n=1000, n^2=1e6; each insertion cost O(n)=1000? 1e6*1000=1e9 operations; too large.
+
+But we can store sorted unique values in a balanced BST by using `bisect` but we will shift list; shifting 1000 elements is negligible; 1e6 * 1000 = 1e9 maybe high but each shift is constant small? Not good.
+
+We can adopt a more efficient approach: maintain counts of each value 1..n and maintain a BIT for presence to get predecessor and successor in O(log n). For each added value x: we can search for predecessor: binary search to find largest value < x with count > 0. Similarly successor. Use BIT or fenwick to support sum queries. For n=1000, O(log n) ~ 10. Good.
+
+Let's design:
+
+- Have array count[1..n] counts of occurrences in current subarray.
+- Have BIT over n indices to support prefix sums: each index has 1 if count>0, else 0. Then we can find predecessor using BIT: find max index < x that has presence 1. Use method: use binary search on Fenwick tree: we can compute prefix sum.
+
+Implementation details: function find_prefix(k) to find smallest index with cumulative sum>=k. For predecessor: we can query prefix sum up to x-1; if sum==0 -> none; else find index with cumulative sum==sum. Use find_kth method.
+
+Similarly, successor: query prefix sum up to x; if sum==total sum: none. else find index with cumulative sum==sum+1.
+
+But we also need to find successor when x present? We'll need to get index > x.
+
+Alternatively we can use a sorted set built with `bisect` on list of values. Since n <= 1000, we can maintain a simple array of presence booleans; for each operation we can find predecessor using a while loop scanning leftwards until presence found; same for successor scanning rightwards. That is O(n) per query; again O(n^3). But maybe still okay? Use naive: For each addition we may scan up to 1000 steps; 1e6*1000=1e9 loops; may not finish.
+
+Let's implement BIT for O(log n) queries. We'll implement Fenwick tree supporting:
+
+- add(idx, delta) for count updates when presence changes.
+
+- sum(idx): prefix sum.
+
+- find_kth(k): returns smallest index such that prefix sum >= k; assume k>=1.
+
+Then to get predecessor: let preCnt = sum(idx-1). if preCnt == 0: none. else pred = find_kth(preCnt).
+
+Similarly successor: let curCnt = sum(idx). total = sum(n). if curCnt == total: none. else succ = find_kth(curCnt+1).
+
+We'll also keep count array to know presence changes; when new value inserted: count[v]++ ; if count[v]==1: we set fenwick add(v,1)
+
+When removing: count[v]--; if count[v]==0: fenwick add(v,-1).
+
+Now we need to maintain imbalance count.
+
+When adding a new distinct value x:
+
+- Determine pre and succ existence.
+
+- Check contributions:
+
+gapBefore = 0
+if pre and succ and succ - pre > 1: gapBefore = 1
+
+gapPred = 0
+if pre and x - pre > 1: gapPred = 1
+
+gapSucc = 0
+if succ and succ - x > 1: gapSucc = 1
+
+imbalance += gapPred + gapSucc - gapBefore
+
+Similarly when deleting a value x that becomes 0, we need to adjust gaps in reverse:
+
+Current unique set before removal: includes x. We'll find pre and succ (before removal). gapPred, gapSucc, gapBefore as above.
+
+We need to compute new imbalance after removal: Remove x. The new gaps that appear: previously had gaps between (pre,x) and (x,succ) if >1, after removal we will have gap between pre and succ if >1.
+
+So new imbalance = old imbalance - (gapPred + gapSucc) + (gapBefore) where gapBefore defined with pre and succ, after removal.
+
+Important to evaluate: The old gaps present before removal were gapPred and gapSucc (that we counted as part of imbalance). After removal, these gaps vanish. Additionally, a new gap perhaps arises between pre and succ if their diff >1. So net change: old_IMB - gapPred - gapSucc + gapBefore.
+
+Check: That's same as we used formula for addition but reversed. So to handle removal, we compute as described.
+
+Thus we can maintain imbalance variable for current subarray.
+
+Algorithm:
+
+Let n = len(nums). We'll have a result sumImb = 0.
+
+For each left in range(n):
+    reset count array all zeros, fenwick zeros, imbalance = 0.
+    for right in range(left, n):
+        x = nums[right]
+        # add
+        if count[x]==0:
+            # compute pre and succ
+            pre = find_predecessor(x)
+            succ = find_successor(x)
+            gapBefore = 0 if not (pre and succ and succ - pre > 1) else 1
+            gapPred = 0 if not (pre and x - pre > 1) else 1
+            gapSucc = 0 if not (succ and succ - x > 1) else 1
+            imbalance += gapPred + gapSucc - gapBefore
+            fenwick.add(x,1)
+        count[x] += 1
+        sumImb += imbalance
+
+    # after finishing right for this left, we can reset counts? Already reset above.
+
+This is O(n^2 log n) operations; n=1000 -> ~1e6 operations * 10 ~ 1e7 okay.
+
+We need a Fenwick class of size n+2.
+
+Find predecessor: We'll implement
+
+def find_predecessor(x):
+    sum_before = fenwick_sum(x-1)
+    if sum_before == 0:
+        return None
+    return find_kth(sum_before)
+
+Similarly find_successor:
+
+def find_successor(x):
+    sum_x = fenwick_sum(x)
+    total = fenwick_sum(n)
+    if sum_x == total:
+        return None
+    return find_kth(sum_x+1)
+
+Edge: Since fenwick indices are 1..n inclusive.
+
+Implementation details:
+
+Fenwick initialization as zeros.
+
+Implement fenwick_add(i, delta): while i <= n: bit[i] += delta; i += i & -i
+
+sum: while i>0: res += bit[i]; i -= i & -i
+
+find_kth(k): find smallest i such that prefix sum >= k. Standard binary lifting.
+
+Because n <= 1000, we can compute highest power of two <=n but we can use 1<<10.
+
+Implementation of find_kth:
+
+def find_kth(k):
+    idx = 0
+    bitmask = 1 << (n.bit_length() - 1)
+    while bitmask != 0:
+        t = idx + bitmask
+        if t <= n and self.bit[t] < k:
+            idx = t
+            k -= self.bit[t]
+        bitmask >>= 1
+    return idx + 1
+
+Will use fenwick instance variable size n.
+
+Then in loops.
+
+Edge:
+
+When x is 1: predecessor may none; succ logic right.
+
+Now, we also need to handle removal when x count decrements to zero but we won't be removing until we create new left boundary. For each new left we reset entire structures; so we don't need to handle removal. That reduces complexity: For each left we build subarray from scratch. However, resetting count arrays of size n+1 each iteration still O(n^2) but ok.
+
+Alternatively we can reuse but we need to reset each time. Reset arrays of zeros each left: O(n) per left, total O(n^2). Fine.
+
+Important: We must reset fenwick to zeros each left; we can reinitialize.
+
+Implementation:
+
+for left in range(n):
+    cnt = [0]*(n+1)   # index 1..n
+    bit = [0]*(n+1)
+    fenwick = Fenwick(n) # we create new.
+
+Using local classes.
+
+Note: In each left iteration we may need to use separate fenwick but we only call O(n) times. So okay.
+
+Thus final solution.
+
+Let's test with examples.
+
+Example 1: [2,3,1,4]
+Subarrays:
+Indices enumerated: 
+We will compute sum.
+
+I'll quickly run small mental.
+
+We trust algorithm.
+
+Edge Cases: duplicates produce no new gaps.
+
+Let's test scenario: arr [1,3,3,3,5].
+Should produce 8.
+
+Let's implement quick manual test in mind by code? Let's trust.
+
+Potential bug: using 1-based index; nums values are 1..n but n could be bigger than max value? but constraints guarantee <= n. So fine.
+
+Now produce final solution.
+
+Complexities: O(n^2 log n) time, O(n) memory.
+
+Let's produce final answer explanation and code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a subarray `sub` let  
+
+```
+sarr = sorted(sub)
+```
+
+The *imbalance number* of `sub` is  
+
+```
+cnt = |{ i : 0 ≤ i < len(sarr)-1  and  sarr[i+1] – sarr[i] > 1 }|
+```
+
+When two consecutive elements of the sorted subarray differ by more than one
+their “gap” does not contain a number that is present in the subarray.
+So the imbalance number is simply the number of gaps between **adjacent
+distinct values** that contain a missing integer.
+
+--------------------------------------------------------------------
+
+#### 1.   Observations
+
+* Only the set of *distinct* values inside the subarray matters, not how
+  many times each value occurs.
+* Let the distinct values be `v1 < v2 < … < vk`.
+  Then
+
+```
+imbalance(sub) =  (k-1) – (# of neighbouring pairs (vi,vi+1) with vi+1 – vi == 1)
+```
+
+So we only have to keep track of the distinct values and the
+number of “bad” gaps (difference > 1) between consecutive distinct values.
+When a new value is inserted in the subarray we can update the
+imbalance number only in **O(log n)** time.
+
+--------------------------------------------------------------------
+
+#### 2.   Data structures
+
+* `cnt[v]` – number of occurrences of value `v` in the current subarray
+  (array of size `n+1`).
+* `BIT` – a Fenwick tree of size `n` that stores  
+  `1` if `cnt[v] > 0` (i.e. `v` is present) else `0`.  
+  With the Fenwick tree we can find the predecessor and successor of
+  a value in `O(log n)`.
+
+The Fenwick tree also supports
+
+* `add(v, delta)` – increase the presence flag of `v` by `delta`
+  (`+1` when a new value appears, `-1` when it disappears).
+* `prefix_sum(v)` – number of present values `≤ v`.
+* `find_kth(k)` – smallest index `i` such that `prefix_sum(i) ≥ k`.
+
+--------------------------------------------------------------------
+
+#### 3.   Updating imbalance when a *new* value appears
+
+Assume we are inserting value `x` that was not present before.
+Let `pre` be the nearest present value `< x` and `succ` the nearest
+present value `> x`.  
+(They may be `None` if they do not exist.)
+
+```
+gapBefore = 1   if  pre and succ and succ - pre > 1   else 0
+gapPred   = 1   if  pre and x - pre   > 1   else 0
+gapSucc   = 1   if  succ and succ - x > 1   else 0
+
+imbalance += gapPred + gapSucc - gapBefore
+```
+
+*`gapBefore`* represents the gap that existed between `pre` and `succ`
+before inserting `x`.  
+After inserting `x` that gap disappears, but two new gaps appear,
+hence the above formula.
+
+--------------------------------------------------------------------
+
+#### 4.   Removing a value is not needed
+
+For the algorithm we fix a left border `l` and extend the right border
+`r` from `l` to `n-1`.  
+After finishing the inner loop we discard all data structures and
+start again with a new left border.  
+Therefore we never need to remove a value from the structure – the
+process of restoring a clean state is cheaper than handling deletions.
+
+--------------------------------------------------------------------
+
+#### 5.   Algorithm
+
+```
+ans = 0
+for l in [0 .. n-1]:
+    reset cnt[1..n] = 0
+    initialize empty BIT
+    imbalance = 0
+    for r in [l .. n-1]:
+        x = nums[r]
+        if cnt[x] == 0:               # new distinct value
+            find pre and succ using BIT
+            compute gaps as described above
+            imbalance += gapPred + gapSucc - gapBefore
+            BIT.add(x, 1)
+        cnt[x] += 1
+        ans += imbalance
+return ans
+```
+
+--------------------------------------------------------------------
+
+#### 6.   Correctness Proof  
+
+We prove that the algorithm returns the sum of imbalance numbers of all
+subarrays.
+
+---
+
+##### Lemma 1  
+For a subarray `S` and a value `x` that is already present in `S`,
+adding one more occurrence of `x` does not change the imbalance number
+of `S`.
+
+**Proof.**
+
+The imbalance number depends only on the **distinct** values inside the
+subarray (Observation 1).  
+Adding another copy of an existing value does not change the set of
+distinct values, hence the imbalance is unchanged. ∎
+
+
+
+##### Lemma 2  
+Let `S` be a subarray and let `x` be a value not present in `S`.  
+Let `pre` be the greatest distinct value of `S` that is `< x`
+(and `None` if it does not exist) and `succ` be the smallest distinct
+value of `S` that is `> x` (also `None` if it does not exist).
+Let `gapBefore` be 1 if `pre` and `succ` exist and `succ - pre > 1`,
+otherwise 0.
+Let `gapPred` be 1 if `pre` exists and `x - pre > 1`, otherwise 0.
+Let `gapSucc` be 1 if `succ` exists and `succ - x > 1`, otherwise 0.
+
+Then the imbalance number of `S ∪ {x}` equals
+
+```
+imbalance(S) + gapPred + gapSucc – gapBefore .
+```
+
+**Proof.**
+
+Before inserting `x` the subarray `S` contains the distinct values
+
+```
+…, pre, …, succ, …
+```
+
+with all pairs of adjacent distinct values counted in
+`imbalance(S)`.  
+After inserting `x` the ordering of distinct values becomes
+
+```
+…, pre, x, …, succ, …
+```
+
+* The pair `(pre, succ)` no longer exists.  
+  It contributed `gapBefore` to the previous imbalance.
+* The pair `(pre, x)` exists and contributes `gapPred`.
+* The pair `(x, succ)` exists and contributes `gapSucc`.
+
+There are no other changes in the set of distinct values,
+hence the new imbalance is the old one plus the two new gaps
+minus the removed gap. ∎
+
+
+
+##### Lemma 3  
+During the inner loop, just before adding `nums[r]` to the current subarray
+`[l … r-1]` the algorithm keeps the exact imbalance number of this
+subarray in the variable `imbalance`.
+
+**Proof by induction on the length of the inner loop.**
+
+*Base.*  
+For the first iteration (`r = l`) the subarray is empty.
+`imbalance = 0` is correct.
+
+*Induction step.*  
+Assume after processing positions `l … r-1` the variable is correct.
+Now we insert `x = nums[r]`.
+
+* If `cnt[x] > 0` (i.e. `x` already present), by Lemma&nbsp;1 the
+  imbalance does not change. The algorithm does not change
+  `imbalance` – still correct.
+
+* If `cnt[x] == 0` (a new distinct value), the algorithm
+  finds `pre`, `succ`, computes the three gaps and updates
+
+```
+imbalance += gapPred + gapSucc – gapBefore
+```
+
+which, by Lemma&nbsp;2, makes `imbalance` equal to the imbalance of the
+new subarray `[l … r]`. ∎
+
+
+
+##### Lemma 4  
+Immediately after the statement `ans += imbalance` the algorithm adds
+to `ans` exactly the imbalance number of the subarray `[l … r]`.
+
+**Proof.**
+
+By Lemma&nbsp;3, just before this statement `imbalance` equals the
+imbalance of `[l … r]`; hence adding it to `ans` is correct. ∎
+
+
+
+##### Theorem  
+After all iterations the algorithm returns
+
+```
+Σ  imbalance(x)   over all subarrays x of nums .
+```
+
+**Proof.**
+
+The outer loop iterates over all possible left borders `l`.
+For a fixed `l` the inner loop iterates over all right borders
+`r ≥ l`, therefore all subarrays `nums[l … r]` are considered
+exactly once.  
+By Lemma&nbsp;4 the value added to `ans` for each pair `(l,r)`
+equals the imbalance of that subarray.  
+Summing over all pairs yields the required sum. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 7.   Complexity Analysis
+
+Let `n = len(nums)`.
+
+*The outer loop* runs `n` times.  
+*The inner loop* runs `n-l` times → total `n(n+1)/2 = O(n²)` iterations.
+
+All operations inside the loops:
+
+* Fenwick add / prefix sum / find_kth – `O(log n)`  
+  (`n ≤ 1000`, `log n ≤ 10`).  
+* All other operations – `O(1)`.
+
+Hence
+
+```
+Time   :  O(n² log n)  ≤ 1.0 × 10⁷  operations   (fast enough)
+Memory :  O(n)         (arrays + Fenwick tree)
+```
+
+--------------------------------------------------------------------
+
+#### 8.   Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Fenwick:
+    """Fenwick tree (Binary Indexed Tree) for prefix sums."""
+    def __init__(self, n: int):
+        self.n = n
+        self.bit = [0] * (n + 1)
+
+    def add(self, idx: int, delta: int) -> None:
+        """Add delta to position idx (1‑based)."""
+        i = idx
+        while i <= self.n:
+            self.bit[i] += delta
+            i += i & -i
+
+    def prefix_sum(self, idx: int) -> int:
+        """Sum of [1, idx] (1‑based)."""
+        res = 0
+        i = idx
+        while i > 0:
+            res += self.bit[i]
+            i -= i & -i
+        return res
+
+    def find_kth(self, k: int) -> int:
+        """Return smallest index i with prefix_sum(i) >= k (k ≥ 1)."""
+        idx = 0
+        bitmask = 1 << (self.n.bit_length() - 1)
+        while bitmask:
+            t = idx + bitmask
+            if t <= self.n and self.bit[t] < k:
+                idx = t
+                k -= self.bit[t]
+            bitmask >>= 1
+        return idx + 1
+
+
+class Solution:
+    def sumImbalanceNumbers(self, nums: List[int]) -> int:
+        n = len(nums)
+        ans = 0
+
+        # all values are between 1 and n inclusive
+        for l in range(n):
+            cnt = [0] * (n + 1)          # occurrences of each value
+            bit = Fenwick(n)            # 1 if value present
+            imbalance = 0
+
+            for r in range(l, n):
+                x = nums[r]
+                if cnt[x] == 0:                 # new distinct value
+                    # predecessor
+                    pre = None
+                    pref_cnt = bit.prefix_sum(x - 1)
+                    if pref_cnt:
+                        pre = bit.find_kth(pref_cnt)
+
+                    # successor
+                    succ = None
+                    succ_cnt = bit.prefix_sum(x)
+                    total = bit.prefix_sum(n)
+                    if succ_cnt < total:
+                        succ = bit.find_kth(succ_cnt + 1)
+
+                    # compute gaps
+                    gap_before = 1 if (pre is not None and succ is not None
+                                         and succ - pre > 1) else 0
+                    gap_pred   = 1 if (pre is not None and x - pre > 1) else 0
+                    gap_succ   = 1 if (succ is not None and succ - x > 1) else 0
+
+                    imbalance += gap_pred + gap_succ - gap_before
+                    bit.add(x, 1)
+
+                cnt[x] += 1
+                ans += imbalance
+
+        return ans
+```
+
+The program follows exactly the algorithm proven correct above
+and conforms to the required function signature.

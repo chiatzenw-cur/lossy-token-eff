@@ -1,0 +1,868 @@
+<think>
+Okay, I need to solve this problem where I have to find the longest valid substring of a given word such that none of its substrings are present in the forbidden list. Let me think about how to approach this.
+
+First, let me understand the problem again. A valid substring is one where none of its substrings are in the forbidden array. So for every possible substring of the word, I have to check if any of its substrings are in forbidden. But checking all possible substrings directly would be way too slow, especially since the word can be up to 1e5 characters long. That's going to be O(n^2) time, which isn't feasible.
+
+Wait, the constraints say that forbidden words can be up to 10 characters long. Oh right, the forbidden[i].length is up to 10. That's a useful piece of information. So maybe I need to leverage that.
+
+Let me think: For any position in the word, when checking for forbidden substrings, I only need to look at substrings of length up to 10. Because if a forbidden substring is longer than 10, then it's not possible since the forbidden words are limited to 10. Wait, no. The forbidden list can have words up to 10 characters. So for example, if a forbidden word is of length 3 characters, any substring of the word that's longer than 3 characters could contain that forbidden substring as a substring. So, when checking validity of a substring, we need to check all possible substrings of the current substring. But that's again O(n^2) in the worst case.
+
+But given that forbidden words are up to 10 characters long, perhaps there's a way to optimize. For example, for any position in the word's substring, we can check only the substrings of length up to 10. Because if a forbidden substring exists, it must be of length <=10. Therefore, when checking if a substring is valid, we can look at all recent possible substrings (up to length 10) ending at the current position.
+
+Wait, here's an idea: For each position i in the word, we can check all substrings ending at i with lengths from 1 to up to 10. Because if any of those substrings is in forbidden, then the current substring (starting from some position j to i) is invalid. So, for example, if the forbidden list has a substring of length 3, then whenever we process a character at position i, we need to check the substrings ending at i with lengths 1, 2, 3, etc., up to the maximum forbidden length. So, maybe we can track the earliest position where a forbidden substring ends, and adjust our window accordingly.
+
+This sounds like a sliding window approach. Let me think. The sliding window approach is often used for substring problems. But how can we apply it here?
+
+Let me think about the problem in terms of sliding window. The idea is to maintain a window [left, right], and for each right, we check if any forbidden substring exists in the current window. If yes, we need to move left to the right of the earliest position where the forbidden substring was found.
+
+But how do we efficiently check for forbidden substrings in the current window?
+
+Since forbidden substrings can be up to length 10, for each right, we can check the substrings ending at right with lengths 1 to max_len (max length of forbidden words). For example, if the max forbidden length is 3, we check substrings of length 1, 2, 3 ending at right. For any of those substrings, if it exists in forbidden or is part of forbidden, then we need to adjust the left boundary.
+
+Wait, but when checking for forbidden substrings, we need to make sure that none of the substrings in the current window are forbidden. So, when we add a new character to the window (i.e., expand the right to right+1), there's a possibility that some forbidden substrings end at this new position. So for each new right, we need to check all possible substrings ending at right with lengths up to max_len. If any of those substrings is in forbidden, then we need to update the left to be the position after the start of that forbidden substring.
+
+Wait, but how do we find the earliest left that allows the window to not contain any forbidden substrings?
+
+Let me think. For instance, suppose we have a forbidden substring of length L. When we process position right, we check the substrings from right - L + 1 to right, right - L + 2 to right, etc., up to the entire substring from 0 to right. Wait, no. For each possible length l (from 1 to max_len), we can check the substring ending at right of length l. For example, if max_len is 3, then for each position right, we check substrings of length 1, 2, 3. For each of these substrings, if it is in forbidden, then the current window can't include that substring. So, the left must be set to (current position - l + 1 + 1) = current position - l + 2? Or wait, if the substring is from position i to right (inclusive), then the start is i = right - l + 1. So, if that substring is forbidden, then the left bound must be moved to (i + 1), because any window that includes this substring would be invalid. Therefore, for each forbidden substring found at position right, we need to take the earliest possible position where the forbidden substring starts and move left to that position + 1.
+
+But for each right, we need to check all possible l up to max_len. So for example, for the current right, check all possible substrings ending at right with lengths up to max_len. Then, for each such substring, if it's in forbidden, then we have to update the left to be the maximum of its current value and (start position of the forbidden substring + 1). Because if there are multiple forbidden substrings ending at right, we need to take the one that starts the earliest, so that we move the left boundary as far as needed.
+
+Wait, no. Because if multiple forbidden substrings are found, for example, a substring of length l1 and l2 (say l1 < l2), then if the forbidden substring of length l2 starts at position i, then the forbidden substring of length l1 may start at i + (l2 - l1). But when checking for forbidden substrings, the earliest start would be the one that requires the left to be moved the furthest. Because if the forbidden substring of length l starts at position i, then any window that includes i to right is invalid. Therefore, for the current right, the left has to be adjusted to the maximum of all possible (start position + 1) for forbidden substrings ending at right. So for each right, we check for all possible l (from 1 to max_len), and for each l, check if the substring ending at right with length l is in forbidden. If it is, then the left boundary has to be set to max(left, (right - l + 1) + 1) = max(left, right - l + 2). 
+
+So, the approach is:
+
+- Preprocess forbidden words into a set for O(1) lookups. Also, find the maximum length of forbidden words, say max_len.
+
+- Initialize left = 0, and the maximum length found so far is 0.
+
+- Iterate over each right in 0 to len(word)-1:
+
+   - For l in 1 to max_len:
+
+      - Check if right - l + 1 is >=0. If not, break.
+
+      - Take the substring word[right - l + 1 : right + 1], which is the substring ending at right with length l.
+
+      - If this substring is in forbidden, then set left to max(left, right - l + 2). Because the substring starts at (right - l + 1), so the earliest possible left that is valid is (right - l + 1 + 1) = right - l.
+
+      - (Wait, the substring is from start to right. So the start is right - l +1. If that substring is forbidden, then any window that includes this substring is invalid. So the left must be set to (start + 1) = right - l, so that the window starts from right - l + 1, but left is right - l + 1, so the window would not include that substring. Wait, perhaps I should think in terms of the current window being [left, right], and for a forbidden substring of length l ending at right, the forbidden substring starts at (right - l + 1). So the earliest possible left that allows the window to be valid is (right - l + 1) + 1 = right - l + 2. So the left has to be moved to the maximum between its current value and this value.
+
+   - After checking all possible l's for this right, the current window is [left, right]. So the current length is right - left + 1. We can compare this to the maximum length.
+
+So, for each right, we check the possible substrings ending at right with lengths up to max_len, and adjust left accordingly.
+
+This approach is O(n * max_len) time, which given that max_len is up to 10, and n is 1e5, this would be acceptable (1e6 operations).
+
+But why does this work? Let me think. Because whenever a forbidden substring occurs, we adjust the left to ensure that it's excluded. For example, suppose there's a forbidden substring of length 3 ending at position right. Then, the window left is moved to right - 3 + 1 + 1 = right - 2 + 1 = right - 1? Wait, let me recalculate:
+
+If a forbidden substring of length l is found ending at right, then the start index is right - l + 1. To exclude this forbidden substring, the window's left must be set to (start + 1) = right - l + 2. So, for example, if right is 5, and l is 3, then start is 3. So left must be at least 4. So the window [left, right] is [4,5], which excludes the substring [3,5]. So, the left is set to the maximum between its current value and this new value. 
+
+By doing this for all possible l's (from 1 to max_len), we ensure that any forbidden substring ending at current right is excluded because the left is adjusted. 
+
+But wait, this approach ensures that for the current window, none of the substrings ending at right are forbidden. However, there might be forbidden substrings that are not ending at right but are in the window. How to handle those?
+
+Ah, but the problem states that the entire substring [left, right] must not have any forbidden substrings. However, the approach only checks the substrings ending at right. How can we be sure that there are no forbidden substrings in the window [left, right] that don't end at right?
+
+Hmm. That's a problem. For example, suppose in the window [left, right], there's a forbidden substring that starts at some position earlier than right. But this approach only checks for forbidden substrings that end at right. So it's possible that some forbidden substrings are present in the window but not ending at right. How can that be handled?
+
+Wait, but the sliding window approach requires that we check for forbidden substring presence. But how can we ensure that all forbidden substrings in the current window are not present?
+
+This approach seems to only check for forbidden substrings that end at the current right. So if there's a forbidden substring inside the window, but not ending at right, how can we detect it?
+
+For instance, let's say the forbidden substring is "ab", and the current window is [left, right]. Suppose the window has a substring "ab" somewhere inside. But since we are only checking substrings that end at right, we might miss that forbidden substring. 
+
+Wait, but that's not possible if we process the window correctly. Because when we process right, the previous steps would have already adjusted the left. Let me think again. Let's take an example. Suppose the forbidden list contains "ab". Let's say the current window is [left, right]. Suppose that the window includes "ab" at positions i and i+1. But during processing of right = i+1, we check for substrings ending at right. So for l=2, we check the substring ending at right with length 2, i.e., word[i..i+1], which is "ab". Then, we would set left to i+1 - 2 + 1 +1? Wait, let me recheck:
+
+For substring length l=2, the start is right - l + 1 = (i+1) - 2 + 1 = i. So the substring is from i to right (i+1). So if this is forbidden, then left is set to max(left, i + 1). So the left would be adjusted to i+1. Which would ensure that the window starts from i+1, so that the forbidden substring "ab" is excluded. Therefore, for any forbidden substring that ends at right, the left is adjusted. 
+
+But what about a forbidden substring between left and right, but not ending at right?
+
+For example, consider a forbidden substring that ends at position right-1. Suppose during processing of right-1 step, we adjusted left accordingly. Then, when processing right, the window would have left that is already adjusted, so that previous forbidden substrings are not present. 
+
+So, this approach ensures that, for each step, any forbidden substring that ends at current right is handled. But what about forbidden substrings that are in the window and end before right?
+
+Wait, for example, suppose that during processing of right, the window is [left, right]. But there's a forbidden substring that ends at position right-1, but during processing of right-1, the left was adjusted to exclude that. So when we process right, the left is already set to a position where all forbidden substrings ending at positions up to right-1 have been handled. Therefore, the current window [left, right] would have all possible forbidden substrings that end at any position up to right handled. 
+
+So the logic here is that whenever a forbidden substring is present, it will be detected when processing the right end of that substring. For example, a forbidden substring that ends at position k is detected during processing of k. So during processing of k, the left is adjusted to exclude that substring. So when processing right =k+1Draft, the left is already adjusted. Thus, the current window [left, right] does not contain any forbidden substrings. 
+
+Therefore, this approach should work. Because any forbidden substring must end at some position, and when that position is processed, the left is adjusted so that the forbidden substring is excluded. Therefore, during the processing of right, all forbidden substrings that could be in the window are already handled, and the only possible forbidden substrings that could be in the current window are those that end at right. 
+
+So, this approach is sufficient. 
+
+Therefore, the algorithm would be:
+
+- Preprocess forbidden into a set, and find max_len (the maximum length of forbidden words).
+
+- Initialize left = 0, max_len = 0.
+
+- For each right in 0 to len(word)-1:
+
+   - For l in 1 to max_len:
+
+      - Check if right - l + 1 >=0. If not, break.
+
+      - substring = word[right - l +1 : right +1]
+
+      - if substring is in forbidden:
+
+          - left = max(left, right - l + 2) 
+
+   - Update the max_len with (right - left + 1)
+
+So, the key insight is that we only need to check for forbidden substrings ending at current right, because when we process each right, we adjust the left so that all forbidden substrings that end at positions up to right are excluded. 
+
+Now, let's test this logic with the examples.
+
+Take example 1: word = "cbaaaabc", forbidden = ["aaa","cb"]
+
+max_len is 3 (since "aaa" is length 3, "cb" is 2).
+
+Processing each right:
+
+Let's walk through the example:
+
+The word is c b a a a a b c. Let's index from 0 to 7.
+
+Forbidden set is {"aaa", "cb"}.
+
+Left starts at 0.
+
+For right=0 (char 'c') palette:
+
+Check l from 1 to 3:
+
+l=1: substring is 'c' not in forbidden. 
+
+l=2: right - l +1 = 0 -2 +1 = -1 → invalid. So loop breaks.
+
+So left remains 0. current window is 0-0, length 1. max is 1.
+
+right=1 (char 'c').
+
+Check l=1: substring is 'b' → not in forbidden. 
+
+l=2: substring is 'cb' → which is in forbidden. So left = max(0, 1 -2 +2) = max(0, 1) → left=1. 
+
+Then current window is 1-1 (length 1). Max remains 1.
+
+right=2 (char 'a'):
+
+Check l=1: 'a' not forbidden. 
+
+l=2: right - l +1 = 2 -2 +1 = 1 → substring word[1:3] is 'ba' not in forbidden.
+
+l=3: right - l! +1 = 2-3 +1 = 0 → substring word[0:3] is 'cba' → not forbidden. 
+
+So left remains 1.
+
+Current window is 1-2, length 2 → max is 2.
+
+right=3 (char 'a'):
+
+Check l=1: 'a' not forbidden.
+
+l=2: substring from 3-2+1=2 → 'aa', not forbidden.
+
+l=3: substring from 3-3+1=1 → word[1:4] is 'baa' → not forbidden.
+
+l=4? No, since max_len is 3.
+
+So left remains 1. current window length 3 (1-3), which is 3. max is 3.
+
+right=4 (char 'a'):
+
+Check l=1: 'a' not forbidden.
+
+l=2: substring 4-2+1=3 → word[3:5] is 'aa' → 2 letters, not forbidden.
+
+l=3: substring from 4-3+1=2 → word[2:5] is 'aaa' → which is forbidden. So left is updated to max(1, 4-3+2) = max(1,3) → left becomes 3.
+
+So current window is 3-4 (length 2). max remains 3.
+
+right=5 (char 'a'):
+
+Check l=1: 'a' not forbidden.
+
+l=2: substring from 5-2+1=4 → word[4:6] is 'aa' → not forbidden.
+
+l=3: substring from 5-3+1=3 → word[3:6] is 'aaa' → forbidden. So left becomes max(3,5-3+2) = max(3,4) → 4. 
+
+current window is 4-5 → length 2. max remains 3.
+
+right=6 (char 'b'):
+
+Check l=1: 'b' not forbidden.
+
+l=2: substring from 6-2+1=5 → word[5:7] is 'ab' → not forbidden.
+
+l=3: substring mixture 6-3+1=4 → word[4:7] is 'aab' → not forbidden. 
+
+So no forbidden found. left remains 4. current window is 4-6 (length 3). max is 3. 
+
+But wait the example says the answer is 4. Let's see.
+
+Wait, perhaps I made a mistake. Let me check the example again.
+
+Wait example 1's input is word = "cbaaaabc", which is 8 characters. The forbidden is ["aaa","cb"].
+
+The correct output is 4. Let's see when the window becomes 4 characters.
+
+Let me check when right=6 (the 'b' at position 6). The current left is 4. So the window is positions 4 (a),5 (a),6 (b) → length 3. 
+
+Now, processing right=7 (the 'c' at position 7).
+
+Check l from 1 to 3:
+
+l=1: 'c' not forbidden.
+
+l=2: substring from 7-2+1 = 6 → position 6-7 is 'bc', not forbidden.
+
+l=3: substring from 7-3+1=5 → positions 5-7: 'abc' → not forbidden.
+
+So no forbidden found. current window is left=4, right=7 → length 7-4+1 = 4. Which is the maximum. That's the desired answer.
+
+So the algorithm would capture this. So during right=7, the window is 3-7 (since left was 4?), but wait the left is 4. So the window is 4 to 7, which is 4 characters. So yes, that gives the answer of 4.
+
+So the algorithm works here.
+
+Another example: example 2: word = "leetcode", forbidden = ["de","le","e"]
+
+Forbidden words are of lengths 2, 2, 1. So max_len is 2.
+
+So, for each right, check l=1, 2.
+
+Let me see:
+
+The word is l e e t c o d e. So indexes 0-7.
+
+Forbidden is "e", "le", "de".
+
+So let's process:
+
+Initially left=0.
+
+right=0 (char 'l'):
+
+l=1: 'l' not forbidden. l=2: can't, since right is 0. So left remains 0. window length 1. max=1.
+
+right=1 (char 'e'):
+
+Check l=1: 'e' is forbidden. So left is set to max(0, 1 -1 + 2) → 1 -1+2 = 2. So left becomes 2. 
+
+Then check l=2: substring from 0 to 1 → 'le' which is forbidden. So left is set to max(2, 1-2 +2) = max(2, 1) → 2. 
+
+So left is 2. current window is 2-1? Wait, no. Wait right is 1. So the window is [2,1], which is invalid. That suggests that after processing right=2, the left is set to 2. Wait perhaps I made a mistake here. Let me re-express.
+
+Wait when right is i, for l=1, the substring is word[i - l + 1 ... i]. For l=1, it's word[i].
+
+So for right=1, l=1: start is 1-1+1 = 1. So substring is word[1], which is 'e' → forbidden. So left is set to max(0, 1-1 +2) = max(00, 2) → left becomes 2. 
+
+So the window is left=2, right=1. Which is invalid. But in reality, the window is left=2 and right=1? That can't be. So that suggests that in the code, for each right, after processing, we can have left > right, which is an invalid window. But that's okay, because when that happens, the current window length is 0. 
+
+But then, for right=1, the current window is invalid, so the maximum is still the previous max (1). 
+
+But in the example, the answer is 4, which is the length of the longest valid substring. Let me try to process further.
+
+right=2 (char 'e'):
+
+Check l=1: substring is 'e' → forbidden. left becomes max(2, 2-1+2) = max(2,3) → 3. 
+
+Check l=2: start = 2-2+1 = 1. substring word[1:3] is 'ee' → not in forbidden. So no change. 
+
+So left is 3. current window is [3,2], length 0. So max remains 1.
+
+right=3 (char 't') (position 3):
+
+Check l=1: 't' is allowed. 
+
+Check l=2: start=3-2+1=2, substring word[2:4] is 'et' → not forbidden. 
+
+So left remains 3, current window is [3,3] → length 1. max remains 1.
+
+right=4 (char 'c'):
+
+Check l=1: 'c' allowed. 
+
+l=1, l=2: start is 4-2+1=3. substring is 'tc' → not forbidden. 
+
+current window is [3,4], length 2. max is 2.
+
+right=5 (char 'o'):
+
+Check l=1: 'o' allowed. 
+
+l=2: start=5-2+1=4. substring 'co' → not forbidden. So left remains 3. window length is 3 (positions 3-5). max becomes 3.
+
+right=6 (char 'd'):
+
+Check l=1: 'd' allowed. 
+
+l=2: start is 6-2+1=5. substring 'od' → not forbidden. 
+
+current window length 4 (3-6). max is 4. 
+
+right=7 (char 'e'):
+
+Check l=1: 'e' is forbidden. So left is max(3,7-1+2) → 7-1+2 = 8 → left becomes 8. 
+
+Then check l=2: start=7-3+1= 7-2+1=6. substring word[6:8] is 'de', which is forbidden. So left is max(8, 6+1) → 7? Wait:
+
+For l=2, start is 6 → substring is word[6:7+1] → word[6] and 7 → 'de' which is forbidden. So the start is 6, so left is set to max(current left (8), 6+1 = 7) → 8 remains. 
+
+So after processing l=1 and l=2, left is 8. current window is [8,7], which is invalid. So the window length (right - left +1) is 7-8+1 = 0. 
+
+So the maximum is 4, which matches the example. 
+
+So this approach works for the example.
+
+Now, what about the case where forbidden has a substring longer than the max allowed. For example, if forbidden has a substring of length 10. But according to the constraints, forbidden[i].length is up to 10. So the code will set max_len to 10. So for each right, we check l up to 10. 
+
+So the code needs to process forbidden words and find the maximum length of forbidden words. 
+
+Now, for the code implementation:
+
+First, we need to process forbidden into a set, and find max_len.
+
+Then, for each right in 0..n-1, check for all possible l from 1 to max_len. 
+
+But the code needs to take into account that for l steps, the start index (right - l +1) must be >=0. So for l in 1 to max_len:
+
+if (right - l +1) < 0 → break. 
+
+Wait, for example, if right is 0, then for l=1, start is 0, but for l=2, start is -1. So in that case, we break. But how? Because for l from 1 to max_len (say 3), we need to check for l values where right - l +1 >=0. So for each l, check if it's possible. For example, if the current right is 0, then l can be at most 1. So for l from 1 to max_len, but in practice, we check for l up to min(max_len, right + 1). 
+
+So perhaps we can loop l from 1 to max_len, and for each l, check if (right - l +1) >=0.
+
+But for l larger than (right +1), the start is negative. Therefore, for each l in 1..max_len:
+
+start = right - l +1
+
+if start <0 → skip.
+
+Else, check substring word[start:right+1], which is of length l.
+
+So in code:
+
+for l in range(1, max_len +1):
+
+    start = right - l + 1
+
+    if start < 0:
+
+    break
+
+    substr = word[start: right+1]
+
+    if substr in forbidden:
+
+        left = max(left, start + 1)
+
+So, for example, when right is 0, l=1: start =0, check substr. For l=2, start is 0-2+1= -1 → break.
+
+So the loop over l would be from 1 to max_len, but for each l, we check if start is >=0. 
+
+But how to loop? Because for l=1 to max_len, but if the start is negative for some l, then we can break. Wait, no. For example, if the right is 2 and max_len is 3. For l=1, start=2, for l=2, start=1, for l=3, start=0. So no problem. But if the right is 1, then for l=3, start =1-3+1= -1. So for l=3, it's invalid. So for l=1, 2, 3, we need to check if start is >=0. So how do we loop?
+
+Well, in the code, for each right, we can loop l from 1 to max_len. But for each l, check if start is >=0.
+
+But in that case, for l=1, the start is right -1 +1 = right. So for l=1, start is always >=0 as long as right >=0.
+
+But for l> right+1, start will be negative. 
+
+So for example, if right is 2, and l=3, start=2-3+1= 0. So it's okay. But if right is 0, and l=2, start is 0-2+1= -1. 
+
+So the loop would be from l=1 to max_len, and for each l, check if (right - l +1) >=    0. If yes, proceed. Else, break. Wait, no. Because for example, when right is 2, l=3: start is 0. So it's valid. But for l=4, start is 2-4+1 = -1. So for l in 1 to max_len, the code needs to check for each l whether the start is valid. But for l from 1 to max_len, it's possible that for some l, start is negative, but for higher l it's not. Wait no, as l increases, the start decreases. So once we hit a l where start is negative, all larger l will have start negative.
+
+Ah right! For example, for l=1, start is right -1 +1 = right. So for l=1, it's valid if right is >=0 (which it is). For l=2, start is right -2 +1 = right -1. Which is valid if right -1 >=0 → right >=1. For l=3, start is right-3+1 = right-2. So for right=2, it's 0. For higher l, the start becomes more negative. So for each right, the maximum possible l that can be checked supports start >=0 is l_max = right +1. Because for l= right+1, start = right - (right+1) +1 = 0. For l=right+2, start would be -1. 
+
+So, for each right, the maximum possible l to check is min(max_len, right+1). 
+
+But instead of calculating that, we can loop l from 1 to max_len, and for each l, check?
+
+Wait, but for example, when max_len is 3, and right is 0. Then for l=1, start=0 (valid), l=2: start= -1 (invalid). So for l=2 and l=3, they are invalid. So in that case, we can break. 
+
+So the code can loop l from 1 to max_len. But for each l, check if start is >=0. If not, break. Because once l is such that start is negative, then for l+1 and higher, start will be more negative. 
+
+Wait, no. Because for l=1, start is right. Then l=2, start is right -1. So as l increases, start decreases. So for example, if we are at right=2, and l=3, start is 0. Then l=4 would be start = 2-4+1 = -1. 
+
+So for l from 1 to max_len, when we process l in order, once we find that start becomes negative, we can break. Because for higher l's, start will be even lower. 
+
+Therefore, in the code, for each right, loop l from 1 to max_len. But in the loop, for each l, check if start is >=0. If not, break the loop. 
+
+For example:
+
+for l in range(1, max_len+1):
+
+    start = right - l +1
+
+    if start <0:
+
+        break
+
+    substr = heating word from start to right.
+
+    if substr in forbidden:
+
+        left = max(left, start+1)
+
+So this way, for l=1 to max_len, but for l's where start is negative, break the loop. 
+
+This would save some iterations. 
+
+So the code is:
+
+max_len = max(len(f) for f in forbidden) if forbidden else 0
+
+forbidden_set = set(forbidden)
+
+left = 0
+
+max_length = 0
+
+for right in range(len(word)):
+
+    for l in range(1, max_len+1):
+
+        start = right - index + 1 → wait, l is the length. So start = right - l +1.
+
+        if start <0:
+
+            break
+
+        substr = word[start: right+1]
+
+        if substr in forbidden_set:
+
+            left = max(left, start + 1)
+
+    current_length = right - left +1
+
+    max_length = max(max_length, current_length)
+
+return max_length
+
+Wait, but in the code, for each l in 1 to max_len, it's possible that l could be larger than right+1, but the code checks if start is negative and breaks.
+
+But how to code this in Python?
+
+Yes. So for each l in 1 to max_len:
+
+start materials = right - l +1.
+
+if start <0 → break.
+
+So for example, in code:
+
+for l in range(1, max_len +1):
+
+    start = right - l +1
+
+    if start <0:
+
+        break
+
+    substr = word[start: start + l]
+
+    if substr in forbidden_set:
+
+        left = max(left, start + 1)
+
+Wait, but word[start: start + l] is the same as word[start: right+1], since right = start + l -1.
+
+Yes. So that's correct.
+
+So, the code for this part is:
+
+Now, let's think about edge cases.
+
+Case where forbidden contains a substring of length 1. For example, forbidden = ["a"], then for each right, check l=1. If the current character is 'a', then left is set to start +1 → right -1 +1 = right. So left becomes right. So current_length is right - left +1 = 0. 
+
+Which is correct, because any substring containing 'a' is invalid. So the maximum valid substring is the maximum of all 0's, which would be 0. Wait no. Wait, the maximum valid substring would be the maximum length of substrings that do not contain 'a'. So for example, if the word is "aba", forbidden is ["a"], then the valid substrings are "b" (positions 1-1), so the maximum length is 1. 
+
+Let me simulate:
+
+for right=0 (char 'a'):
+
+l=1 → start=0 → substr is 'a' which is forbidden. left becomes max(0, 0+1)=1. current_length is 0 -1 +1 = 0.
+
+max_length is 0.
+
+for right=1 (char 'b'):
+
+check l=1: start=1. substr is 'b' → not forbidden. 
+
+so left remains 1. current_length is 1-1+1=1 → max is 1.
+
+for right=2 (char 'a'):
+
+l=1: substr is 'a' → forbidden. left becomes max(1, 2 - 1 +1) = max(1, 2) → 2. 
+
+so current_length is 2-2+1 =1 → max remains 1.
+
+so the overall maximum is 1. Which is correct.
+
+Another case: forbidden contains empty string? No, since forbidden[i].length is at least 1. 
+
+So the code handles that. 
+
+Another case: word has no forbidden substrings. Then the code would return the entire length of word. 
+
+So, code seems correct.
+
+Now, let's think about the data structures. The forbidden_set is a set of strings. 
+
+But in Python, when we have forbidden as a list, converting it to a set is straightforward. 
+
+Now, for the max_len, if forbidden is empty, then the max_len is zero. But in that case, the code would process max_len=0, so the loop for l in range(1, 0+1) → l in 1 to 1. Which would loop once. But since max_len is 0, perhaps the code would have to handle that. Wait, the constraints say that forbidden is non-empty? No, the constraints say forbidden.length >=1. Wait, the constraints for forbidden is 1 <= forbidden.length <= 1e5. So forbidden is not empty. Therefore, the max_len can be calculated as the maximum of forbidden lengths. 
+
+So the code can safely do that.
+
+So in code:
+
+max_len = max(len(f) for f in forbidden)
+
+But what if forbidden is empty? Well, per the constraints, the forbidden list is not empty.
+
+Now, code for the function:
+
+Implement the function. Let's code.
+
+So the class Solution has a function longestValidSubstring, which takes word and forbidden.
+
+Now, code steps:
+
+- Preprocess forbidden into a set and find max_len.
+
+- Initialize left =0, max_length =0.
+
+- Iterate through each right in 0 to len(word)-1.
+
+- For each right, loop l from 1 to max_len, check if start is valid.
+
+- For each substr, if found in forbidden, adjust left.
+
+- After processing all l's, update the max_length.
+
+So, in Python:
+
+But wait, for the forbidden, the elements may have varying lengths, so the max_len is the maximum length.
+
+So, code in Python:
+
+class Solution:
+    def longestValidSubstring(self, word: str, forbidden: List[str]) -> int:
+        forbidden_set = set(forbidden)
+        max_len = max(len(f) for f in forbidden) if forbidden else 0
+        left = 0
+        max_length = 0
+        n = len(word)
+        for right in range(n):
+            # Check for substrings ending at right with length up to max_len
+            for l in range(1, max_len + 1):
+                start = right - l + 1
+                if start < 0:
+ quitting
+                    break
+                substr = word[start : start + l]
+                if substr in forbidden_set:
+                    left = max(left, start + 1)
+            current_length = right - left + 1
+            if current_length > max_length:
+                max_length = current_length
+        return max_length
+
+Wait, but in Python, the slicing is up to but not including the end index. So word[start : start + l] is correct, since the length is l. Because start + l is the end index. For example, start=0, l=3: word[0:3] is characters 0,1,2 (3 chars). 
+
+Yes.
+
+But let me test for the example 1.
+
+In example 1, forbidden is ["aaa","cb"], so max_len is 3.
+
+When right=2 (third character, 'a'), then for l=3:
+
+start = 2 -3 +1 =0. substr is word[0:0+3] = word[0:3] = 'cba' → not in forbidden. So no change.
+
+But when right=4, for l=3: start=4-3+1=2 → substr is word[2:5] = 'aaa' → which is in forbidden. So left is set to max(1, 2+1)=3. Which is correct.
+
+So the code seems correct.
+
+But what about when forbidden has multiple substrings? For example, if a substring of length 2 is in forbidden, and a longer substring is also in forbidden. For example, if forbidden is ["ab", "abc"], then max_len is 3. 
+
+When processing a substring that ends with "abc", we will check l=3, and if it's forbidden, the left is adjusted. But also, for l=2, the substr may be "bc", which may or may not be forbidden. 
+
+But the code checks all possible l's, and for any forbidden substrings ending at right, it adjusts the left. 
+
+So this approach works.
+
+Now, let's think about the time complexity. For each right, the code does up to max_len steps. Since max_len is up to 10, and the word length is 1e5, the total steps are 1e5 * 10, which is 1e6. That's acceptable.
+
+But for each substr, we have to generate a substring of up to 10 characters. But in Python, string slicing is O(k), where k is the length of the substring. So for each substr, the code takes O(l) time. So the total time would be O(n * max_len * max_len) ? Because for each character, and for each l (up to 10), and for each substr, we take O(l) time. So in worst case, for n=1e5 and max_len=10, total time is O(1e5 * 10 * 10) = 1e7 operations. Which is acceptable.
+
+But perhaps we can optimize this. For example, precompute all the forbidden substrings and check them.
+
+But given the constraints, even that would be acceptable.
+
+Alternatively, for each l, we can check the substring in O(1) time, but that's not possible unless we precompute some kind of trie or automaton. But for the given constraints, it's acceptable to check the substrings directly.
+
+Therefore, this code should work.
+
+Let me test the code with example 1.
+
+Example 1: word = "cbaaaabc", forbidden = ["aaa","cb"]
+
+max_len is 3.
+
+Let me simulate.
+
+Initially, left=0, max_length=0.
+
+right=0:
+
+loop l=1, 2, 3.
+
+l=1: start=0, substr 'c' not in forbidden. 
+
+l=2: start=0-2+1 = -1 → break. So no more loops. current_length is 0-0+1=1. max_length=1.
+
+right=1:
+
+l=1, start=1-1+1=1 → substr 'b' → allowed. 
+
+l=2: start=1-2+1=0 → substr 'cb' is in forbidden. So left = max(0, 0+1) → 1. 
+
+current evaluate length: 1-1+1 =1. max remains 1.
+
+right=2:
+
+l=1 → substr 'a', not forbidden. 
+
+l=2 → start=2-2+1=1 → substr 'ba' not forbidden. 
+
+l=3 → start=2-3+1=0 → substr 'cba' not forbidden. 
+
+no changes. current length is 2-1+1=2 → max is 2.
+
+right=3:
+
+l=1 → 'a' allowed.
+
+l Hot: 2 → start=3-2+1=2 → substr 'aa' allowed. 
+
+l=3 → start=3-3+1=1 → substr 'baa' not forbidden. 
+
+current length is 3-1+1=3 → max=3.
+
+right=4:
+
+l=1 → 'a' allowed.
+
+l=2 → start=4-2+1=3 → substr 'aa' allowed. 
+
+ l=3 → start=4-3+1=2 → substr 'aaa' which is forbidden. So left becomes max(1, 2+1=3). So left is 3.
+
+current length: 4-3+1=2. max is 3.
+
+right=5:
+
+l=1 → 'a' allowed.
+
+l=2 → start=5-2+1=4 → substr 'aa' allowed. 
+
+l=3 → start=5-3+1=3 → substr 'aaa' again. So left is max(3,3+1=4). 
+
+current length is 5-4+1=2.
+
+right=6:
+
+l=1 → 'b' allowed.
+
+l=2 → start=6-2+1=5 → substr 'ab' allowed. 
+
+l=3 → start=6-3+1=4 → substr 'aab' allowed. 
+
+current length is 6-4+1=3. max remains 3.
+
+right=7:
+
+l=1 → 'c' allowed.
+
+l=2 → start=7-2+1=6 → substr 'bc' allowed. 
+
+l=3 → start=7-3+1=5 → substr 'abc' allowed. 
+
+current length is 7-4+1=4 → max is 4. 
+
+Thus, code returns 4. Correct.
+
+Another example: word = "leetcode", forbidden = ["de","le","e"].
+
+max_len is 2.
+
+Forbidden set is {'de', 'le', 'e'}.
+
+Let me simulate:
+
+left starts at 0.
+
+right=0 (l):
+
+l=1 → substr 'l' not in forbidden. 
+
+l=2 → start=0-2+1=-1 → break. 
+
+current length is 1 → max is 1.
+
+right=1 (e):
+
+l=1: substr 'e' is forbidden. So left = max(0, 0+1)=1. 
+
+l=2: start=0 → substr 'le' which is forbidden. So left is max(1, 0+1=1 → remains 1. 
+
+current length is 1-1+1=1. 
+
+max remains 1.
+
+right =2 (e):
+
+l=1 → substr 'e' forbidden. left becomes max(1, 2-1+0? Wait start is 2 -1 +1 =2? Wait:
+
+for l=1, start=right - l +1 =2-1+1=2? Wait right is 2 (0-based), l=1:
+
+start = right -l +1= 2 -1 +1 =2. substr is word[2:2+1] = word[2], which is 'e' → forbidden. So left becomes max(1, 2+1=3). So left is 3. 
+
+Then, l=2: start=2-2+1=1. substr word[1:3] is 'ee' → not forbidden. 
+
+current length is 2-3+1 = 0. 
+
+max remains 1.
+
+right=3 (t):
+
+l=1: 't' allowed. 
+
+l=2: start=3-2+1=2 → substr 'et' → not forbidden. 
+
+current length is 3-3+1=1 → max remains 1.
+
+right=4 (c):
+
+l=1: 'c' allowed. 
+
+l=2: substr is word[3:5] = 'tc' → allowed. 
+
+current length is 4-3+1=2. max is 2.
+
+right=5 (o):
+
+l=1: 'o' allowed. 
+
+l=2: word[4:6] is 'co' allowed. 
+
+current length 5-3+1=3 → max is 3.
+
+right=6 (d):
+
+l=1: 'd' allowed. 
+
+l=2: substr word[5:7] is 'od' allowed. 
+
+current length 6-3+1=4 → max is 4.
+
+right=7 (e):
+
+l=1: substr is 'e' → forbidden. left becomes max(3, 7-1+1=7 → start=7, start+1=8. So left is 7.
+
+l=2: start=7-2+1=6. substr word[6:8] → 'de' which is forbidden. So left = max(7, 6+1=7) → 7.
+
+current length is 7-7+1=1. 
+
+max is 4. 
+
+So the code returns 4, which is correct.
+
+So this seems to work.
+
+Now, what about a case where the forbidden substring is longer than max_len? Wait, no, since the max_len is the maximum of forbidden words. 
+
+So the code is correct.
+
+Now, what about if a forbidden substring is longer than the max_len? Well, no. Because the code sets max_len to the maximum of forbidden words. So forbidden words can't be longer than max_len.
+
+So the code is correct.
+
+Another case: forbidden contains a substring of length 10.
+
+Then, for each right, we check substrings of length 1-10. 
+
+So in the code, for each right, l ranges up to 10. 
+
+Thus, for a word of length 1e5, it's manageable.
+
+Now, what about when the forbidden set has a word of length 1, but the code checks all l up to max_len (say 10). For example, for a forbidden word of 'a', and the word is 'aaaaa'... but the code checks all possible l's. But for each right, when l=1, the code checks the current character. For example, when a forbidden word of length 1 is present, the code would find it and set left to start+1 = current right+1? No, for l=1, start is right -1 +1 = right. So substr is word[right], which is the character. So if forbidden contains that, left becomes max(left, right+1). For example, if left was 0, and the current right is 0, then left becomes 1. So the window [left, right] is [1,0], which is invalid. 
+
+But in the code, after processing all l's, current_length is right - left +1. For example, right=0, left=1 → 0-1+1 =0. 
+
+Thus, for such a case, the code would return the maximum valid substring.
+
+Thus, the code seems to handle all cases.
+
+Now, code in Python:
+
+Now, the code has to handle forbidden being empty. But according to constraints, forbidden.length >=1, so no need. 
+
+But during code, for the case when forbidden is empty, then the code would have max_len = 0, and then the loop for l in range(1, 0+1) → range(1,1) → no iterations. So for each right, no checks. Thus, current_length is right-left+1. Since left is 0, the max_length would be the entire word length, which is correct.
+
+But since the constraints say forbidden is non-empty, that case is not needed.
+
+Thus, the code is as written.
+
+Another thing to consider is that the forbidden words may have varying lengths, but the code checks for all possible lengths up to max_len. 
+
+Now, the code should be correct. 
+
+So, the code is as follows.
+</think>
+
+To solve this problem, we need to find the length of the longest valid substring of a given string `word` such that none of its substrings are present in the forbidden list. The key challenge is to efficiently check for forbidden substrings while maintaining an optimal time complexity.
+
+### Approach
+1. **Preprocessing Forbidden Substrings**: Convert the list of forbidden substrings into a set for O(1) lookup time. Also, determine the maximum length of any forbidden substring to limit our checks to relevant lengths.
+2. **Sliding Window Technique**: Use a sliding window approach to maintain a window [left, right] where all substrings within the window are valid. For each position `right` in the word, check all possible substrings ending at `right` with lengths from 1 up to the maximum length of forbidden substrings.
+3. **Adjusting the Window**: If any forbidden substring is found ending at the current position `right`, adjust the `left` boundary of the window to exclude the forbidden substring. This ensures that the window remains valid for subsequent checks.
+
+### Solution Code
+```python
+from typing import List
+
+class Solution:
+    def longestValidSubstring(self, word: str, forbidden: List[str]) -> int:
+        forbidden_set = set(forbidden)
+        max_len = max(len(f) for f in forbidden) if forbidden else 0
+        left = 0
+        max_length = 0
+        n = len(word)
+        
+        for right in range(n):
+            # Check all possible substring lengths up to max_len
+            current_max_len = min(max_len, right + 1)
+            for l in range(1, current_max_len + 1):
+                start = right - l + 1
+                if start < 0:
+                    break
+                substring = word[start: start + l]
+                if substring in forbidden_set:
+                    left = max(left, start + 1)
+            current_length = right - left + 1
+            if current_length > max_length:
+                max_length = current extremely
+        return max_length
+```
+
+### Explanation
+1. **Preprocessing**: Convert the `forbidden` list into a set for efficient lookups. Determine the maximum length of any substring in the forbidden list to limit the number of checks needed.
+2. **Sliding Window**: For each position `right` in the word, check all substrings ending at `right` with lengths from 2 to the maximum forbidden substring length. This ensures we efficiently check for any forbidden substrings that could invalidate the current window.
+3. **Adjusting the Window**: If a forbidden substring is found, adjust the `left` boundary to the position right after the start of the forbidden substring. This ensures that all subsequent checks start from a valid position.
+4. **Tracking Valid Lengths** : After processing each position `right`, update the maximum length of valid substrings found so far.
+
+This approach ensures that we efficiently check for forbidden substrings while maintaining a linear time complexity

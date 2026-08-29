@@ -1,0 +1,260 @@
+<|channel|>analysis<|message|>We need to provide solution to Leetcode question: 1707. Color the Transformed Array? Actually colorTheArray. The query updates element of array from zero to color. Initially zeros not counted as pairs. After each query, compute number of adjacent pairs with same non-zero color. Straightforward: maintain current array of colors array of length n.
+
+For each query (i,color):
+prev=nums[i]
+If prev == color: no change? but queries may repaint same index repeatedly; we need to handle equals properly: if prev == color, nothing changes in pair counts. But we still need to output same count as previously.
+
+When we change color from prev to color:
+We need to adjust adjacent pairs with index i and i-1, i and i+1. For each neighbor j in [i-1,i+1] if neighbor exists and nums[j] == prev and prev != 0: that pair existed previously; need to decrement count. If after repaint neighbor color equals new color and new color != 0: new pair formed; increment count.
+
+Edge: prev may be 0, meaning no pair existed previously.
+
+Also we should account for both sides separately. Note when prev==color we skip updates because nothing changes: skip.
+
+Time O(queries). n up to 1e5 so O(1e5) fine.
+
+Implementation: maintain list answer. current array colors n zeros; currCount=0; For each query: if colors[idx]==color: answer.append(currCount); continue. Else update: For each neighbor within range: if colors[neighbor]==colors[idx] and colors[idx]!=0: currCount -=1. After updating neighbors for old color: for neighbor: if colors[neighbor]==color and color!=0: currCount +=1. Then set colors[idx]=color. Append currCount.
+
+Test examples. For n=4 example get [0,1,1,0,2].
+
+Edge case when n=1: neighbor none, operations fine.
+
+Check: also when painting over a color to 0? Not allowed because color>=1 always. But we may recolor index from prev>0 to new color diff. We handle properly.
+
+Return result.
+
+That's all.
+
+Let's craft final solution code.
+
+We should import List from typing.
+
+Potential small optimization: avoid repeated neighbor loops each query but that's fine.
+
+What about query same index recolor to different color: when prev==color? skip.
+
+Implementation details: inside loop, index = q[0], color = q[1]. Let's compute before color.
+
+Pseudo:
+
+class Solution:
+    def colorTheArray(self,n,queries):
+        colors=[0]*n
+        count=0
+        res=[]
+        for idx,color in queries:
+            if colors[idx]==color:
+                res.append(count)
+                continue
+            old=colors[idx]
+            # those pairs formed before
+            for neighbor in (idx-1, idx+1):
+                if 0 <= neighbor < n:
+                    if colors[neighbor]==old and old!=0:
+                        count -=1
+                    if colors[neighbor]==color and color!=0:
+                        count +=1
+            colors[idx]=color
+            res.append(count)
+        return res
+
+Works.
+
+The function signature expects List from typing.
+
+Provide final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every query we paint one position of the array.  
+After that query we must know how many *adjacent pairs of indices* have the
+same non‑zero color.
+
+The array has size `n ( ≤ 10^5 )` and there are at most `10^5` queries,
+so an `O(1)` processing of each query is sufficient.
+
+
+
+--------------------------------------------------------------------
+
+#### Observations
+
+* Only the two neighbours of the painted index can change the answer,  
+  because all other pairs stay untouched.
+* A pair `(j , j+1)` can exist **iff**
+  `nums[j] == nums[j+1] != 0`.
+* A repaint may
+
+  * remove a pair that existed before,
+  * create a new pair, or
+  * neither (when the colour does not change the equality).
+
+So for one query we only have to look at the neighbours of the painted
+index.
+
+--------------------------------------------------------------------
+
+#### Algorithm
+```
+init array `col` with 0 (uncoloured)
+curPairs = 0
+result = []
+
+for each (idx , newColor) in queries:
+    oldColor = col[idx]
+    if oldColor == newColor:          # repainting with the same colour
+        result.append(curPairs)
+        continue
+
+    # remove old pairs that involve idx
+    for neighbour in [idx-1, idx+1]:
+        if 0 <= neighbour < n:
+            if col[neighbour] == oldColor and oldColor != 0:
+                curPairs -= 1
+
+    # add new pairs that involve idx
+    for neighbour in [idx-1, idx+1]:
+        if 0 <= neighbour < n:
+            if col[neighbour] == newColor and newColor != 0:
+                curPairs += 1
+
+    col[idx] = newColor
+    result.append(curPairs)
+
+return result
+```
+
+The two loops over the neighbours are O(1), therefore  
+the whole algorithm runs in `O(queries)` time and `O(n)` memory.
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the correct number of adjacent
+identical‑color pairs after each query.
+
+---
+
+##### Lemma 1  
+Immediately before a query is processed, `curPairs` equals the number of
+adjacent index pairs `(j, j+1)` with `col[j] == col[j+1] != 0`.
+
+**Proof.**
+
+The algorithm starts with all zeros, so no pairs exist and
+`curPairs = 0` is correct.  
+Assume the lemma holds before some query.  
+During this query the algorithm updates `curPairs` as described below,
+and after the update it appends the (new) value of `curPairs` to the
+answer list and continues.  
+Therefore the lemma remains true for the next query.  
+By induction the lemma holds for every step. ∎
+
+
+
+##### Lemma 2  
+During the processing of a query, the algorithm subtracts exactly the
+number of pairs that disappear because of the repaint and adds exactly
+the number of pairs that appear because of the new colour.
+
+**Proof.**
+
+While an index `idx` is repainted, only pairs involving `idx` can
+change.  
+For a neighbour `k`
+
+* If `col[k] == oldColor` and `oldColor != 0`, the pair `(min(idx,k),
+  max(idx,k))` existed before the query – the algorithm subtracts 1.
+  No other operation touches this pair, so it is removed from the count.
+* If `col[k] == newColor` and `newColor != 0`, the pair will exist after
+  the query – the algorithm adds 1.
+  No other operation touches this pair, so it is added to the count.
+
+Pairs that neither had `oldColor` nor `newColor` remain unaffected by
+the algorithm.  
+Thus exactly the disappearing and appearing pairs are updated. ∎
+
+
+
+##### Lemma 3  
+After updating `col[idx]` to `newColor`, the value of `curPairs`
+equals the number of adjacent identical‑color non‑zero pairs in the
+array `col`.
+
+**Proof.**
+
+By Lemma&nbsp;2 all pairs that change are handled correctly.
+All other pairs stay the same and are not modified.
+Therefore, after the update `curPairs` matches the true number of pairs
+in the updated array. ∎
+
+
+
+##### Theorem  
+For every i (1 ≤ i ≤ |queries|) the i‑th element of the returned
+array equals the number of adjacent indices with the same non‑zero
+colour after processing the i‑th query.
+
+**Proof.**
+
+From Lemma&nbsp;1, just before the i‑th query,
+`curPairs` matches the number of pairs in the current array.
+The algorithm updates `curPairs` according to Lemma&nbsp;3.
+It then appends this value to the result list.
+Thus the i‑th entry of the result is correct. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+For each query we check at most two neighbours twice ( O(1) ).
+With `q` queries the total time complexity is
+
+```
+O(n)      for the initial array
+O(q)      for all queries
+Total:   O(n + q)   ≤   2·10^5
+```
+
+The array of colours needs `O(n)` memory, so the memory usage is
+`O(n)`.
+
+--------------------------------------------------------------------
+
+#### Reference Implementation (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def colorTheArray(self, n: int, queries: List[List[int]]) -> List[int]:
+        col = [0] * n            # current colours
+        cur_pairs = 0            # current number of adjacent equal pairs
+        ans = []
+
+        for idx, new_color in queries:
+            old_color = col[idx]
+            if old_color == new_color:
+                ans.append(cur_pairs)
+                continue
+
+            # remove old pairs that involve idx
+            for nb in (idx - 1, idx + 1):
+                if 0 <= nb < n:
+                    if col[nb] == old_color and old_color != 0:
+                        cur_pairs -= 1
+
+            # add new pairs that involve idx
+            for nb in (idx - 1, idx + 1):
+                if 0 <= nb < n:
+                    if col[nb] == new_color and new_color != 0:
+                        cur_pairs += 1
+
+            col[idx] = new_color
+            ans.append(cur_pairs)
+
+        return ans
+```
+
+The implementation follows exactly the algorithm proven correct above.

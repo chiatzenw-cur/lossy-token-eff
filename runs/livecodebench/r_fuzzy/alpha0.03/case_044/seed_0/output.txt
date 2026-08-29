@@ -1,0 +1,253 @@
+<|channel|>analysis<|message|>We need to solve problem: given array of integers up to 10^4, length up to 100, find max sum of pair such that their maximum digits are equal. Return -1 if none. Approach: iterate numbers compute a mapping from max digit to two largest numbers having that digit. That ensures O(n). For each number, compute its maximal digit: convert to string or repeatedly mod10 or division by 10. Since numbers between 1 and 10^4 inclusive, digits up to 5. We can compute max digit quickly.
+
+Then maintain a dict: key -> list of two largest numbers with distinct indices? Actually we just need two largest numbers for each max digit. So we can store top two in a dict: mapping digit to (max1, max2). For each number x: compute d; if d not in map: map[d] = [x]; else if len(map[d])==1: map[d].append(x) etc but we need always sorted descending: keep two largest. Implementation:
+
+```
+best = {d: [max1, max2]}
+for x in nums:
+    d = compute_max(x)
+    if d not in best:
+        best[d] = (x, -1)
+    else:
+        m1, m2 = best[d]
+        if x > m1:
+            best[d] = (x, m1)
+        else:
+            if x > m2:
+                best[d] = (m1, x)
+```
+
+After process sorted accordingly. Then compute max sum: max(sum) over digits where best[d][1] != -1 else none. Return -1.
+
+Edge: duplicates same number two indices? It's okay. The algorithm will handle duplicates: second largest might same value, good.
+
+Check with example.
+
+Implementation in Python: class Solution: def maxSum(self, nums: List[int]) -> int:.
+
+Also mention complexity O(n).
+
+Let's produce final message.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a pair of numbers we only care about the largest decimal digit
+contained in each number.  
+If two numbers share the same largest digit we can add them, otherwise
+the pair is invalid.
+
+The array length is at most `100`, so a quadratic scan would already
+fit, but we can do better by grouping numbers by their largest
+digit and keeping only the two largest numbers in each group.
+
+--------------------------------------------------------------------
+
+#### 1.  Computing the largest digit of a number
+
+```
+def max_digit(x):
+    d = 0
+    while x:
+        d = max(d, x % 10)
+        x //= 10
+    return d
+```
+
+Numbers can be up to `10 000`, so at most 5 iterations.
+
+--------------------------------------------------------------------
+
+#### 2.  Maintaining the two largest numbers per digit
+
+We keep a dictionary
+
+```
+best[d] = (first, second)   # first >= second
+```
+
+During a single pass over the array:
+
+```
+for number in nums:
+    d = max_digit(number)
+
+    if d not in best:
+        best[d] = (number, -1)          # only one number seen so far
+    else:
+        first, second = best[d]
+        if number > first:
+            best[d] = (number, first)   # new largest, old becomes second
+        elif number > second:
+            best[d] = (first, number)   # becomes new second
+```
+
+After the pass `best[d]` contains the two largest numbers having
+maximum digit `d` (or only one number if the pair does not exist).
+
+--------------------------------------------------------------------
+
+#### 3.  Computing the answer
+
+```
+ans = -1
+for first, second in best.values():
+    if second != -1:                    # a valid pair exists
+        ans = max(ans, first + second)
+return ans
+```
+
+If no digit had two numbers, `ans` remains `-1`.
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the maximum sum of a pair of
+numbers whose maximum digits are equal or `-1` if no such pair exists.
+
+---
+
+##### Lemma 1  
+For every digit `d` (0‑9) after processing the array
+`best[d] = (a,b)` where  
+`a` is the largest number in `nums` whose maximum digit is `d`,  
+`b` is the second largest such number (or `-1` if only one exists).
+
+**Proof.**
+
+We use induction over the `i`‑th processed number.
+
+*Base:*  
+Before any number is processed, `best` is empty – the statement is
+trivially true for all digits.
+
+*Induction step:*  
+Assume the statement holds after processing the first `i-1` numbers.  
+Consider the `i`‑th number `x` with maximum digit `d`.
+
+- If `d` was not present, we set `best[d]=(x,-1)` – now `x` is the
+  largest and the second largest does not exist, satisfying the
+  statement.
+
+- If `d` was present with `(a,b)` already the two largest numbers:
+
+    *If `x > a`*: we set `(x,a)`.  
+    Now the largest is `x` and the second largest is the former largest
+    `a`; all other numbers are ≤ `b`. Hence the property holds.
+
+    *Else if `a ≥ x > b`*: we set `(a,x)`.  
+    The largest stays `a`, the new second largest is `x`; all other
+    numbers are ≤ `b`. Property holds.
+
+    *Else if `x ≤ b`*: we keep `(a,b)`.  
+    Both largest and second largest remain unchanged; property holds.
+
+Thus after processing the `i`‑th number the statement holds.
+By induction it holds after the whole array. ∎
+
+
+
+##### Lemma 2  
+For any pair of numbers having the same maximum digit `d`,
+their sum is ≤ `best[d].first + best[d].second`
+(the sum of the two largest numbers for that digit).
+
+**Proof.**
+
+Let the pair be `(p,q)`.  
+By Lemma&nbsp;1, `best[d].first` is the largest number with digit `d`,
+so `p ≤ best[d].first` and `q ≤ best[d].second` (if we choose ordering
+such that `p` is the larger of the pair).  
+Therefore `p+q ≤ best[d'.first + best[d].second`. ∎
+
+
+
+##### Lemma 3  
+If a pair with equal maximum digit exists, the algorithm outputs
+a value at least as large as the maximum possible pair’s sum.
+
+**Proof.**
+
+Let `(x*,y*)` be the pair with the maximum sum among all valid pairs
+and let its common maximum digit be `d*`.  
+By Lemma&nbsp;1, `best[d*].first` and `best[d*].second`
+are at least as large as `x*` and `y*` respectively.  
+Hence `best[d*].first + best[d*].second` is ≥ `x*+y*`.  
+The algorithm computes the maximum over all digits of such sums, so
+the returned value is at least `x*+y*`. ∎
+
+
+
+##### Theorem  
+The algorithm returns  
+
+- the maximum possible sum of a pair of numbers from `nums` whose
+  maximum digits are equal, or  
+- `-1` if no such pair exists.
+
+**Proof.**
+
+*Existence of a pair*  
+If no digit occurs at least twice in `nums` then `best[d].second` is
+`-1` for all `d`, the loop never updates `ans` from `-1`,
+thus the algorithm returns `-1`.  
+Conversely, if some digit occurs at least twice, the loop will find a
+finite sum and return it.
+
+*Optimality*  
+Assume at least one valid pair exists.  
+Let `(x*,y*)` be the maximum‑sum valid pair.  
+By Lemma&nbsp;3 the algorithm’s answer is at least `x*+y*`.  
+By Lemma&nbsp;2 no pair can sum to more than the algorithm’s answer.
+Hence the algorithm returns exactly the maximum sum among all valid
+pairs. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+- Compute maximum digit for each number: `O(n)` where `n ≤ 100`.
+- All other operations are `O(1)` per number.  
+  Total time: `O(n)`  
+- Dictionary size ≤ 10 digits → `O(1)` memory.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def maxSum(self, nums: List[int]) -> int:
+        # Helper to compute the largest digit of a number
+        def max_digit(x: int) -> int:
+            d = 0
+            while x:
+                d = max(d, x % 10)
+                x //= 10
+            return d
+
+        best = {}  # digit -> (first, second)
+
+        for num in nums:
+            d = max_digit(num)
+
+            if d not in best:
+                best[d] = (num, -1)
+            else:
+                first, second = best[d]
+                if num > first:
+                    best[d] = (num, first)
+                elif num > second:
+                    best[d] = (first, num)
+
+        ans = -1
+        for first, second in best.values():
+            if second != -1:
+                ans = max(ans, first + second)
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above.

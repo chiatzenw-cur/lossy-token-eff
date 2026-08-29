@@ -1,0 +1,375 @@
+<|channel|>analysis<|message|>We need to analyze problem. Game: start integer n. Players alternate; Vanya first. On each turn player can add 1 or subtract 1. After Vanya's move (i.e., after his turn) if the current integer is divisible by 3, he wins immediately. If after 10 moves (i.e., 10 turns? Let's interpret: "10 moves have passed and Vanya has not won" meaning after the 10th move (could be at Vova's turn or after Vova's? Let's read: "10 moves have passed" presumably from start, so after 10 moves have been made; that's after Vova's 5th, since starting from Vanya? Let's compute: Vanya moves 1, Vova 2, Vanya 3, Vova 4, Vanya 5, Vova 6, Vanya 7, Vova 8, Vanya 9, Vova 10. So 10 moves include 5 each. If Vanya has not won by that time, Vova wins.
+
+Thus winner is determined by earliest Vanya's turn that makes position divisible by 3, within 5 turns.
+
+We need to analyze optimal play. Since Vanya can win if he can reach a multiple of 3 at his own move. If initial n mod 3 = 0? Check: Before any move, it's Vanya's turn, but win only occurs "after Vanya's move". So initial divisible by 3 doesn't matter until Vanya moves. Vanya can either add 1 or subtract 1. So effectively Vanya can choose to make the number differ by ±1. He wants to make it divisible by 3. So he can win on first move if exists k such that n ± 1 ≡ 0 mod 3. That is, if n ≡ 1 mod3, then n-1 divisible by3. If n ≡ 2 mod3, n+1 divisible by3. If n ≡ 0 mod3, then no ±1 gives divisible by3? Let's check: n=0 mod3: n-1= -1 mod3 =2 mod3, n+1=1 mod3, none 0. So cannot win first move. So.
+
+Now if Vanya cannot win first, Vova will move after seeing n not divisible by 3. Vova's objective: to prevent Vanya from being able to win in his next move or in later upcoming moves, until 10 moves passed when Vova wins.
+
+We can view game as board game where each move ±1. We can try dynamic programming / simulation for up to 10 moves ahead.
+
+Simplify: Since only modulo 3 matters for divisibility, we can consider state as (current n mod 3, turn number, whose turn). Because we only care about being divisible by 3? Actually we care if after Vanya's turn n%3==0. So we need to consider if Vanya can guarantee his win assuming no other restriction. Since both players can only add/subtract 1. So at each turn, players choose with knowledge of parity etc.
+
+We can analyze minmax: For up to 5 Vanya turns. Vanya wants to reach 0 mod3; Vova wants to keep n mod3 ≠ 0 on those times.
+
+Essentially, playing on mod3 cycle. Each move changes n by ±1 mod3, which is same as adding ±1 mod3 = ±1 (mod3). Thus each move toggles mod3 between 0,1,2 properly: if n%3==0, subtract 1→2mod3, add 1→1. So both options give 1 or 2. So Vanya can from any n%3=0 go to 1 or 2. He cannot stay at 0.
+
+Hence Vanya will win if he can force after his move the mod3 is 0.
+
+Thus we want to know if there exists a strategy for Vanya such that at some of his turns he achieves mod3=0. Since each move flips value +-1, we can model as a turn-based game on a finite directed graph of states (mod3). But there might be branching due to two choices each.
+
+But we can analyze more simply: Suppose Vanya wants to reach 0 mod3 after his own turn. He can choose to move ±1, meaning choose mod3 of his next state to be either (prev +1) mod3 or (prev -1) mod3. After Vova's move, again ±1.
+
+Observation: Since all moves are ±1, the parity of turn matters for n mod3. Over two moves, net change ±2 etc.
+
+We can compute reachable states for each turn.
+
+Simpler: Since n is small, we can brute force all states for up to 10 moves, performing optimal play algorithm with recursion (minimax). Since t up to 100, and state space small (mod3 or maybe actual number). But numbers can vary up to 1000, but we can map to any integer but there are only 2^? However the number influences only via mod3 because win condition depends on mod3. So we might compress states into mod3. But let's verify: Suppose current value n, it's Vanya's turn, he wants to win if (n+1)%3==0 or (n-1)%3==0. So based on n%3 we can determine offers. So only n%3 matters.
+
+Similarly, Vova's goal is to avoid that. So the game is fully defined by current mod3 and whose turn.
+
+Thus state space: 3 mod classes × 2 players = 6 states.
+
+We need to evaluate if Vanya can force win within first 5 his turns. Equivalent to if starting from state (n%3, Vanya) is winning for Vanya.
+
+We can compute via DP: For each state (mod, player, moves_done) maybe after certain number of moves. Since game ends after 10 moves if Vanya hasn't won: winner Vova. Equivalent to horizon length 10. So we can compute recursively up to depth 10.
+
+Simpler: Since horizon small, we can compute recursively. But we also need to consider that the second player might also sometimes achieve win? No, only Vanya can win. So Vova's objective is to survive to depth 10.
+
+Thus we can compute as: The game has maximum depth of 10. Starting state (mod, 0 for Vanya) at depth=0.
+
+Define function win(state, moves_done): returns True if Vanya can force win from this state given that it's that player's turn and we are at moves_done moves already performed. moves_done counts number of moves up to now. The game ends when moves_done >= 10, winner Vova. So if moves_done==10 => return False (Vanya cannot win). For other states: If it's Vanya's turn and after this move if new n%3==0 => immediate win. Should we stop before Vova's turn? Yes, this occurs after Vanya's move. So when evaluating Vanya's choice, he checks if either move leads to n%3==0; if so, immediate win. If not, then for each move, the resulting state leads to Vova's turn and we continue. Vanya chooses a move that results in eventual win. Similarly, when it's Vova's turn, he chooses move that makes it as hard for Vanya to win; i.e., Vova prefers to avoid Vanya's win. So we compute: If any move leads to Vanya losing (i.e., win==False) then Vova will choose that. So the outcome is that Vova causes Vanya lose unless all moves lead to win. So function returns whether Vanya can force win given optimal play. So we implement minimax.
+
+Because mod3 small, we can store memoization of (player, mod, moves_done) -> bool.
+
+Let's implement quickly.
+
+Edge cases: Suppose Vanya, on his turn, cannot find a move to immediate win; he will choose a move that leads to winning later if possible, else loses.
+
+Now compute per test case.
+
+Test sample:
+
+Input 6 testcases: 1,3,5,100,999,1000. Let's evaluate:
+
+n=1, mod=1. Vanya's first move: n-1=0 => wins. Should output First. Sample shows First.
+
+n=3, mod=0. Vanya's first move: can't win. Vova will reply. Should result? Let's simulate: After Vanya's first move (n +/-1) mod=1 or2. Let's analyze the minimax. The provided sample says Second. So Vova wins.
+
+n=5, mod=2. Vanya's first move: n+1=6 => wins. So First.
+
+n=100, mod=1. Likely First. sample: First.
+
+n=999, mod=0. sample: Second.
+
+n=1000, mod=1. sample: First.
+
+Ok.
+
+We need to produce code accordingly.
+
+Let's implement:
+
+- input t
+- for each case: read n, compute mod = n % 3
+- call recursive function with mod and player=0 (Vanya). Moves_done=0.
+
+Return 'First' if True else 'Second'.
+
+Let's implement recursion:
+
+from functools import lru_cache
+
+@lru_cache(None)
+def can_win(mod, player, moves_done):
+    if moves_done >= 10:
+        return False
+
+    if player == 0:  # Vanya's turn
+        # Try move +1 and -1
+        for delta in (-1, 1):
+            new_mod = (mod + delta) % 3
+            if new_mod == 0:
+                return True
+        # No immediate win, evaluate moves
+        for delta in (-1, 1):
+            new_mod = (mod + delta) % 3
+            if not can_win(new_mod, 1, moves_done + 1):
+                # Vova will choose to make Vanya lose if any move leads to lose
+                # Actually we are evaluating Vanya's choice: if any move leads to win, he will do it.
+                return True   # Wait we need to evaluate properly: In Vanya's turn, he chooses a move that eventually leads to win. So we need to check: if there exists delta such that can_win(new_mod, 1, moves_done+1) == True, then True.
+        return False
+
+    else:  # Vova's turn
+        # Vova chooses delta that leads to Vanya's lose if any
+        for delta in (-1, 1):
+            new_mod = (mod + delta) % 3
+            if not can_win(new_mod, 0, moves_done + 1):  # if Vanya cannot win from there
+                return False  # Vova will force a loss
+        # If all moves lead to Vanya win, then Vanya will win
+        return True
+
+Be careful: In Vova's turn, the function should return False if there's a move that guarantees Vanya's loss. But if all moves lead to True, then Vanya wins.
+
+Thus in Vova's turn: For each delta, if not can_win(new_mod, 0, moves_done+1): Vova would choose that move, making vanya lose (i.e., return False). If all moves return True, then return True.
+
+Edge for Vanya's turn: We need to find path that leads to True. It is earlier: If after the move, winner immediate else evaluate next state. But note: We already considered immediate win: new_mod==0. That is a win. So we can simply iterate for delta, compute new_mod. If new_mod==0: return True. Else if any such move leads to True; return True. Else False.
+
+Yes.
+
+But wait, there is nuance: At Vanya's turn, he might choose a move that results in Vova's immediate win? But Vova's win condition is only after 10 moves. So not relevant.
+
+Thus algorithm correct.
+
+We'll also test with sample.
+
+We should also validate for possible loops: but we use recursion with depth up to 10, no loop.
+
+Edge Complexity: O(6*10) per test. fine.
+
+Return.
+
+Let's produce final code. Note: Use sys.stdin.read to parse ints.
+
+Also we must handle t up to 100.
+
+Ok.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every test case we are given an integer `n`.
+
+* Vanya moves first.
+* In one move a player can add `1` or subtract `1`.
+* After **Vanya's** move, if the current integer is divisible by `3`, Vanya wins.
+* If 10 moves have been made and Vanya did not win, Vova wins.
+
+Both players play optimally.  
+We have to decide which player will win.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* The only thing that matters for the winning condition is
+  `n mod 3`.  
+  If `n % 3 == 0` the integer is divisible by `3`.
+
+* Adding `1` or subtracting `1` changes the residue modulo `3`
+  by `+1` or `‑1`.  
+  Therefore a move never changes the residue by `0`.
+
+* The game state is completely described by  
+
+  * the current residue `r` (`0,1,2`)
+  * whose turn it is (`Vanya` or `Vova`)
+  * how many moves have already been performed (`0 … 10`).
+
+  So there are only `3·2·11 = 66` different states.
+
+
+
+--------------------------------------------------------------------
+
+#### 2.  Game tree search (minimax)
+
+We decide the winner by exploring the game tree up to depth 10.
+`win(r, player, moves)` – does Vanya have a forced win
+from this state (with optimal play)?
+
+*Base cases*
+
+* `moves == 10`  
+  All 10 moves have been played, Vanya did not win → `False`.
+
+*Player is Vanya (our opponent)*
+
+```
+for delta in (-1, 1):
+        new_r = (r + delta) % 3
+        if new_r == 0:            # Vanya wins immediately
+                return True
+        if win(new_r, Vova, moves+1):   # a move that gives a win
+                return True
+return False                     # no winning move
+```
+
+*Player is Vova*
+
+Vova wants **Vanya** to lose.
+If at least one of his moves leads to a state where Vanya cannot win,
+he will choose that move.
+
+```
+for delta in (-1, 1):
+        new_r = (r + delta) % 3
+        if not win(new_r, Vanya, moves+1):   # Vanya cannot win
+                return False                 # Vova forces a loss
+return True                                 # all moves lead to a win
+```
+
+The recursion depth is at most `10`, so the computation is trivial.
+We memoise the results (`lru_cache`) – the graph contains only
+66 states.
+
+
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm outputs the correct winner.
+
+---
+
+##### Lemma 1  
+For every state `(r, player, moves)` the function `win`
+returns **True** iff Vanya can force a win
+from that state assuming optimal play.
+
+**Proof.**
+
+By induction over `moves` from `10` down to `0`.
+
+*Base.*  
+If `moves == 10` the function returns `False`. There are no moves left,
+otherwise Vanya would have won earlier.  
+So the result is correct.
+
+*Induction step.*  
+Assume the lemma holds for all states with more than `moves` moves
+remaining.  
+Consider a state `(r, player, moves)`.
+
+*Case 1 – player is Vanya.*  
+He can win immediately if a move brings the residue to `0`;
+the algorithm checks this and returns `True`.  
+Otherwise he has only two possible moves.  
+If **one** of them leads to a state where `win` is `True`,
+then after that move Vanya will win by the induction hypothesis.
+The algorithm returns `True`.  
+If **both** moves lead to states where `win` is `False`,
+Vanya has no winning strategy – the algorithm returns `False`.  
+Thus the return value is correct.
+
+*Case 2 – player is Vova.*  
+Vova will try to make Vanya lose.
+If *any* of his moves leads to a state where `win` is `False`,
+by the induction hypothesis Vanya cannot win from that state,
+so Vova will choose that move and Vanya will lose; the algorithm
+returns `False`.  
+If *all* of his moves lead to states where `win` is `True`,
+whatever Vova chooses, Vanya will win subsequently; the algorithm
+returns `True`.  
+Hence the return value is correct.
+
+By induction the lemma holds for all states. ∎
+
+
+
+##### Lemma 2  
+For the initial state `(n % 3, Vanya, 0)` the algorithm returns
+`True` exactly when Vanya is the eventual winner.
+
+**Proof.**
+
+The initial state is exactly the situation described in the problem
+statement: the game starts with the integer `n`, it is Vanya’s turn
+and no move has yet been made.  
+By Lemma&nbsp;1 the value returned by `win` is `True` iff Vanya can
+force a win from this position – i.e. Vanya is the winner. ∎
+
+
+
+##### Theorem  
+For every test case the program prints `"First"` if Vanya wins
+and `"Second"` otherwise.
+
+**Proof.**
+
+The program calls `win` for the initial state of the test case
+and prints `"First"` when the result is `True`.  
+By Lemma&nbsp;2 the result is `True` exactly for the cases where
+Vanya wins, otherwise it is `False`.  
+Therefore the printed output matches the true winner of the game. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+The game tree contains at most `3 × 2 × 11 = 66` states.
+For each state we test two moves and call the recursion once more.
+
+```
+Time   :  O( number of states )  ≤  O(66)  per test case
+Memory :  O( number of states )  ≤  O(66)  for memoisation
+```
+
+Both are easily inside the limits.
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+import sys
+from functools import lru_cache
+
+def solve() -> None:
+    data = list(map(int, sys.stdin.read().strip().split()))
+    if not data:
+        return
+    t = data[0]
+    nums = data[1:]
+
+    @lru_cache(maxsize=None)
+    def win(residue: int, player: int, moves_done: int) -> bool:
+        """
+        player: 0 -> Vanya, 1 -> Vova
+        moves_done: number of moves already performed
+        returns True if Vanya can force a win from this state.
+        """
+        if moves_done >= 10:
+            return False  # Vanya did not win within 10 moves
+
+        if player == 0:  # Vanya's turn
+            # First, check immediate win
+            for delta in (-1, 1):
+                new_r = (residue + delta) % 3
+                if new_r == 0:
+                    return True
+
+            # No immediate win, try to move to a winning position
+            for delta in (-1, 1):
+                new_r = (residue + delta) % 3
+                if win(new_r, 1, moves_done + 1):
+                    return True
+            return False  # all moves lead to loss
+
+        else:  # Vova's turn
+            # Vova will choose a move that makes Vanya lose if possible
+            for delta in (-1, 1):
+                new_r = (residue + delta) % 3
+                if not win(new_r, 0, moves_done + 1):
+                    return False          # Vova forces a loss
+            return True                   # Vova cannot prevent Vanya's win
+
+    out_lines = []
+    for n in nums[:t]:
+        if win(n % 3, 0, 0):
+            out_lines.append("First")
+        else:
+            out_lines.append("Second")
+
+    sys.stdout.write("\n".join(out_lines))
+
+if __name__ == "__main__":
+    solve()
+```
+
+The program follows exactly the algorithm proven correct above
+and conforms to the required input / output format.

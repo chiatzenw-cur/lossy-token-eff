@@ -1,0 +1,290 @@
+<|channel|>analysis<|message|>We need to analyze the game. Players alternate moves, starting with Vanya. Each move: add 1 or subtract 1. After Vanya's move, we check if the current integer is divisible by 3. If yes, Vanya wins immediately. If 10 moves have passed and Vanya has not won, Vova wins. So Vanya has at most 5 turns (since 10 moves total, each player turns, so Vanya moves 5 times). Wait: There are 10 moves total; if after Vanya's move, integer divisible by 3, he wins. If after 10 moves (i.e., after Vova's 5th move) Vanya hasn't won, Vova wins. So Vanya has 5 moves, Vova 5 moves. But Vanya can only win after his own move; when Vova moves, no win condition. So Vanya wants to get the number divisible by 3 after his own move; Vova wants to prevent that. But after Vova's move, we don't check. So Vova can influence the number for Vanya's next turn. This is like a game where players adjust number by ±1 each turn; Vanya wants to reach a multiple of 3 after his own move.
+
+We need to decide outcome under optimal play.
+
+We can think of the game as: current integer n, turn t: 0 to 9 (0-based). Vanya's turn when t even (0,2,4,6,8). Vova's turn when t odd (1,3,5,7,9). After each Vanya's move, if number divisible by 3, Vanya wins. If 10 moves complete, Vova wins.
+
+This is a finite game with perfect information. We can perform DP backward from move 10 to 0. Since n <= 1000, but number can change by ±1 each move, but bounded? Could go out of bounds? But we can consider states limited: all integers reachable from n within 10 moves: n +/- 10. So range n-10 to n+10. That's at most 21 values. So we can DP.
+
+We can define DP[t][x] = True if Vanya can force win from state (x, turn t). t from 0 to 10. Terminal: if t==10 => Vova wins, so Vanya cannot win: DP[10][x] = False. Also terminal after Vanya's move? Actually we check after Vanya's move, but that is considered during the transition: if Vanya moves to y divisible by 3, he wins immediately. So in DP, when it's Vanya's turn (t even), we see if he can move to y such that y % 3 == 0 => win. If not, he can choose any move that leads to a position where Vova can force win? Wait: it's typical minimax: Vanya wants to win, Vova wants to avoid. So for DP, if it is Vanya's turn, DP[t][x] = True if there exists a move (x±1) such that (either y divisible by 3 (immediate win) or, if not, DP[t+1][y] is True). Actually if y divisible by 3, it's immediate win; there's no need to consider DP[t+1]. So we can define:
+
+If t even: DP[t][x] = True if there exists move to y such that y%3==0 or (t+1<10 and DP[t+1][y] is True). But t+1 will be odd (Vova's turn). Similarly for Vova's turn: DP[t][x] = False if there exists a move to y such that DP[t+1][y] is False? Wait: Vova wants to avoid Vanya winning. So if it's Vova's turn, Vanya will win if after Vova's move, DP[t+1][y] is True (i.e., Vanya can force win). Vova will choose a move that makes Vanya lose if possible. So DP[t][x] = False if there exists a move to y such that DP[t+1][y] is False. Actually careful: At Vova's turn, if all moves lead to Vanya winning (DP[t+1][y]==True), then Vova cannot avoid. So DP[t][x] = True if for all moves, DP[t+1][y]==True. Wait but we are labeling DP[t][x] as whether Vanya can force win from that state. So if it's Vova's turn, Vanya will win if Vova cannot choose a move that leads to Vanya loss. So DP[t][x] = True iff for all moves y, DP[t+1][y] is True. Because if any move yields False (Vanya losing), Vova will choose that move. So DP[t][x] = all(DP[t+1][y]).
+
+Thus base: DP[10][x] = False (since Vanya has no more turns). For t from 9 down to 0: if t even: DP[t][x] = True if any of ( (y%3==0) or (t+1<10 and DP[t+1][y] == True) ). else: DP[t][x] = all(DP[t+1][y]).
+
+But note that when Vanya makes a move to y divisible by 3, he wins immediately, so we don't need to consider DP[t+1]. So for Vanya's turn, we check if y%3==0; else if DP[t+1][y] True. But we need to consider both.
+
+Edge: t=9 (Vova's turn). At t=9, Vova moves to y. Then 10 moves is passed, and Vova wins if Vanya hasn't won. But since Vanya hasn't won, DP[10][y] = False. So at t=9, Vova's move leads to DP[10][y] which is False. So for Vova's turn, DP[9][x] = all(DP[10][y]) = all(False) = False. So DP[9][x] = False for all x. That means at last Vova's turn, Vanya cannot force win, regardless of move. That matches rule: Vova wins after 10 moves if Vanya hasn't won. So at t=9, DP[9][x] = False. Good.
+
+Thus we can compute DP[0][n] for each test case. But we need to compute DP for all possible n? Since t small, we can compute for each test case separately. But we can also compute DP for all n up to 1000+10 maybe. But t <=100, so computing per test case is fine.
+
+But we can also reason analytically: Because the game is simple, we might find pattern: Vanya can win if whatever mod 3 etc. Let's attempt to analyze.
+
+Observations: Since each move changes number by ±1, parity of n toggles each move. But mod 3 pattern: each move changes n by ±1, so mod 3 changes by +1 or -1. So considering mod 3 classes "0,1,2".
+
+Goal: Vanya wants to get to 0 mod 3 after his own move.
+
+It might be beneficial to think of the game as each turn: If it's Vanya's turn, he can move to (x±1) mod 3 = (x±1 mod 3). If he can reach 0 mod 3 (i.e., if x mod 3 == 1 or 2), he can win immediately. But if not, he can't win immediately. But if x mod 3 == 0, Vanya cannot win immediately; he must move to 1 or 2 mod 3. The game continues.
+
+Similarly, Vova's turn: he can move to (x±1) mod 3. He wants to avoid Vanya winning later. But we need to examine states as a game on mod 3 only? Because rest of integer values maybe irrelevant. But because the moves are ±1, if the mod 3 is same, the integer's actual value matters? Maybe not. Because winning only depends on divisibility by 3, and the rest of the number is irrelevant for winning condition. So we might only care about remainder mod 3. However, the game might depend on ability to "stay" on a remainder that delays the win? But if we only care about mod 3, you can always choose ±1 to adjust remainder. So we can model game as states of remainder 0,1,2. But there might be constraints: The integer might be negative? But n >=1. But we can go below 1? The problem doesn't restrict negative numbers; they said integer n, could be negative? But n >=1, but we can sub 1 to get 0 or negative? Actually starting n >=1, but you can subtract 1 repeatedly. There's no restriction that current integer must remain positive. So we can go to negative numbers. But mod 3 still well-defined.
+
+Thus we can treat as a game on mod 3; the actual value doesn't matter for win condition. So DP states can be (t, r) where r=0,1,2. Let's compute:
+
+Let DP[t][r] = whether Vanya can force win from remainder r at turn t. Terminal: DP[10][r] = False.
+
+We can compute backward:
+
+At t=9 (Vova's turn), DP[9][r] = all over moves: He can choose r+1 or r-1 mod 3. But for each r, DP[10][r'] = False. So DP[9][r] = False. So at t=9, all remainders are losing for Vanya.
+
+Now t=8 (Vanya's turn). We need to check: Are there any moves to remainder 0? If yes, Vanya wins immediately. So for r=1 or 2, Vanya can move to 0 mod 3 (since 1-1=0, 2-1=1? Wait 2-1=1 not 0. But 2+1=0 mod3? 2+1=3 mod3=0. So yes, r=1 can subtract 1 to 0; r=2 can add 1 to 0. So for r=1 or 2, Vanya can win immediately at t=8. For r=0, he cannot win immediately, but can move to 1 or 2. For each, DP[9][1] = False, DP[9][2] = False. So DP[8][0] = any of those? Actually for Vanya's turn: DP[t][r] = True if there exists a move to y such that y%3==0 or DP[t+1][y] True. In r=0, no immediate win. But if he moves to 1, DP[9][1] = False. So it's not winning. So DP[8][0] = False.
+
+Thus DP[8][0] = False; DP[8][1] = True; DP[8][2] = True.
+
+Now t=7 (Vova's turn). For r=0: Vova can move to 1 or 2. DP[8][1] = True, DP[8][2] = True. So all moves lead to Vanya win. So DP[7][0] = True. For r=1: Vova can move to 0 or 2. DP[8][0] = False, DP[8][2] = True. Since there is a move to 0 (DP[8][0] = False), Vova will choose that, causing Vanya lose. So DP[7][1] = False. For r=2: Vova can move to 1 or 0. DP[8][1] = True, DP[8][0] = False. So again there is a move to 0 (False), so DP[7][2] = False.
+
+So DP[7][0] = True, DP[7][1] = False, DP[7][2] = False.
+
+Now t=6 (Vanya's turn). r=1 or 2: immediate win. So DP[6][1] = True, DP[6][2] = True. r=0: moves to 1 or 2; DP[7][1] = False, DP[7][2] = False. So DP[6][0] = False.
+
+Thus DP[6][0] = False; DP[6][1] = True; DP[6][2] = True.
+
+Now t=5 (Vova's turn). For r=0: options to 1 or 2; both DP[6][1] = True, DP[6][2] = True -> DP[5][0] = True. For r=1: options to 0 or 2; DP[6][0] = False, DP[6][2] = True -> there is a move to 0, so DP[5][1] = False. For r=2: options to 1 or 0; DP[6][1] = True, DP[6][0] = False -> DP[5][2] = False.
+
+Notice pattern: The DP values oscillate.
+
+Thus t=4 (Vanya's turn). r=1 or 2: immediate win. So DP[4][1] = True, DP[4][2] = True. r=0: moves to 1 or 2; DP[5][1] = False, DP[5][2] = False -> DP[4][0] = False.
+
+We can see pattern: For any Vanya's turn t even, DP[t][0] = False, DP[t][1] = True, DP[t][2] = True. For any Vova's turn t odd, DP[t][0] = True, DP[t][1] = False, DP[t][2] = False.
+
+Thus DP[0][r] depends on parity of t. Since t=0 is even, DP[0][0] = False, DP[0][1] = True, DP[0][2] = True.
+
+So the answer depends on n mod 3: If n mod 3 == 0 -> Vanya loses (Vova wins). If n mod 3 == 1 or 2 -> Vanya wins. Wait, check sample: They had n=1 => Output First. (1 mod3=1 -> X). n=3 => Output Second. 3 mod3=0 -> Second. n=5 => Output First. 5 mod3=2 -> First. n=100 => Output First. 100 mod3=1 -> First. n=999 => Output Second. 999 mod3=0 -> Second. n=1000 => Output First. 1000 mod3=1 -> First. So matches pattern.
+
+Thus solution: For each test case, compute n mod 3. If mod 3 == 0 -> "Second" else "First".
+
+Edge cases: n can be 0? Input says n>=1. So fine.
+
+Thus final solution: read t, loop over t lines, read n, compute n % 3, print "Second" if 0 else "First".
+
+Now write code. Use sys.stdin.read().split().
+
+Also note: The sample input shows "6\n\n1\n\n3\n\n5\n\n100\n\n999\n\n1000\n\n" but there are empty lines. Use .split() to handle whitespace.
+
+Return.
+
+Let's produce final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every move a player can add `1` or subtract `1` from the current integer.
+The game starts with the given integer `n` and the following rules
+
+* Vanya starts.
+* After **Vanya’s** move, if the current integer is divisible by `3` he wins.
+* If `10` moves are finished and Vanya has not won, Vova wins.
+
+The game is perfectly deterministic, the two players play optimally and
+therefore the result depends only on the starting integer `n`.
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+Adding or subtracting `1` changes the integer by `±1`.
+For the winning condition only the remainders modulo `3` matter:
+
+```
+r = 0  →  already divisible by 3
+r = 1  →  subtract 1 → 0
+r = 2  →  add 1 → 0
+```
+
+So the only relevant information is the current remainder `r ∈ {0,1,2}`.
+
+--------------------------------------------------------------------
+
+#### 2.  Game as a finite state tree
+
+We can build the game tree backwards.
+
+```
+t = 0 … 10   – number of moves already performed (0 at the start)
+t even      – Vanya’s turn
+t odd       – Vova’s turn
+```
+
+For a state `(t, r)` we define
+
+```
+win(t, r) =  True  if Vanya can force a win from this state
+            False otherwise
+```
+
+*Base*  
+`win(10, r) = False` – all 10 moves are done, Vanya has not won → Vova wins.
+
+*Transition*  
+```
+t even (Vanya’s turn)
+    Vanya can win if he can immediately reach a multiple of 3
+    or if he can move to a state where he can force a win.
+    win(t, r) =  (r==1 or r==2)          # immediate win
+                or  win(t+1, r+1) or win(t+1, r-1)
+
+t odd (Vova’s turn)
+    Vova will choose a move that makes Vanya lose if possible.
+    win(t, r) =  win(t+1, r+1) and win(t+1, r-1)   # all moves lead to Vanya’s win
+```
+
+Because the remainder after a move is `(r±1) mod 3`, the whole game
+avoids any dependence on the absolute value of the integer.
+
+--------------------------------------------------------------------
+
+#### 3.  Computing the result
+
+We evaluate the table for `t = 9 … 0` and `r = 0,1,2`.
+
+```
+t = 9  (Vova) : all win(9, r) = False
+
+t = 8  (Vanya) : win(8,1)=True, win(8,2)=True, win(8,0)=False
+t = 7  (Vova)  : win(7,0)=True, win(7,1)=False, win(7,2)=False
+t = 6  (Vanya) : win(6,0)=False, win(6,1)=True, win(6,2)=True
+t = 5  (Vova)  : win(5,0)=True, win(5,1)=False, win(5,2)=False
+t = 4  (Vanya) : win(4,0)=False, win(4,1)=True, win(4,2)=True
+t = 3  (Vova)  : win(3,0)=True, win(3,1)=False, win(3,2)=False
+t = 2  (Vanya) : win(2,0)=False, win(2,1)=True, win(2,2)=True
+t = 1  (Vova)  : win(1,0)=True, win(1,1)=False, win(1,2)=False
+t = 0  (Vanya) : win(0,0)=False, win(0,1)=True, win(0,2)=True
+```
+
+At the start (`t = 0`) the pattern is:
+
+```
+r = 0  →  win = False   →  Vova wins
+r = 1  →  win = True    →  Vanya wins
+r = 2  →  win = True    →  Vanya wins
+```
+
+Therefore the whole game reduces to
+
+```
+if n % 3 == 0  →  Vova wins
+else           →  Vanya wins
+```
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm outputs the correct winner for every
+starting integer `n`.
+
+---
+
+##### Lemma 1  
+For every `t (0 ≤ t ≤ 10)` and remainder `r ∈ {0,1,2}` the value `win(t,r)` computed by the recurrence above is exactly the result of the game
+starting from state `(t, r)` when both players play optimally.
+
+**Proof.**
+
+We use induction over `t` from `10` down to `0`.
+
+*Base (`t = 10`)*  
+All moves are finished, Vanya has not won, so by the rule Vova wins.
+Thus `win(10,r) = False` is correct.
+
+*Induction step*  
+Assume the statement holds for all states with turn number `t+1`.  
+Consider a state `(t, r)`.
+
+*If `t` is even (Vanya’s turn)*  
+- Vanya can win immediately if `r = 1` or `r = 2`, because he can move
+  to `0` (mod 3).  
+- If `r = 0`, he cannot win immediately.  
+  He chooses a move to `r+1` or `r-1`.  
+  By the induction hypothesis, `win(t+1, r±1)` is true exactly when
+  from that state Vanya can force a win.  
+  Therefore `win(t,r)` is true iff there exists a move that leads to a
+  winning state or to an immediate win.  
+  This matches the definition of optimal play.
+
+*If `t` is odd (Vova’s turn)*  
+- Vova will choose a move that makes Vanya lose if possible.
+  That is, if there exists a move `r'` with `win(t+1, r') = False`,
+  Vova will take it and Vanya loses.  
+  Only if all moves lead to `win(t+1, r') = True` does Vanya win.  
+  Thus `win(t,r)` equals the logical AND of the two successors,
+  which again corresponds to optimal play.
+
+Hence the recurrence correctly captures the game outcome
+for all `(t,r)`. ∎
+
+
+
+##### Lemma 2  
+For all starting integers `n` the algorithm returns  
+`"First"` iff `n mod 3 ≠ 0`.
+
+**Proof.**
+
+From Lemma&nbsp;1 the starting state is `(t = 0, r = n mod 3)`.
+The table computed in Section&nbsp;3 shows:
+```
+win(0,0) = False   →  Vova wins
+win(0,1) = True    →  Vanya wins
+win(0,2) = True    →  Vanya wins
+```
+Thus Vanya wins exactly when `n mod 3` is `1` or `2`. The algorithm
+prints `"First"` in this case and `"Second"` otherwise. ∎
+
+
+
+##### Theorem  
+For every test case the program outputs the correct winner
+according to the rules of the game.
+
+**Proof.**
+
+Directly from Lemma&nbsp;2. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+The algorithm performs only a constant amount of work per test case:
+
+```
+Time   :  O(1)  per test case
+Memory :  O(1)
+```
+
+With `t ≤ 100` this is trivial.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+import sys
+
+def solve() -> None:
+    data = sys.stdin.read().strip().split()
+    if not data:
+        return
+    t = int(data[0])
+    out_lines = []
+    for i in range(1, t + 1):
+        n = int(data[i])
+        if n % 3 == 0:
+            out_lines.append("Second")
+        else:
+            out_lines.append("First")
+    sys.stdout.write("\n".join(out_lines))
+
+if __name__ == "__main__":
+    solve()
+```
+
+The program follows exactly the algorithm proven correct above.

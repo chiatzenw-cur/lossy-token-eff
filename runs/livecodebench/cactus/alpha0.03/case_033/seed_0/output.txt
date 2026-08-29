@@ -1,0 +1,301 @@
+<|channel|>analysis<|message|>We need to find minimal length of final string after merging in order with optional direction: left/ right sequence. At each step we combine current string + next word either side case with join rule.
+
+Observation: existence of word lengths and overlapping when last char of one equals first of next leading deletion conflict. This is essentially merging with constraints that deletion occurs when endpoints coincide. We also can merge from either direction to potentially change characters at ends.
+
+Essential: each concatenation x,w or w,x results in a string that, after merge, any overlap might occur only at the boundary between the two strings, but we handle the longest overlap because we only remove one occurrence if the characters match.
+
+Specifically join(x,y):
+- If last char of x == first of y, we concatenate all without duplication? Wait rule: "can delete one of them" meaning that if the last char of x equals first char of y, you can delete one of them or the other? Example join("ab", "ba") = "aba". Here they removed the first character of "ba" and also last apple? Let's analyze: x="ab", y="ba": y's first char 'b' matches x's last char 'b'. They output "aba". They took x "ab", removed first char of y 'b', and then append remaining "a". So deletion "one of them" like event? Usually you replace substring 'b's? But we have to think: "If the last character of x is equal to the first character of y, one of them is deleted." So we get xy, but because one deletion reduces length by 1 when overlapping adjacent equal letter. They didn't delete both merging letters. Wait they deleted entire character from either side? But example. x=['a','b'], y=['b','a']; x last 'b', y first 'b'. They output "aba": all characters of x 'a','b', then 'a' of y. That means they deleted "b" from y, resulting removal of one character from one string. Similarly join("ab","cde") => "abcde": no overlap, so delete none.
+
+Thus join(x,y)=x + y[1:] if x[-1]==y[0] else x + y.
+
+Also join(y,x)= same: if y[-1]==x[0], we can delete one of them accordingly. So you append at either side.
+
+Thus minimal length is bounded by sum of lengths minus number of connected exclusions across final string, where deletion occurs when adjacent pair of resulting sequence has matching boundary. By building sequence of words with adjacency orientation: we can choose orientation for each word relative to previous string, which may produce overlapping at adjacency. Specifically that is choose i such that we specify whether word[i] is appended to left or right, and we maintain that need to check conflicts at ends: pair of adjacent words in the final order they appear, we need to know their relative letters accordingly.
+
+However the final string must be a result of inserting words at either side sequentially – but the final order of word concatenations may be arbitrary? Wait because we are iteratively joining as you apply j fixes, we always pick words[i] as whole word to be inserted either left or right of current string. The order in which words appear 'inside* inside string' could change partly, but order of insertion applied is fixed: i from 1 to n-1. But we could insert words 1 to i-1 into each char while inserted can go left or right. This arrangement is akin to picking a stack or permutation? Let's analyze.
+
+Let current string str_k; we join word[i] either left or right. Then word[i] appears at leftmost or rightmost than previously. Since we only move word after being inserted, between segments that were there before, the internal order of previous words remains same relative. This middle ground. Equivalent to building final string where last word before insertion is the current str which contains contiguous x of previous words. So we can consider that the final string's linear order of words is not arbitrary; it's basically a partial order of left-right insertions that results in a insertion sequence that can be effectively represented as placing words in a parenthesis; but because a word may be inserted at left or right multiple times, but no new word can move past later inserted ones. That is typical of constructing a final string where the order of words is given by starting positions. This is analogous to "maximum length" of a concatenation with topological ordering but with left-right insert possibility: essentially all words eventually form a linear arrangement; we can construct by gradually adding at left or right boundaries.
+
+This is similar to: we have sequence from words[0], then word[1] left or right of the LHS; eventually we still get a linear sequence where words order can be any permutation that is obtainable via "deque" operations: i.e., we create an array by cutting from left or right each time; So each word is appended to one end; this is analogous to building an entire line from a deque: you start with cell 0, then for each subsequent person you may push left or right to the deque. This yields any ordering of the words? Let's test with 3 words: 0,1,2; choose 1 left or right; 2 left or right; final order may be any of 6 permutations? Let's enumerate quickly:
+
+- 1 left => order [1,0] after first; then 2 left => [2,1,0], 2 right => [1,0,2]
+- 1 right => [0,1]; then 2 left => [2,0,1]; 2 right => [0,1,2]
+
+So any arrangement of 3 words? The permutations: [2,1,0], [1,0,2], [2,0,1], [0,1,2]. Not all: [1,2,0] missing; [0,2,1] missing. So it's not arbitrary because can't reorder internal relative to initial.
+
+Essentially order remains fixed relative: After computation, the order of words in final string is left-to-right list where the lookup is to get final arrangement by iteratively picking 0/1 left or right. This is equivalent to problem of constructing "full binary tree" or "pop from ends" resulting in a front positions? Let's view: The transformation is basically building word order as a permutation that is a "zigzag" from earliest inserted to later inserted? Actually it's like we form array by scanning words in order and converting each iteration to left or right. This is basically building a permutation that is a sequence of "prefix sums" of each choice? Wait we can model this: chooses for each i we put i either at start or end, but behind or ahead of next words? Actually at each step, writes, we add word[i] to sentence if it goes left, it becomes new leftmost part. At final step, words index can appear anywhere depending on choices left or right.
+
+We can use DP approach: we want to find minimal final length based on pairwise resulting overlaps between consecutive words in final string. Each insertion word will end up adjacent to some existing word(s). But given we only keep previous string, we must consider that the boundary between last inserted words influences the reply of future merges.
+
+Potential approach: dynamic programming along time indices with states: left: between str(k) and node a? Actually we treat as process: store current string's "front string" maintained; but we need to know its last character and first character? Because when merging we only have to consider whether last char of one equals first char of next. In join we need to consider minimal len after each step: if current string str will have length its furthest ends and we may also generate. But we only need length to achieve final minimal result; we don't need to know 'string content'.
+
+However, the deletion condition depends on characters of string ends: the last char at leftmost side & first char at rightmost side? Wait join When we choose to join words[i] on left: we do join(words[i], str_{i-1}). Condition: last char of words[i] equal first char of str_{i-1} => deletion? Hmm join expects x and y with potential overlapping, where first char of y vs last char of x. So we evaluate pair: words[i] as x, str_{i-1} as y. So we need to know first character of str_{i-1} and last char ofwords[i] for deletion cost. Similarly if we join str_{i-1} left of words[i], then join(str_{i-1}, words[i]) comparing last char of str_{i-1} and first char of words[i].
+
+Thus we need ability to know these boundary characters for strings after each step. So it's essentially we need to build string that might apply deletions gradually; but we only need to know overall length and first/last char after each step for future merges.
+
+Thus we could use DP over segment to compute minimal length for subsequence of words perhaps as a subsequence.
+
+Observation: for any number of words, the final string equals concatenation of all words where pairwise merge occurs only at boundaries between consecutive words in final order independent of any corrections due to earlier merges? Actually because we maintain original words but may share overlapping char at adjacent positions? Let's reason.
+
+Suppose we have words [w0, w1, w2]. Suppose we do merging [w0, w1] -> w01; then len(w01) may be len(w0)+len(w1) -1 if overlaps. Next merging w2 either side may cause long and merge w01 with w2 depending on boundary between "something" and w2: that depends on last char from w01 or first char of w01. So after exchanging, node positions might change.
+
+Thus final string length equals sum(lengths) - sum(overlap removal) where overlap removal occurs at each merge between two sequences. Because each merge merges two but may maintain previous internal overlaps; we only remove at most one char per merge.
+
+But we have n-1 merges, so at most n-1 deletes. So minimal sequence length = sum(len(words)) - maximal number of deletions across merges. Each deletion reduces length by 1 if merging both share same character. How to count? We need to examine each operation: if we merge the current string "T" with next word "q" either left or right, we might get a deletion if (last char of u == first char of v). So we can achieve deletion if we position them accordingly. We want to maximize count of such successful deletions across n-1 merges overall.
+
+Thus the question reduces to: Choose arrangement of words arranged as a sequence (full string) with each adjacent pair considered at some 'adjacency' where "last of left vs first of right"? But due to how we replace merging after first steps, the last char of resulting segment must be the last char of current string or last char of joined word whichever remains from deletion. For example: merging x="ab", y="ba" gives "aba" where last char is 'a', missing 'b'. That last char is same as last of y touched? Wait after join we have Yapped last char be last char of y? We can think after merging, final string's last char equals last char of the concatenation that had rightmost part; maybe from y or after deletion. The general rule: join($x$, $y$) yields new string whose last character is highest index char of y: if there's no deletion at last char; else y's last char is overwritten? Actually if x[-1]==y[0] we delete the first char of y; then last char of final string remains y[-1] unless there are others.
+
+Thus summarizing: For DP, we need forward/backwards state "ending character" and "starting character," but initial is start string of first word, but after merges we may pick left to modify start char.
+
+Thus we need to consider dynamic states of "current string by top of the expansion" as we reverse tokens.
+
+In effect we traverse inside out. But we can approach via dynamic programming across order of words using 3 characters: first character: start char; last char: end char.
+
+We need to compute minimal length using backtracking? But current string can be long in length 50000, but still adjacent boundary char matters but not entire content.
+
+Essential: When we merge two contiguous strings, we only check last char of left segment with first char of right segment. So we need to ensure final string's start and end characters after each merge for preceding merge.
+
+To satisfy monotonic property, we can treat these as building a string incrementally; we want to pick an ordering of the words to maximize number of equal adjacent pair transitions.
+
+But we might restrict later merges: after earlier permuting, the last char of preceding big chunk matters; its left/ right ability because future merges may affect start or end accordingly? Wait left or right operations consider boundaries between last char of some prefix and first char of suffix.
+
+Given we can choose to put word[i] before (left) or after (right) the current string. So we essentially can generate final order as we pick left/right positions, and we can pick which preceding or succeeding neighbor to satisfy overlapping for that pair.
+
+It seems we can treat this as constructing a string which is a permutation of words in some order that is at each selection we adopt orientation that puts into previous and future, so we combine as we go.
+
+We need algorithm:
+
+Let's think complexity n up to 1000. Each word length up to 50. Brute force enumerating all insertion orders 2^(n-1) is impossible.
+
+Simplify via DP over length of substring plus boundaries: We look at subarray of words containing consecutive indices? But the order of words transmitted may not be contiguous.
+
+We might derive that the state after all merges is a concatenation of all words in a contiguous order where each word's leading character may shift due to preceding merges? Actually think about algorithm: At each step, we apply join with next word at left or right. At step i, we join words[i] to whole string so maybe not contiguous index-wise? For example, we could after connecting digits get string steps of length 4: we might need to evaluate pron.
+
+Let's attempt to maybe compute minimal length by representing all words as best to arrange to maximize number of times last char of next word equals first char of the following word in final order. Because each time I pair had a matching char at boundary, deletion ensures length reduces by 1. So maximum deletions correspond to maximum number of such compatible pairs in final arrangement string.
+
+Given we can insert left or right in the sequence, its final ordering may be any permutation that can be represented by insertion order from start, but not all permutations.
+
+But is any permutation reachable? Let's confirm earlier example for 3 words 'a','b','c'. We had 4 permutations reachable: index positions (2,1,0),(1,0,2),(2,0,1),(0,1,2). Are there other sequences? For 3 words, can we go with 1 at middle left, 2 at right? adjacency? Wait we only allowed up to arbitrary arrangement by sequential membership like add to left or right. The algorithm yields permutations known as "pop in/out"? This is the property 'queue building by pushes to either ends' -> Lexicographic permutations? This is just all permutations that can be arranged by starting with first, then iteratively placing new to left or right, which is essentially all permutations that are "left right positions" like we can, in final order, any word can be at any position but only one of the number of (n)? Actually the number of permutations reachable is 2^(n-1). Because at each step we just choose to place earlier word inserted earlier as leftmost or rightmost, so each subsequent insertion chooses one of 2 positions, giving unique permutation. However as we have 3 words, 2^(2)=4 permutations=4. Yes matches reachable listing. So all permutations are not reachable: after we choose left/right for each assignment we get unique permutation. But given there are 2^(n-1) distinct permutations; but that's too many: For n=4, 8 permutations out of 24 possible. So basically only 2^(n-1) of all n! permutations are reachable: basically building a permutation by adding start and end gradually.
+
+Thus we can compute DP where we consider 2^(n-1) permutations; but distance large result 2^999 workable? We cannot.
+
+But this is separate: we never need to consider permutations; we need minimal final length given we can pick left/right each step.
+
+Observation: After all merges, the final string equals sum of lengths minus sum over i of match(i, final_next). Each 'i' refers to boundary between word[i] and word[i+1] in the final order? The boundary matches if (last char of the left word wchar == first char of prefix of right string) but after potential deletions of earlier words. Since deletions only happen when adjacent ends match, after assimilation we basically set new list.
+
+So basically final length is sum(len(words)) - M where M is number of matches across all merges. In order to achieve max reduction, we need to consider as we insert each word, we might have ability to reduce 1 if there's a match between its chosen side and or neighbor. Since we only create n-1 merges, each merge occurs once.
+Hence we can only count at most n-1 matches; we just care if each join provides unique opposite orientation.
+
+Thus we can attempt to compute maximum possible number of deletions that can occur across the process.
+
+Observation: If we combine word[i] to previous string S, then for this merge we can merge if there is a match between one side of matched strings: either (last char of S == first char of word[i]) if we append to right, or (last char of word[i] == first char of S) if we append to left. So we can potentially get deletion if either S has its left char equal to last char of word[i] or S has its right char equal to first char of word[i].
+
+Therefore we need to track by DP of prefix: after processing i words, we maintain the maximum deletions achieved. The state should be enough to contain the prefix string's first and last character to support 'matching' with next word w. But we don't know the absolute wording; we only need the fresh char at ends. Because if we modify i-th word orientation we choose orientation. So we can maintain:
+
+DP[i][a][b] maybe? But we are required to store all possibilities for first and last characters summarizing orientation after i steps. Each word's 'content' might produce many initial letter but we can't compute all.
+
+But initial positions with each word inserted only have their content predetermined relative order at boundaries. Because no merging across earlier words; boundaries between words that are contiguous in final string after i steps may align with boundaries of earlier merges.
+
+Thus we want to know minimal length to produce final string of processed i words. Starting from after first word, we maintain first and last char of shape (maybe front char or back char). When we add word or, we can produce new first and last char accordingly.
+
+Let wordstring[i] with length len[i].
+
+We consider state of first char f and last char t of already built string. Initially we have f=i0.first, t=i0.last.
+
+If we push left: Wordop=we compare last char of w[i] with first char of current S. If w_last == s_first, we delete one char; next string becomes w + s with a possible deletion of first char of s? Wait we join w before s includes s; we have join(word[i], S) of x=word[i], y=S. We take w1? when w_last==s_first => delete one of them? We remove one of them: j? The suffix of w and first letter of s? In this case, last char of word[i] equals first char of s. So deletion may choose either LHS (x's last char) or deletion from y's first char. So we can later choose from which? But we can't choose to delete first char of w if we are moving from left orientation. But if we put w[i] as X and S as Y, the k condition is last char of x == first char of y. So we can avoid duplication by deleting one letter. But there may be cases where we output w not removing char from w, but remove F of S? But we can't produce string longer than 1 less? Actually we can delete from either one: For answer, we need minimal length, it always reduces by 1 if the condition holds because either we can delete the one causing duplication. So we don't need to decide which; but we must know the resulting new first and last character after removal. Because if we delete from w, the last char becomes w[-2], but when we append S, we keep the start of S. If we delete from S, then last char of w stays, and the first char of S becomes second char.
+
+Thus to know new first/last we must know not using only last char but also maybe second char after deletion. Since we only need to measure if next hash from S may produce deletion at boundaries, we need to know new first char after operation if we may delete first from type.
+
+But we just need to know boundaries possible: we need to know minimal length of resulting string; but also for future, we need to know first and last characters of new string. A deletion could change them.
+
+Thus the necessary states store the first and last char of the current string as well as possibly the second character after first or last char in case there's significant effect when we remove a char.
+
+But we can treat transformation as loops on big string that can reduce variable lengths by just deleting boundary char if duplication. So we need to model resulting first and last char (depending) given preceding char.
+
+Detailed: Suppose we have string S, with unique representation: first char f1, last char l1, and maybe two-letter sequences: front2 char / back2 char. When we join w to S at left-root orientation:
+
+Case1: Add word on left: x = w, y = S. Step:
+
+- If w[-1] != S[0]:
+  new string: w + S
+  new first char: w[0], new last char: S[-1], no deletion.
+- Else w[-1] == S[0].
+  We delete one char from w[?] or S[0]. Optionally:
+  Option a: delete W's last char: -> w[:-1] + S. New first char: w[0], new last char: S[-1 ].
+  Option b: delete S's first char: -> w + S[1:].
+  In merge: deletion from S changes first char to S[1]. So new first char depends on S[1] if S length >1.
+
+Thus probability: the resulting first char must be either w[0] or S[1] depending on deletion. Additionally, since we choose minimal length so we may choose at most one deletion. That's always possible: obviously the difference exists only if we choose to delete at boundary to avoid concurrency. So we might choose the one that results in smallest total next deletions? For this DP we can choose a deletion that leads to minimal possible final length overall. So we need to consider this deciding to delete from S or from w.
+
+But we don't know which deletion is better to minimize size for subsequent merges. So due to potential complexity we might have visited both state possibilities. Because each operation can achieve multiple possible resulting first/last char pairs (maybe one of two). So we may need to keep updated DP for each possible state.
+
+Thus we present DP that after processing i words, we maintain top states for each pair (f, l). Balanced.
+
+The number of computations can be large: all letter possibilities: 26 letters. DP sizes: i up to 1000, f small alphabet, l moderate. So 1000 * 26 * 26 = 676k states but still heavy but manageable if we keep minimal length for each pair. Additionally we may need second char for each string? but we might handle 2-letter pair by update.
+
+But we cannot easily deduce second char from just f and l because no rule. But we could track for k char contributions: we might need to store the first two characters and last two characters with length 2. Because deletion from S depends on its second char. But we may only need to know if there's a chance to delete the first char of S; that depends on second char of S. When we decide to delete S's first char, we might need to save S[1] vs up to entire string. But we don't need to store S[1] after many steps? Wait we may only need to guarantee that second char from front remains unchanged for subsequent merges but may need to see for start char for later merges. So to compute DP, we need to know the entire order of the string to decide later cancellations; but we cannot store all. However we might keep "first char and second char" as essential to later splits.
+
+But we can think of a simpler proof: For optimal answer, we can always decide to delete from 'w' side side? Actually, when merging at left: We can delete either w's last or S's first. But we can choose which merge deletion result leads to minimal length. If we use S's first deletion, we will lose S's first char; which may be truncated but may also affect future ability to delete because future merges will test 's.first' for something else. So which choice can lead to minimal final length? This could be DP.
+
+But we might circumvent by not worrying about transitions beyond the first/last, because we only need to know length after each step; we can track DP only 2 sides; we do not track initial part. But DP probably uses only a pair of coordinates: first character of root and last character of root. Let's test: after left insertion, we delete from W or S, but the resulting new first char may be w[0] or S[1], which we don't know. But we can treat the resulting pair as (f', l') where f' might be w[0], l' might be l1. But we could also get f' = S[1] if S[1] still an existing Chinese char. We only need to know its value to determine front char for future merges. However, we don't know S[1] due to not storing top two spaces. So we cannot compute this! Let's think about two-step deletion design: maybe we can always avoid filters by choosing not to delete from S; We can always delete the internal char from moving word; in both cases, w[-1] left, S[0] remains. So using that ensures we know the first bar remains from S thus remains unchanged. But if we can delete from S, we might lose ability for deletion to right? But we might not need to; the number of deletions across both merges maybe same? Wait deleting from S might cause +1 deletion overall but each merge reduces at most one char; So at any step we can generate at most one deletion; So we want to maximize count for all merges. Each merge will potentially produce 1 deletion if comparable. So we cannot lose deletion possible by adjusting deletion side. However the choice may affect future merges' removal ability: Suppose we have S starting char 'a', last char 'b', w='ba' ending at 'a', 'a' matches 'a' of s; we can choose delete whether last char of w or first char of s. If we delete from S's first char, we lose 'a', leaving s starting 'b' maybe. But still still length 1 change. Pair i+1 merging might depend on new first char, but we cannot modify earlier. But maybe by deleting from w we keep original first char as 'a', making l next call maybe. So which such decisions cause global min? Not obvious.
+
+But there may be a global optimum that chooses leftmost side as 'shifting' and ensures unify runs.
+
+Given complexity, maybe we can derive that optimum is just sum lengths minus number of single deletions among all pairwise? The maximum number of deletions equals number of times we can find a pair of operations where last char of left side matches first char of right side, regardless of identification of which side changed. Because each merge gives -1 occurrence if boundary pairs exist. But you can only create such pair of boundaries for content that has lineage such that the chosen side can match with any neighbor; this could be done by either arrangement. With ability to choose left or right from the front/back, we can ensure that the preceding pair ends with char equal to first char of next word? Wait we can also reorder in such a way that we can always sign chain of all equal runs? Example with words: ["ab","b"] "". We found length 2: we join str_0 w and w1 not produce cost. Because count of merges where we can form match means we might consider by setting orientation: maybe we need to always choose L_i_suffix to match? This is always possible? For n=1: 1. For n=2: we can choose orientation to get overlapping if any pair has either previous last == next first or previous first == next last. But we might not be able to find orientation for maximizing.
+
+Essential problem reduces to: Let's define each word a tuple of first and last char and maybe internal char? But we cannot ded per concatenation.
+
+Wait maybe we can treat each word individually: We choose orientation left or right in the final sequence; the terminal order ensures each pair of inserted words influences boundaries.
+
+This arrangement might be complex but we can attempt to compute some dynamic programming on position for each word with orientation using BFS on the string fully? Equivalent to constructing a rotation?
+
+Let's think intimately: For each step, we join two strings:
+
+The resulting string of S concatenated left w can be considered as a string with all characters of w followed by all of S, but with boundary duplication allowed to removal of just one char. If n repeated, the resulting string will just be concatenation of all words with no extra string compression; but we can just need to count for each pair of adjacent words (in front/ back order) if we can produce length minus 1.
+
+Essential idea: Suppose we process string step by step using property that we cannot create new overlapping characters inside each word (since characters inside word), only at borders. So final string is a concatenation of all words; no compressions inside each word. So the only possible length reduction arises from previous pairings from adjacent words in final arrangement.
+
+However, note that a deletion might happen after a longer boundary arises from earlier merges? For instance, after performing middle merges we might have first character of the suffix changes due to previous deletion? So that is still wrong: But interior of the suffix after that inserted at left may shift if deletion from S removed copy of first char. Example: S="ab"; w="ba". Compare w[-1]='a' == S[0]='a'. Deleting S[0] yields w + S[1:="b"] concatenating to 'bab', not 'aba'? Wait with deletion from S, we get w + "b" = "bab". So final start char becomes 'b', still same as w[0] no. So whichever we delete, the first char of the resulting string is either w[0] or from S[1]. So if S[j] remained 'something' might be different.
+
+Similarly, when later we merge to right, we check last char of this finished string; its last char may become 'l1' or w's last char etc.
+
+Without knowing all first & last, we cannot compute future merges.
+
+But the problem can be solved elegantly by dynamic programming on process of writing 26*26 possible first/last letters but also not need second char matters? Wait we might need to know first/last letters of entire string because of two possibilities of disabling deletion while merging. Actually we consider -1 deletion at each step. Suppose we replace string after merging. For next merge we only need to know last char of current string (could be from either previous w or previous suffix). Similarly need to know if we can choose to move between adjacent characters after insert to minimal changes. Guarantee we plan to keep variable of earliest and last char of final string except that each step we can create -1 by either deletion of front or front run. The only extra info needed for ability to specify path of deletion is trivial because we can always choose to delete from target side we are merging. For subsequent merge you might need to know if we can delete from one side again but it's due to later merges.
+
+Simplify assumption: The effect of deletion only on boundaries difference only changes element at the boundary but does not affect the other digits. So to track minimal length we only need to know the first and last characters after each merge. Because merging occurs at edges; the second char is only needed if we could delete front char. But we can always treat that we will delete from X's boundary not overall; because we can also decide to skip deletion for further merges? Let's examine scenario where we want to keep for later merges ability to delete from preceding string after we later join merging to left? Actually we might want to keep f unchanged to satisfy next merge; but we could phrase as we will always delete from the other side to not lose that char. Suppose we have front char 'a', we might need to delete from the left side if w's last char 'a' matches; but we could delete from its last char to preserve original first char 'a'. But if we postpone deletion that might reduce ability to transform? So we would always delete from the side that preserves boundary for future merges. Thus we can avoid second char retrieval.
+
+Hence the DP can use only first and last char and not ability to delete the front char. When we want to delete, we can emphasise that we always delete the side from whichever word side we create, preserving unsagged boundary.
+
+Thus we will compute DP:
+
+- Initially, we have string = words[0].
+- For i from 1..n-1:
+  - We consider two options: front join with word[i] at left or right.
+  - If we add word at right: w = words[i], S = LHS, we may merge if S_last == w_first: we can delete one ('ab')
+    new length is matched lengths if deletion else not.
+    new first char = S_first, new last char = w_last (since deletion shapes; if deletion occurs we also keep w_last?). If we need to delete the inner char w_first: we reduce its length by 1; but last char remains w_last. In sum: length = S_len + w_len - (skip if we delete either char or W length maybe).  Specifically: If S_last==w_first: new len = S_len + w_len - 1 (since we remove one char). Else new len = S_len + w_len.
+And new first char remains S_first left; new last char remains w_last (since we delete after start?). Actually deletion removed caeless char as either original.
+
+We also might delete from S_last? If we delete S_last by turning it to w's first char? But we don't have ability to deletion from S by using left join? Actually case "join(S, w)" includes removal either last char or value of w_first. In this operation we are adding w to right. So whichever we want to delete we can delete either last char of S or w_first. But copy of S_last char interacts with next l. We preserve first char of S and last char of S may change if we delete S_last. So it's necessary to track new sequence's last char depending on which we delete. It's possible that better to delete from S_last to preserve w_first as start. For subsequent merges to right, we might want new last char to be w_last or some other.
+
+If we delete S_last, space remains w_first so new leftmost char after ps might be changed? Wait hooking to right we are adding after combination; the start char remains part of S; last char from S_last might be replaced by w_first if we delete S_last. That may change.
+
+Hence our DP assumption ignoring version info duplicates might miss optimum.
+
+Hence the DP states may need to know more information: basically verifying that each previous string is formed by selecting left or right of remaining words; some potential for deletion is not considered.
+
+But we can approximate as other.
+
+Hold on: Maybe we can find that max operations = number of overlaps between any prefix and suffix of successive words is independent of the neighbor swaps? Because multiple adjacency types might yield choose orientation that merges adjacent accordingly.
+
+We can treat each word as a node with string representation. Removing of one ghost at two side results in at most n-1 deletions. But minimal length may mean we need to have at least 1 match across merges. The length after all merges will be sum(len)-max where matched pair count. Could it be as high as n-1? Only if there is always same pair positions that obviously overlap. But maybe we can circumvent by orientation: let's think formulated pair "char1" may be char 0  that no char.
+
+Let's search for path for adjacency patterns. For each addition we need to know if its boundary containing certain char is true. If we always match relative to preceding string O.. the last char may become first of rightmost word, whoever finished.
+
+Given no overlapped modifications inside, we can approach via graph DP on letters? We can treat each word as an edge that could be oriented with certain rule to create adjacency. Let's maybe formulate as same as building string of words of length n, each ends with writes of char a->b last char; Each word's orientation inside final sequence must maintain cumulative letter string transitions.
+
+Alternate viewpoint: The final string of letters can be predicted by merging arrangement: each addition forms a string that is left-justified of prefixes. For any pair of inserted words, the serialization may produce adjacent pair. Wait we might have solution with operations analogous to building a stack; Equivalent to that final string is built by combining them at edges where the subsequent words in maintain a path across a graph of letters; This yields turn.
+
+Maybe we can view each word as maintain pair of first and last character and length; join operations produce 'string' with lengths determined by edges but we can always subtract 1 if at moment of join. This property emphasises adjacency of characters only pair (last char of left, first char of right). So we could model the sequence of 2-characters executed from earlier chain of characters. The last character of final string after one step is just that of the rightmost word in the current string (only because we consider deletion only when suffix char of left or first char of right, but maybe we can preserve last char of right type). The final last char may always be the last char of the last word inserted at rightmost side? Wait we don't know, maybe the last char may shift due to deletion from previous stack during left insertion? Suppose last step was 'join right': after word inserted on right, the string ends with "wordi_last" when we choose not to delete or we may delete from S_last? In join(str, word). There can be case where S_last == word_first, so we might delete one char. If we delete S_last instead we keep first char of word. That might make new last char = word_last (since we keep entire word). That that seems straightforward. So the minimal length final string will be max over track of option? However, we might maintain that last char always equals last char of whichever word inserted last at right? That's what I think because we always can sort of keep topmost side current. Strictly, after each merge we might have last char = LCA's last char or the inserted word's last char? Let's analyze:
+
+Take S = 'ab', last = 'b'. Insert w='ata': W last = 'a', first 'a', so we can delete some char; If we choose to add w to right, we might consider patch: if S_last==w_first: i.e., 'b' == 'a'? no. So skip. New string ends with 'a'.
+
+So last char = last char of w. So maybe after chosen insertion to right, last char always becomes w_last. Indeed, only if deletion occurs from w (delete its last char) last char becomes w_last-1? Wait last char of w may be before deletion or slicing? Not if we remove from w left; but if we delete w_first we keep w last; if we delete S_last, we still keep w_last; So last char unchanged. So after a right insertion, last char remains w_last always. For left insertion, first char becomes w_first or S_first? But we can choose to delete from S_first.
+
+Thus final first char can be either chosen. For left insertion we might consider: we may keep S_first to keep previous word repeated? But we don't want to lose new first char as w_first? But if we delete from w_last we keep that; but short.
+
+Thus we can treat as we can always keep the last of inserted word and first of previous string. But what if we delete from S_first? That may change first char; but we just allow to skip if not beneficial. So we want to keep minimal length; maybe we can only delete from word side to avoid changing extremes.
+
+Thus we can treat as we always maintain extremes: The first char of processed string is first char of its first words (since we never delete it). This equals the first char of w0. Wait in left insertion we think we might keep S_first if we delete from w last; but we might also delete S_first.
+
+To maximize number of deletions, we might want to delete from word side to maintain original boundaries for future? Let's test with simple example:
+
+Simulate with chars: with words1 'ab', words2 'ba', words3 'bc', we used alpha.
+
+If we only maintain extremes unchanged, we can produce pattern: maybe first 2 letters matched produce deletion.
+
+I think impossible to compute optimum with simple DP ignoring second char leads to compute.
+
+Let's attempt to produce DP that holds final first and last char as well as maybe the direction of the string relative to original orientation. Actually we choose to always preserve leftmost char and keep last char of piece inserted to right. Without we keep start char unchanged.
+
+So we can compress to arbitrary allow for start char always constant. So basically final string will have period of its extremes as starting char of first word and not changed due to left insertion, unless we purposely delete. Actually we could maybe preserve leading char as subexpress.
+
+However, also we can consider that we may not want to change first char; But maybe you'd want to delete current first char to match that of next word for later deletion? But that will bring only one deletion beyond the ones we get earlier; but might yield longer deletion count at later stages if we keep first char changed to produce small result. Might produce more deletion count? Actually you might have bigger opportunity to create triple overlap: word A at left, word B at right adjacent; if you delete B's first char we might keep first char of G etc.
+
+But maybe we can consider that maximum deletions can be achieved by simply design: Each pair can produce at most one deletion. And connecting words after each operation, we only need to ensure check adjacency between words indices that we want to match. But the arrangement determined by insertion order from left or right yields which words become adjacency indices. Suppose we have words array: x0, x1, x2,..., we can construct a final order of words with order of indices where each word inserted left or right is known. We'll have a permutation. Then we can compute total possible deletions sum across adjacent pairs where adjacent indices i,j we impose l_i equals f_j? Wait we might define left->right adjacency.
+
+Therefore we may reduce to: We can track the final arrangement as a permutation of index set. The maximum number of adjacency matches possible so we can compute using DP over positions of persons? Actually we can maintain order that can be built by starring start index 0 and add each next word as either left or right. Equivalent to placing them in a deque: For each new word i we can choose to put it next to left or right of current chain. So the final sequence yields a particular order that keeps original relative order with no reversing.
+
+Hence the maximal possible deletions may be the number starting to choose which pair to connect such that adjacency char from the left element's last char equals right element's first char. This is like we need to choose a path through nodes such that we produce as many edges as possible.
+
+We can choose to choose either front or back where indices match. The set of positions that can be built are exactly all permutations that have the property that for each consecutive colon (except maybe using stack extremes). Equivalent to building a permutation array ones orbit.
+
+But not obviously trivial.
+
+Could we reconstruct new string with algorithm of char merges? I think the problem may intend a simpler solve: two extreme operations: maintain next char's last and first ensures we can rearrange at each step to have the most appropriately matched boundary. Let's think again: For each word i, we can pick orientation either left or right: so we will have two possible pair values at the end: first or last. Since we want to maximize the number of deletions, basically we may pick closing outgoing next char that matches next word's first char. That might just reduce to maximum adjacent matches between counts if we can reorder arbitrarily? Wait that would produce max Y_n as count of possible pair where each boundary char match.
+
+But repeated possibilities from each of previous words may come from anything. But we only have path.
+
+Simpler: Because each operation merges two strings, we only reduce length by 1 if when there's a matching char between the two ends being merged. So we can concisely consider: after each swap, we can choose whether to merge at a pair with match by converting first char to match last of the other or adjusting accordingly. This transformation can be chosen to "aim" each round adjacency pair. So yes we can choose pair i and j; i can't be repeated; such pairs correspond to mapping adjacency between word indices.
+
+Observing that the final string could be constructed so that the word order does not require reordering beyond insertion left or right. But is it always possible to achieve adjacency order we want? Suppose we choose word sequence: 0,1,2 -3,4? We might circumvent.
+
+Let's attempt to solve with DP on indices held as they are unmatched: we just keep merge tree with final string as string of words with internal permutations defined by recursion.
+
+Observation: The operation essentially does always apply some label to the extremes: each word used to become part of string when inserted at left or right. So the resulting string has a representation as a sequence of all words in some order. In this order, each partial string created at step i matches last of previous built in front or insertion at immediate side such that boundary is between previous or new inserted word. The final string order is basically the order of words placed from first to last.
+
+Thus we can treat it as:
+- We maintain a pointer chain of words.
+- We can consider placing n words in array a[0..n-1] final order.
+- For each index i from 0 to n-1 (except last?), the word a[i] appears in final string. For each merge i+1, we have some union with a[i+1] so we adjust length accordingly.
+
+I'm reading some complexities; but I'm stuck.
+
+Maybe there's simpler. Because each word is length <=50. n<=1000. The longest chain of merges is 999 algorithm. To abide by constraints, maybe we can compute for each word i<j if we create substring j placed right? But no.
+
+Think of dynamic process where we maintain a pair of last char of the current string (which we handle at end). But we can also maintain tail characters of top and bottom of the list with minimal length given all inserted choose substrings. Let's compute DP that at step i we have a set of state lengths for L and R of current string: at step i (after processing first i words), we keep first character pair (f1, f2) maybe two first? Actually we need start char of string for left merges. But to compute left merge we may need first char of S. So we must know string start char. Similarly we need last char of S. That's 26^2 = 676 possibilities.
+
+We can compute DP matrix that for each state is minimal length after shift. Each step, we accept words[i] and produce two 'next' states: Add left or right. For each state we compute new first and last char as described above. We can consider only deletion from side w? hmm.
+
+But when we delete from S's first char (option a), we lose the first char so we compute new first char as second char of S? But we don't know that. So we can instead approximate that deletion from S's first char is never allowed (i.e., we only consider deletion from word) because that will always keep first char unchanged. That effectively may produce earlier pattern, but may lead to less deletion rate maybe it may not be optimal if we want to delete from S to preserve front char for future merges. Let's test with example:
+
+words = ["ab","ba"]? start "ab". Add word 1: same as string "ba". We have two options: join as left: "ba"+"ab" -> "baa" (if deletion by w_last? Wait let's confirm). Suppose sequence: w0="ab", w1="ba". On first step we may choose left insertion of "ba": S="ab" substring, w="ba" => new string =? join(w,S) -> 'ua' evaluation: split? Let's use our DP that never deletes from S. "pos" w_last = a, S_first = a -> merging deletes w_first? Actually when we join w = x, s = y; condition x[-1]==y[0]; We choose deletion from w's last? That occurs on w. Then final string = w[:-1]+s = 'b'+'ab' -> "b"+"ab" = "bab". Which yields length 3. After second step we guess combine. Maybe there's better by not deleting from w's last but ability to delete from S after? Suppose instead we delete from S's first char: w='ba', s='ab', deletion: w + s[1:] -> 'ba' + 'b' = 'bab' same. So effectively not changed; but sequence depends.
+
+Now to finish-s we also might want to place second word "ab" inserted as right? Eh.
+
+But this example might highlight difference? Let's brute n=2 with unsatisfying? produce answer 3? Let's compute length: sum len(n)=4. We can have single deletion whether not overlapping? Actually we might produce 'aba': result string minimal? Let's analyze: w0='ab', w1='ba'. We can merge w0 with w1 with left: join(w0,w1) = 'aba', length 3. Example output from example 1: returned example 2: ['ab','b'] results length 2 (original length 3 minus one). So we can achieve 1 deletion because w0 last 'b' != first of w1 'b'? Wait w0="ab", w1="b": len 2+1=3. In our minimal, we had 2 length: from join w0,l w2? Actually w1 single vowel 'b' -> join left or right.
+
+Now maybe we produce our earlier algorithm may produce >= length? Let's test DP with a global shift.
+
+But I think DP should work but we need to incorporate ability to delete from S's first char if w last==S_first. Equivalent to having 'sharing' state.
+
+But we can circumvent by making DP maintain the "first and last char" and also the length of LHS at front vs after the ability to be overlapped? Wait we can treat the string as essentially S_words set; We will need to know previous pipeline's 'front' character maybe which turns as we can delete from the preceding word during left insertion. For deletion from S_first, we don't need to erase that first char from S; we need the next char after removal. So the initial word's first char may be "lost", but the next char of S is whatever S[1] basically. So our DP would need to know not only first char but also underlying first char used for deletion. We can differentiate "first char available for second deletion" and maybe we can pick deletion accordingly. That's like we need to know the actual content of each word; because S may have last char of many words. This complexity may blow up? But we can restrict to 26 length pairs maybe still small.
+
+But cunning: We can treat the count of deletions as the number of matches between pairs of words where their boundaries match. Because deletion only occurs at merging two different substrings; we don't care if the char that was removed is at the boundary of overlapping words. But we might have residual effect on ability to match further but not fully.
+
+In our DP by determining first and last char, we can propagate further: For left insertion, we can pick to delete from s_first (keeping w's first char equal s_first?). Actually if we delete s_first we change start of new string to s_second, but we can't compute state. So in DP we can ignore that option; but it may be suboptimal for substrings that rely on ability to delete from earlier S? But if we skip that, we may lose ability to delete earlier char? Wait constraints say we may delete one of them. So there is always solution that deletion from w side not saving state. Because merge of w and S may treat last char of w or first char of S. After removal, the string remains the same order but with one char removed (maybe preserve first char of S). This leads to last char of w remains same but starting char could be changed? If we originally split content: s=some s. Last char after removal might be from w or s. And first char after removal may be start of S or started after 'b removal' if we removed w_last first.
+
+For left insertion, we can choose deletion from w vs S. Suppose we delete from w. After deletion, new string is w[:-1] + S. The starting char is w[0] if w has length >0. So the first char may change relative to S. Because S's first char still can appear later after w remainder? Actually the output will start with w[0] (unless w is only one char). So after merging, the leading char may change to the first char of w (position 0). So we may choose to modify accordingly. That may change further connections possibilities. So we cannot assume we keep first char unchanged.
+
+Thus we need to track a bigger state: maybe "first character" of the current string; if we delete from w, new first char's first char may become w[0] else from S. Therefore we need to know which previous prefix produced the last char and maybe are
+We can learn from generative shaping of strings using a Trie over edges.
+
+Hence we should treat any string segment as a "node" that knows "**its first character**, **its last character**, and the earlier string's prefix** maybe of length 2**? For reasoning we need to know when we keep starting char after deletion from S.
+
+Wait maybe better we treat all words in one dimension; not changes.
+
+Alternatively, maybe we can compute greedy that each merge will satisfy either previous last char matches first of new string or > remove: we can use either best orientation. But duplicates cause combinations differ.
+
+Downwards scanning, algorithm: at each step, we choose orientation to either produce deletion from S or from W.
+
+But actual optimum may just pair each adjacency type as the best among both.
+
+Let's compute: Each pair of words (a_index, b_index) may produce deletion if either a_last==b_first or a_first==b_last whichever orientation is applied; we can choose this orientation as we build.
+
+Therefore to maximize total deletions, we can think of each pair of adjacent words in final order; we might choose adjacency direction; but we can also reorder positions by not changing relative order but can choose start or end across orientation.
+
+We need to compute maximum number of matches across possible orderings that can be built via left/right choices.
+
+This may be solved as: we have graph of words with edges length weight if adjacency matches. Taking all words with directed edges? Actually we can treat each edge by char pair - we want to find a permutation that is like a path using these matches, minimal length. Actually reminiscent of sequence greedy where we can choose to start with word 0 and then we can decide to add word at left or right. Equivalent to constructing a string with pointer of open positions; the resulting order of words is such that there are relationships constraints when we consider deletion from j. If we decide that each join between word i and j according to rule: last of left side equals first of right side (or reversed). Our DP of states may not need to consider deletion

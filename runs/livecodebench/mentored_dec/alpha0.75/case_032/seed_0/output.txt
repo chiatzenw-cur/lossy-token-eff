@@ -1,0 +1,456 @@
+<|channel|>analysis<|message|>We need to compute sum over all subarrays of imbalance count. Imbalance of subarray = number of gaps >1 in sorted subarray. How to compute efficiently? Constraints n up to 1000. Number of subarrays ~ n(n+1)/2=500k. For each subarray up to n^2, 5e5. We could compute each subarray sorted in O(length log(length)) worst O(n^3 log n). Not efficient.
+
+Observation: imbalance is number of missing integers between consecutive sorted distinct values. For sorted array, consider gaps between consecutive values such that difference >1. We can compute break points when absolute difference between consecutive elements (in sorted) >1.
+
+Simpler: for each subarray, if we take multiset of elements. We can compute min and max, but also number of distinct values and gaps. But we only need number of gaps which have difference >1. Not requiring counts of gaps. Implementation: maintain a sorted set of values. In subarray, we can maintain a balanced BST to add each element and compute gaps across sorted order. But n <= 1000, we can use O(n^2 log n) maybe acceptable? 500k subarrays times log at most 10. That's 5 million operations, okay. But we also need to handle duplicates, we only need sorted unique values. For sorted array sarr (repeated), we compute difference of consecutive values, but duplicates cause zero difference not >1. So we use sorted set of values. Complexity: for each subarray we need to insert entries into set, then counting gaps? For each new element, we need to check its neighbors and update gap count. We can maintain a tree: use Python's bisect on sorted list (list of values). Each insert O(k) to shift (since we need to handle duplicates). We can use sorted list as list but insertion O(k) up to n. In total O(n^3) again; not good.
+
+Alternate approach: Since n <= 1000, we can brute force all subarrays but compute imbalance number by computing frequency in that subarray, rather than sorting. Use counting array for values 1..n. Since values <= n, we can maintain freq counts.
+
+We can compute for each subarray [l,r] the sorted array of unique values, plus we can compute gaps. For each subarray, we can maintain a boolean array of size n+2? Use bitmask approach maybe we can compute cumulative counts.
+
+Since numbers <= n, we can precompute for each l,r: we can compute prefix counts for each value to know counts in subarray.
+
+But computing imbalance number requires checking sorted unique values: we can get all values that appear at least once, then for each consecutive value from 1 to n, check if there is at least one present, and between each present pair, if difference >1. This can be done by maintain a bitset of values present and compute gaps via difference of consecutive present indices. If we have frequency array for each subarray, we might find which numbers present. We could compute via bitset difference maybe.
+
+We can precompute for each l the cumulative presence to shift. Because n <= 1000, we could compute over all subarrays via scanning incrementally as r increases, and maintain a balanced count of present values. We'll maintain array present[1..n] counts; when we increment r, update count for value(nums[r]). If count goes from 0 to 1 we mark it as present. Then we need to know number of gaps between consecutive present values. We can maintain a variable gap_count that tracks total gaps >1 (for the current subarray). When we add a value, if it wasn't present, it can affect gaps: if it has neighbours inclusion, we may have to adjust.
+
+Specifically, maintain a set of present values. When adding a value v if it's not present, we will add it and check adjacency before and after: let found previous present value < v, and next present value > v. Initially total gaps = sum over neighbors of gap >1. Each insertion may reduce gaps: basically, before insertion, there may be gaps between prev and next values; after insertion the gap between prev and next may be split into two new gaps (prev,v) and (v,next). What we need is gaps >1 between consecutive present values. As we maintain a sorted set, we can compute gaps by iterating over sorted set. But adding a new element can be done by keeping track of prev and next via a search: we can maintain a Binary Indexed Tree for presence? Complexity O(n^2) with binary search on array of size at most n (O(n)). But we can keep an ordered array of present values; insertion O(n). That's O(n^3) again.
+
+Alternative: Since n <= 1000, we can precompute between each pair of indices l,r using boolean array of size n+1? Could use a bitset for each index and OR? But we need counts over query.
+
+Better approach: For each subarray, we can compute by checking the number of missing integers that lie between min and max. We can compute distinct counts and maybe count of contiguous segments? Let's think.
+
+Imbalance = number of pairs of consecutive distinct values with difference >1. Equivalent to number of distinct segments minus one, but careful.
+
+If the sorted distinct values are [a1,a2,...,ak] where a1 < a2 < ... < ak. Then number of gaps >1 equals number of i where a_{i+1} - a_i > 1. That's number of distinct values that form non-contiguous blocks. So, imbalance equals number of contiguous blocks of consecutive integers (sequences) minus 1. Because if there is a block of consecutive numbers, difference between consecutive is 1. If the numbers only form one contiguous block, imbalance =0. If there are two blocks, imbalance =1, etc. So imbalance = (#contiguous blocks) - 1.
+
+Thus we need for each subarray the number of contiguous blocks of consecutive integers in the set of distinct values.
+
+Thus we can compute distinct count of values; but we need to count gaps >1. Equivalent to number of occurrences of a value that is not consecutive previous value seen. So we need to detect when we encounter a value that is not present or not equals previous +1? We can traverse sorted values.
+
+We can compute for each subarray: collect set of distinct values, then iterate by scanning from min to max: Check overlapping. We can check presence of all values but scanning from 1..n.
+
+Observation: if we have a frequency array of size n+1, we can compute number of blocks by scanning all values from 1..n: if we see a value present start of new block; count until unpresent; counts.
+
+Thus imbalance = number of segments of consecutive present numbers minus 1.
+
+Thus we can compute for each subarray by scanning from min to max, but we can evaluate freq array in O(n).
+
+But using this for each subarray leads to O(n^3) too.
+
+Need optimization.
+
+We can treat each subarray as a set of numbers. We can maintain an array count[1..n] for each l as r increases: updating count and a boolean array of presence. For each subarray, we need it to compute imbalance number quickly. We can maintain the current block count incrementally. For each addition of a value v, we may affect the block count of this current subarray. However, we also need to output for subarray starting at l but varying r; but if we recompute block count for each r using incremental updates, we can track both.
+
+We can maintain for each subarray starting at l, we maintain array count[1..n] and block count. For fixed l, we create a new array after resetting to 0. Then as r increases, we increment count for value val; if count becomes 1, then we update block count:
+
+- If neither v-1 nor v+1 is present (i.e., count[v-1] == 0 and count[v+1] == 0), then we added a new block of size 1, block count increases by 1.
+- If v-1 present and v+1 present, v merges two blocks into one: block count decreases by 1 (since block count -1).
+- If exactly one neighbor present, then block count remains same (since block continues but no new block).
+
+But careful: For block count & gaps formula: imbalance = block_count - 1. For subarray [l,r], we can compute block_count as we update counts.
+
+Thus algorithm: For each l from 0 to n-1:
+    initialize counts array of size n+2 with zeros (use 1-index shift).
+    block_count = 0
+    For r from l to n-1:
+        v = nums[r]
+        if count[v] == 0: # new distinct
+            if count[v-1] == 0 and count[v+1] == 0:
+                block_count += 1
+            elif count[v-1] != 0 and count[v+1] != 0:
+                block_count -= 1
+            else:
+                block_count += 0
+        count[v] += 1
+        imbalance = block_count - 1
+        if imbalance > 0: sum += imbalance
+
+But we may allow negative block_count? Wait block_count can't be less than 1? Initially block_count=0, first distinct element: both neighbors absent -> block_count=1. okay.
+
+Edge case: Suppose value v+1 or v-1 might be outside range of numbers? Values up to n. It's okay to have v-1=0 and v+1=n+1; we can treat counts of out-of-range as zero for array indexes 0..n+1.
+
+Let's test with example: nums=[2,3,1,4]. Steps:
+
+- l=0: reset count[0..5], block=0. 
+ r=0: val=2. neighbors 1 and 3 have 0 => block=1. imbalance 0.
+ r=1: val=3. neighbors 2 present, 4 missing -> block remains 1; imbalance 0. (Block only still [2,3], contiguous)
+ r=2: val=1. neighbors 0 (abs) and 2 present => block remains 1; Actually 1+2 present => same block, no change. block remains 1; imbalance 0. (block [1,2,3])
+ r=3: val=4. neighbors 3 present, 5 missing => block remains 1; imbalance 0. (block [1,2,3,4]) 0 mismatch? Wait but actual algorithm said answer includes subarrays [3,1] etc. However our algorithm with block counting from l=0 only gives wrong for subarray [3,1] etc. Let's examine.
+
+Hold on: L=0 runs [2,3,1,4], and subarrays inside that start at l=0 only. So our algorithm for subarray [2,3,1,4] appx also not capturing non-zero imbalance for subarrays [3,1] or [1,4] or [3,1,4]. Those subarrays start at l=1 and l=2. So we must compute separately for each l starting index. Since we compute for each l from 0 to n-1, each r increases from l. So indeed we need to evaluate each subarray individually. All subarrays from l=0 will produce imbalance zero. For l=1: start at index 1.
+
+Let's run l=1: r=1 val=3; neighbors 2 and 4 have 0 => block=1; imbalance 0.
+r=2 val=1; neighbors 0 and 2 present: block still 1; imbalance 0. But subarray [3,1] has imbalance 1. Wait we got 0. Let's analyze block count formula for subarray [3,1] with values 3 and 1. Unique sorted set {1,3}. The gaps between 1 and 3 is >1. So number of blocks is 2: [1] and [3] separate because there is gap 2 missing. So block_count=2. Our logic gave block=1, wrong.
+
+So our incremental update logic mis-handled case when adding value 1 when 2 present? Actually initial count of 1 is 0, neighbors 0 and 2. 0 absent, 2 present. So according to rule: if one neighbor present, block count stays same. starting with block=1 after adding 3. Then new value 1 adds block?? Wait piece: if count[v] == 0 before adding. For val=1, neighbors: count[0] (0) and count[2] (1) present. So parent: if cnt[v-1]==0 and cnt[v+1]==0 -> new block; else if cnt[v-1]!=0 and cnt[v+1]!=0 -> merge two blocks; else -> merge with existing block, no new block.
+
+But we previously had block=1. With count[1] zero: check neighbors: 0 and 2. 0 missing, 2 present. So we have one neighbor present => block same. block=1. That would produce block=1 incorrectly maybe.
+
+But actual expected block count is 2. Let's analyze: The present blocks are currently [3] as one block. Since the new number is 1, its value (1) is not continuous with 3, thus should produce an additional block. However the logic incorrectly assumes that because one neighbor present, still the same block? Explanation: if we add number 1, if 2 present but not 1, that means the new number between 1 and 2? Wait we only have number 3 present. The sequence 1 and 3 are not consecutive. Since 2 present? Actually no, 2 is not present (present only 3). Hold on earlier we had 2 present? Let's check: In l=1 case, we only added 3 at r=1. So count[3] value 1. No other numbers present. Thus count[2] is 0. So neighbor 0 and 2 present? 0 is considered 0; 2 is 0. So both neighbors absent. So earlier we mis- said 2 present, wrong. Let's re-evaluate.
+
+For l=1:
+- r=1: val=3 -> block=1. count[3]=1.
+
+- r=2: val=1 -> count[1] 0. neighbor 0 and 2: count[0] 0; count[2] 0. So both neighbors absent, block++ => block=2. So imbalance=1. Works. That matches.
+
+Hence correct logic stands.
+
+Thus algorithm steps:
+
+For each l:
+    initialize counts array of size n+2 zero (for 1..n). plus maybe 0 and n+1.
+    block = 0
+    for r from l to n-1:
+        v = nums[r]
+        if count[v] == 0:
+            if count[v-1] == 0 and count[v+1] == 0:
+                block += 1
+            elif count[v-1] != 0 and count[v+1] != 0:
+                block -= 1
+            # else: block stays same
+        count[v] += 1
+        imbalance = block - 1
+        if imbalance > 0:
+            total += imbalance
+
+Edge case: block count may become 0? But we never decrement it below 0 because we only decrement when both neighbors present and block >0. But original block may containing multiple blocks; merging two blocks with new element reduces to one. Example: Blocks: [1] and [3] (gap=2) then new element 2 will join both to [1,2,3], merging two blocks, block increase by minus one? Wait we only add v when count[v]==0. Suppose block=2, we add 2; count[2]==0; neighbors 1 and 3 present -> block -= 1 => block=1. So correct. So block will never become negative.
+
+Testing Example 2: let's test quick.
+
+Implement in python to test.
+
+Let's test with quick small script mentally: Not necessary.
+
+Thus algorithm complexity: For each l from 0 to n-1 we reset counts array once. That's O(n^2) resetting? Actually if we reset counts each time n, it's O(n^2). That is fine: 10^6 ~ 1e6 operations. Each r step increments counts, etc; we also maintain block_count. Complexity O(n^2) overall ~1 million.
+
+But we need to zero count array each time. We can use array of size n+2; we can set all zeros for each l (using for loop; O(n^2)). That's fine.
+
+Alternatively, use list of zeros and for each l we fill with zeros maybe using list comprehension. That overhead still fine.
+
+Edge case: have value <= nums.length <= n. Good.
+
+Double-check block logic deriving: Suppose we have 3, 6, 4 (values 3,6,4). After adding 3: block=1; 6: neighbor 5 and 7 absent -> block=2; 4: neighbors 3 and5? 3 present; 5 absent -> block remains 2. So blocks [3] and [4,6] separate? Wait 4 consecutive with 3? 3 and4 difference 1, so they should be part of same block. For block count 2, we think [3,4] and [6]. But our algorithm states block remains 2. Counting: after adding 3 and 6, block=2. After 4 inserted: 3 present; 5 absent. 3 present? yes. So only one neighbor present. When we insert 4, we connect to 3's block, but not to 6. That's still not merging blocks. But in reality, 4 and 6 difference 2, not contiguous, so block remains 2. So correct.
+
+But above we had 4 and 6, not adjacent. Did we consider merging 4 and 6? No, 4 present: neighbors 3 and 5. 3 present; 5 absent. So block remains 2; correct.
+
+For example [4,6] merges? Not always.
+
+Now we need to confirm that block_count is correct: For set of distinct values, block count equals number of consecutive segments. For example set {2,3,4,6,7} is 2 blocks: [2,3,4] and [6,7]. Let's test with algorithm: Start empty. Insert 2: block=1. Insert 3: neighbors 2 present. So block remains 1. Insert 4: neighbors 3 present, 5 absent -> block=1. Insert 6: neighbors 5 absent, 7 absent -> block++ -> block=2. Insert 7: neighbors 6 present, 8 absent -> block stays 2. Good.
+
+Thus final imbalance = block_count - 1.
+
+Edge case: subarray length 1: block=1, imbalance=0. Good.
+
+Test with Example 2: We can test manually quickly in mind by implementing small script. But for reasoning, we should be safe.
+
+Edge case: duplicate values: If we insert a value that already present (count>0). Then we simply increment count but no block change. But we still need to check maybe if we inserted a value 1 and neighbor 2 present; but 1 already present? duplicates come; but also duplicates of values may change nothing because already counted.
+
+Implementation: you'd need integer variable for counts.
+
+Now sum of imbalance numbers across all subarrays may exceed 32-bit? n up to 1000, number of subarrays ~ 500k, imbalance each up to n subarray length maybe up to 1000? But maximum block count maybe at most n distinct numbers; worst-case set of n distinct numbers each separated by >1 so each block separate? Wait if numbers are unique but consecutive difference >1? For example: numbers 1..1000 with each taken e.g., 1,3,5... but boundaries: maximum number of blocks: For distinct set {1,3,5,...,1999} up to 1000 distinct numbers? Actually elements can be up to n. But you can't have values >n; values up to 1000; duplicates considered, but distinct set of all values 1..n. In worst-case set of distinct numbers that consist of all 1.. n but splitted by 2 difference? But cannot have >1 difference between consecutive sorted numbers because there might be empty; if you have all numbers (1..n), one block only; not many blocks. Our maximum block count is n if each distinct present is not adjacent to any other: that means no adjacent numbers present. That means we have at most ceil(n/2) blocks if we choose all odds? But numbers are 1..n inclusive; choose numbers with adjacency missing. Suppose numbers 1,3,5,...,n (if n odd). For each difference 2, there are no adjacent numbers; each forms single block. So number of blocks = ceil(n/2) ~ 500. So imbalance <= blocks-1 <= 499. So per subarray imbal <= ~500. Sum over all subarrays <= 500k*500 = 250 million < 2^31; fits int int 32-bit. So safe.
+
+Edge: It's safe.
+
+Implementation details: For each l from 0 to n-1:
+
+- counts = [0]*(n+2)
+- block = 0
+- for r in range(l, n):
+    v = nums[r]
+    if counts[v]==0:
+        left = counts[v-1]  # count for v-1
+        right = counts[v+1]  # count for v+1
+        if left==0 and right==0:
+            block += 1
+        elif left!=0 and right!=0:
+            block -= 1
+        # else block unchanged
+    counts[v] += 1
+    imbalance = block - 1
+    if imbalance > 0:
+         total += imbalance
+
+Return total
+
+Complexity: O(n^2). n <= 1000, so fine.
+
+Let's test with sample 1:
+
+nums = [2,3,1,4].
+
+Manually run quickly: code earlier predicted match.
+
+Testing example2 quickly by implementing small test in head verifying output 8.
+
+Let's quick sanity: For each subarray compute block counts. We'll trust.
+
+Corner case 1: we might need to treat array index 0 or n+1 for neighbors left/ right. We'll initialize counts array size n+2 where indices 0..n+1 inclusive; but we might need index 0 for v-1=0 if v=1 -> counts[0] default 0; similarly for v+1=n+1 for v=n -> counts[n+1] default 0. This ensures safe.
+
+Edge: values <= n < n+1, fine.
+
+Implementation done.
+
+Let's adopt python solution.
+
+We must provide complete solution code including import statements.
+
+Now produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every subarray we need its *imbalance number*.
+
+```
+sorted subarray  →  sarr
+imbal. number = number of indices i (0 <= i < len(sarr)-1)
+                 such that sarr[i+1] - sarr[i] > 1
+```
+
+Only the **distinct** values of a subarray matter – the multiplicities
+cannot create a new gap.  
+Let  
+
+```
+distinct values of the subarray = { a1 < a2 < … < ak }
+```
+
+Then all gaps are exactly the intervals
+
+```
+a1 … a2    a2 … a3   …   ak‑1 … ak
+```
+
+A gap occurs iff `ai+1 – ai > 1`.  
+The set of distinct values is split into several *consecutive blocks*  
+(e.g. `{1,2,3,5,6}` → two blocks `[1,2,3]` and `[5,6]`).  
+The number of gaps is
+
+```
+#blocks - 1
+```
+
+So for a subarray we only need to know how many consecutive blocks of
+its distinct values it contains.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.   Maintaining blocks while we extend the subarray
+
+Fix a left border `l`.  
+We walk the right border `r` from `l` to `n-1` and
+maintain
+
+```
+cnt[x] – how many times value x occurs in the subarray [l, r]
+blocks – how many consecutive blocks of distinct values are in the subarray
+```
+
+When a new value `v` is added:
+
+```
+cnt[v] becomes 1  →  the value is new to the subarray
+cnt[v] > 1        →  the value already existed – nothing changes
+```
+
+Only the first case can change `blocks`.
+
+Consider the current neighbors of `v`, i.e.
+`cnt[v-1]` and `cnt[v+1]`.  
+(Indices `0` and `n+1` are outside the input range and are kept
+as `0` by the array.)
+
+* no neighbor present → `v` stands alone → `blocks += 1`
+* both neighbors present → `v` closes the gap between two blocks
+    → `blocks -= 1`
+* exactly one neighbor present → `v` is glued to an existing block  
+    → `blocks` stays unchanged
+
+With this rule `blocks` tracks the number of consecutive blocks of
+distinct values for the current subarray `[l, r]` in **O(1)** time.
+
+The imbalance number is therefore
+
+```
+imbalance = blocks – 1
+```
+
+The answer is the sum of all non‑negative imbalances over all subarrays.
+
+
+
+--------------------------------------------------------------------
+
+#### 2.   Correctness Proof  
+
+We prove that the algorithm returns the correct sum of imbalance numbers.
+
+---
+
+##### Lemma 1  
+For any subarray, the number of gaps
+equals the number of consecutive blocks of distinct values minus one.
+
+**Proof.**
+
+In a sorted list of distinct values the only places where consecutive
+elements differ by more than one are the boundaries of the consecutive
+blocks.  
+If there are `b` consecutive blocks, there are `b-1` boundaries between
+different blocks, hence `b-1` gaps. ∎
+
+
+
+##### Lemma 2  
+During the iteration for a fixed left border `l`,
+`blocks` maintained by the algorithm equals the number of
+consecutive blocks of distinct values of the current subarray
+`[l, r]`.
+
+**Proof.**
+
+Induction over `r`.
+
+*Base (`r = l`).*  
+The subarray contains only one value `v`.  
+`cnt[v]` starts at `0`, thus `cnt[v]==1` after the increment,
+both neighbors are `0`,
+therefore by the rule the algorithm performs `blocks += 1`.
+So `blocks = 1`, which is the correct number of blocks.
+
+*Induction step.*  
+Assume the invariant is true before adding `v = nums[r]`.
+
+*Case 1 – `cnt[v] > 0` before the increment.*  
+`v` is already present; the set of distinct values does not change,
+neither does the number of consecutive blocks.
+The algorithm does nothing to `blocks` – unchanged.  
+The invariant holds.
+
+*Case 2 – `cnt[v] == 0` before the increment.*  
+The first occurrence of `v` is being inserted.  
+There are three possibilities for the current neighbors:
+
+1. `cnt[v-1]==0` and `cnt[v+1]==0`  
+   `v` is isolated → a new block forms, hence `blocks` increases by 1.  
+   The rule applies the same increment.
+
+2. `cnt[v-1]!=0` and `cnt[v+1]!=0`  
+   `v` connects two previously separate blocks, decreasing the
+   number of blocks by 1.  
+   The algorithm performs `blocks -= 1`.
+
+3. Exactly one of the neighbors is present  
+   `v` joins an existing block, the number of blocks does not change,  
+   the algorithm leaves `blocks` unchanged.
+
+In all cases the algorithm updates `blocks` exactly as the real
+number of blocks changes.  
+Hence after the insertion the invariant holds.
+
+By induction the invariant holds for all `r`. ∎
+
+
+
+##### Lemma 3  
+For every subarray `[l, r]` the algorithm adds to the answer
+
+```
+max(blocks[l, r] - 1, 0)
+```
+
+where `blocks[l, r]` is the true number of consecutive blocks.
+
+**Proof.**
+
+By Lemma&nbsp;2, `blocks` equals the real number of blocks.
+The algorithm computes `imbalance = blocks - 1` and sums it only
+if it is positive.  
+If `blocks` is 0, we have no subarray – this never happens –  
+if `blocks` is 1, imbalance is 0, the sum adds nothing.  
+Thus the contribution equals the desired non‑negative imbalance. ∎
+
+
+
+##### Lemma 4  
+The sum computed by the algorithm equals the total sum of
+imbalance numbers of all subarrays.
+
+**Proof.**
+
+By Lemma&nbsp;3 each subarray `[l, r]` contributes exactly its
+non‑negative imbalance number to the total.  
+Summing over all `l` and `r` yields the required sum. ∎
+
+
+
+##### Theorem  
+`Solution.sumImbalanceNumbers` returns the correct sum of imbalance
+numbers for all subarrays of `nums`.
+
+**Proof.**
+
+The function processes all possible left borders `l` and for each
+right border `r` it maintains exactly the data proven correct in
+Lemma&nbsp;3, therefore all subarrays are handled correctly.
+By Lemma&nbsp;4 the produced sum equals the desired answer. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 3.   Complexity Analysis
+
+Let `n = len(nums)` ( `≤ 1000` ).
+
+* For every `l` the inner loop runs `n-l` times.
+* All operations inside the loop are `O(1)`.
+
+Therefore
+
+```
+time   :  sum_{l=0}^{n-1} (n-l)   =  n(n+1)/2  =  O(n²)  (≈ 5·10⁵ operations for n=1000)
+memory :  O(n)  (array cnt[0 … n+1] + a few integers)
+```
+
+Both limits easily satisfy the constraints.
+
+
+
+--------------------------------------------------------------------
+
+#### 4.   Reference Implementation  (Python 3)
+
+```python
+import sys
+from typing import List
+
+class Solution:
+    def sumImbalanceNumbers(self, nums: List[int]) -> int:
+        n = len(nums)
+        # cnt[0] and cnt[n+1] are dummy entries (always 0)
+        total = 0
+        # For every possible left border
+        for l in range(n):
+            # counts for the current subarray [l, r]
+            cnt = [0] * (n + 2)          # indices 0 … n+1
+            blocks = 0
+            for r in range(l, n):
+                v = nums[r]
+                if cnt[v] == 0:              # new distinct value
+                    left = cnt[v - 1]
+                    right = cnt[v + 1]
+                    if left == 0 and right == 0:
+                        blocks += 1
+                    elif left != 0 and right != 0:
+                        blocks -= 1
+                    # else – exactly one neighbor present → no change
+                cnt[v] += 1
+                imbalance = blocks - 1
+                if imbalance > 0:
+                    total += imbalance
+        return total
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required function signature.

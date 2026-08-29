@@ -1,0 +1,346 @@
+<|channel|>analysis<|message|>We need to understand problem: We have two arrays, length n. For each index, we can choose one of two values. We want to maximize the length of the longest non-decreasing contiguous subarray (subarray) in the resulting array nums3.
+
+We can pick arbitrary pattern. Equivalent to choose a sequence of choices (a1,...,an) where each ai=0 or 1 meaning choose from nums1 or nums2.
+
+We want to maximize length of LNDS contiguous. This is a combinatorial optimization.
+
+Idea: dynamic programming to compute longest suffix of a non-decreasing subarray ending at each index given chosen values. But we can choose values to maximize.
+
+Observations: We don't care about overall array; only longest run. We can think of constructing longest non-decreasing run as a contiguous segment. We can choose value at each index to make the sequence non-decreasing as long as possible.
+
+This is similar to selecting a sequence with choices to maximize longest run. Equivalent to we can choose for each index to be from set S[i] = {nums1[i], nums2[i]}. We want longest sequence of indices i..j such that there exists a choice of values for each index in that segment making the values non-decreasing (in that order). Since the run must be contiguous, we don't care about outside decisions.
+
+Thus we can search for consecutive segments where a valid non-decreasing sequence exists.
+
+Given pair of values per index, we can think of bipartite choices. We can treat each index as two possible values. We need to decide if there exists a selection that makes sequence non-decreasing. This reminiscent of dynamic programming for each index track the minimal possible current value for last element with run length k? We need to find longest run.
+
+Simpler: We can consider for each index i, we need to maintain the set of possible values that can be chosen for nums3[i] given that we are extending a non-decreasing sequence from previous. Since we can always pick the minimal value that is still ≥ previous chosen value. But we need to choose a value at each index that is as low as possible to allow future continuation. So typical DP with set of possible last values.
+
+We can potentially maintain a DP: at each index, we maintain the set of achievable values if we are at the end of a run of length L. But because we want maximum length, we can use greedy sliding window?
+
+We need to find longest length of segment where there exists a non-decreasing selection. This is similar to constructing a 'choose' sequence of length L. We can think of dynamic intervals.
+
+Alternatively we can use dynamic programming: For each i, let dp[i] be the minimum possible last value of a non-decreasing sequence ending at i with maximum length we can achieve. But to maintain longest contiguous we want to have DP that tracks the maximum run length ending at i such that there exists a valid selection. For each i, we try to extend from i-1. Suppose we have a run ending at i-1 of length L, with last value v (chosen). At i we need to choose some value >= v from S[i]. If possible, we can extend to L+1. We can also start new run at i with length 1, choosing min possible value. So we need to track minimal last value for each run length. That's similar to LIS DP but constrained to contiguous and using two options per index.
+
+We can for each i maintain two possibilities: For each choice we can choose either nums1[i] or nums2[i]. Let's define two DP states: best length ending at i if we choose value nums1[i], and best length if we choose nums2[i]. But we also need to know the last value.
+
+Better: For each i, compute two values left1[i] and left2[i] which represent the length of the longest non-decreasing contiguous subarray ending at i where we choose nums1[i] for i. Similarly with nums2[i]. We can compute them iteratively. Transition: For i=0, left1[0]=left2[0]=1. For i>0, to compute left1[i], we look back at i-1. We need to consider both choices at i-1: we can come from previous value chosen at i-1 that is <= nums1[i]. So:
+
+left1[i] = 1 + max( maxLenPrev where prev value <= nums1[i] ), where prev value can be nums1[i-1] or nums2[i-1] depending on which we choose.
+
+Thus we need knowledge of maximum length ending at i-1 with last value <= current value. But we have two states: left1[i-1] and left2[i-1]. We can check:
+
+If nums1[i-1] <= nums1[i] then we can extend from left1[i-1] => candidate=left1[i-1]+1. similarly if nums2[i-1] <= nums1[i] then candidate=left2[i-1]+1. But we also might skip the index i-1? Wait contiguous requirement means the subarray must include i-1, so we must pick a value at i-1. So extension only if we pick a value at i-1 <= current value. Therefore we can compute left1[i] as 1 + max( (left1[i-1] if nums1[i-1] <= nums1[i]) else 0, (left2[i-1] if nums2[i-1] <= nums1[i]) else 0 ). If no extension, left1[i] = 1.
+
+Similarly for left2[i].
+
+Thus we can simple DP with O(n). Similarly we can also compute max across all states.
+
+Let's test with example 1:
+
+nums1=[2,3,1], nums2=[1,2,1].
+i=0: left1=1, left2=1
+i=1: left1[1] based on nums1[1]=3. check prev 0:
+- nums1[0]=2 <=3 => candidate 1+1=2
+- nums2[0]=1 <=3 => candidate 1+1=2
+=> left1[1]=2
+left2[1] based on nums2[1]=2:
+- nums1[0]=2 <=2 => candidate = left1[0]+1=2
+- nums2[0]=1 <=2 => candidate=left2[0]+1=2
+=> left2[1]=2
+i=2: val1=1, val2=1
+left1[2] for 1: check prev:
+- nums1[1]=3 <=1? no
+- nums2[1]=2 <=1? no
+=> left1[2]=1
+left2[2] for 1: same => left2[2]=1
+Max across all states is 2. matches expected.
+
+Example 2: nums1=[1,3,2,1], nums2=[2,2,3,4].
+i=0: left1=1, left2=1
+i=1: val1=3; prev <=3:
+- nums1[0]=1 <=3 => 2
+- nums2[0]=2 <=3 =>2
+=> left1[1]=2
+val2=2: prev <=2:
+- nums1[0]=1 <=2 =>2
+- nums2[0]=2 <=2 =>2
+=> left2[1]=2
+i=2: val1=2; prev <=2:
+- nums1[1]=3 <=2? no
+- nums2[1]=2 <=2? yes candidate=left2[1]+1=3
+=> left1[2]=3
+val2=3: prev <=3:
+- nums1[1]=3 <=3 => left1[1]+1=3
+- nums2[1]=2 <=3 => left2[1]+1=3
+=> left2[2]=3
+i=3: val1=1; prev <=1:
+- nums1[2]=2 <=1? no
+- nums2[2]=3 <=1? no
+=> left1[3]=1
+val2=4: prev <=4:
+- nums1[2]=2 <=4 => left1[2]+1=4
+- nums2[2]=3 <=4 => left2[2]+1=4
+=> left2[3]=4
+max=4. matches.
+
+Example 3: nums1=[1,1], nums2=[2,2]
+i=0: left1=1, left2=1
+i=1: val1=1: prev <=1: nums1[0]=1 <=1 yes candidate 2; nums2[0]=2 <=1 no => left1[1] = 2
+val2=2: prev <=2: nums1[0]=1 <=2 => 2; nums2[0]=2 <=2 =>2 => left2[1]=2; max=2.
+
+Hence algorithm works.
+
+Proof: Suppose we pick a subarray indices L..R. For any element i in subarray, we choose a value from S[i]. For consistency, we need the existence of a sequence of values such that each non-decreasing. For DP we systematically, for each i, keep the max length of a subarray ending at i where we choose nums1[i] or nums2[i] as last value. Since we always consider contiguous sequence from previous index, the transitions ensure feasibility: If we pick value at i-1 <= value at i, we can extend. Among all possibilities, DP will capture the maximum length because we take max over both previous states.
+
+Thus complexity O(n).
+
+Implementation: Iterate i from 0 to n-1, keep prev1, prev2 lengths. For each i, compute curr1, curr2. Use variables local: prev1, prev2, then compute new1, new2.
+
+Pseudo:
+
+def maxNonDecreasingLength(nums1, nums2):
+    n=len(nums1)
+    prev1=prev2=1
+    best=1
+    for i in range(1,n):
+        curr1 = 1
+        curr2 = 1
+        # Candidate from prev1
+        if nums1[i-1] <= nums1[i]:
+            curr1 = max(curr1, prev1+1)
+        if nums2[i-1] <= nums1[i]:
+            curr1 = max(curr1, prev2+1)
+        # For curr2
+        if nums1[i-1] <= nums2[i]:
+            curr2 = max(curr2, prev1+1)
+        if nums2[i-1] <= nums2[i]:
+            curr2 = max(curr2, prev2+1)
+        best = max(best, curr1, curr2)
+        prev1, prev2 = curr1, curr2
+
+    return best
+
+Edge case n=1: best=1 always.
+
+Time O(n), memory O(1).
+
+Let's test quickly with random arrays by brute small enumeration. But algorithm is correct.
+
+Let's craft Python code accordingly. Add typing: List[int], return int.
+
+We need to include function inside class Solution. Provide import typing for List.
+
+Now produce final message.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every index `i` we are allowed to use either `nums1[i]` or `nums2[i]`.
+Let  
+
+```
+S[i] = { nums1[i] , nums2[i] }
+```
+
+We build an array `nums3` by choosing one element from each set `S[i]`.
+The task is to make a **contiguous** subarray of `nums3` as long as possible
+while still being non‑decreasing.
+
+--------------------------------------------------------------------
+
+#### 1.  Observation  
+
+Consider a subarray that ends at position `i`.  
+If we know what value we chose for `nums3[i]`, the longest subarray that
+ends at `i` is uniquely determined: we can only look at the one previous
+position `i‑1`.  
+If the chosen value for index `i-1` is `≤` the chosen value for `i`,
+then we can extend the subarray from `i‑1` to `i`; otherwise we must start
+a new subarray at `i`.
+
+Hence for each position we need two pieces of information
+
+| position | chosen value | longest subarray ending here |
+|----------|--------------|------------------------------|
+| `i`      | `nums1[i]`   | `dp1[i]`                     |
+| `i`      | `nums2[i]`   | `dp2[i]`                     |
+
+`dp1[i]` – maximum length of a non‑decreasing subarray ending at `i`
+if we choose `nums1[i]` as the last element.  
+`dp2[i]` is defined analogously.
+
+--------------------------------------------------------------------
+
+#### 2.  Recurrence
+
+For the first index (`i = 0`) we can start a subarray of length `1`
+with either value:
+
+```
+dp1[0] = dp2[0] = 1
+```
+
+For all other indices (`i > 0`)
+
+```
+dp1[i] = 1                                 # start a new subarray here
+          + max( dp1[i-1] if nums1[i-1] <= nums1[i] else 0,
+                  dp2[i-1] if nums2[i-1] <= nums1[i] else 0 )
+
+dp2[i] = 1                                 # start a new subarray here
+          + max( dp1[i-1] if nums1[i-1] <= nums2[i] else 0,
+                  dp2[i-1] if nums2[i-1] <= nums2[i] else 0 )
+```
+
+At every step we simply check the two possible values of the previous
+index and see which ones are not larger than the chosen value at `i`.
+
+The answer is the maximum of all `dp1[i]` and `dp2[i]`.
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the maximum possible length of a
+non‑decreasing subarray.
+
+---
+
+##### Lemma 1  
+For every index `i (0 ≤ i < n)` and for each choice  
+`c ∈ {1,2}` (`c=1` means choosing `nums1[i]`, `c=2` means choosing
+`nums2[i]`) the value `dp_c[i]` computed by the algorithm equals
+
+> the length of the longest non‑decreasing subarray that ends at `i`
+> and whose last element equals the chosen value `nums_c[i]`.
+
+**Proof.**
+
+By induction over `i`.
+
+*Base (`i = 0`).*  
+Both `dp1[0]` and `dp2[0]` are set to `1`.  
+The only subarray ending at `0` is the single element itself, so the
+statement holds.
+
+*Induction step.*  
+Assume the lemma holds for all indices `< i`.  
+Consider computing `dp1[i]` (the case `dp2[i]` is identical).
+
+The algorithm considers two possibilities:
+1. `nums1[i-1] ≤ nums1[i]`.  
+   Then a subarray ending at `i-1` with `nums1[i-1]` as last element
+   can be extended by `nums1[i]`.  
+   By the induction hypothesis the longest such subarray has length
+   `dp1[i-1]`.  
+   Thus `dp1[i-1] + 1` candidates for `dp1[i]`.
+
+2. `nums2[i-1] ≤ nums1[i]`.  
+   Analogously `dp2[i-1] + 1` is a candidate.
+
+3. Otherwise, no subarray ending at `i` can be extended from `i-1`;
+   a new subarray starts at `i`, giving length `1`.
+
+The algorithm takes the maximum of all these candidates, therefore the
+obtained value equals the longest feasible length. ∎
+
+
+
+##### Lemma 2  
+Let `best(i)` be the maximum possible length of a non‑decreasing subarray
+that ends at or before position `i`.  
+After processing position `i`, the algorithm stores
+
+```
+best(i) = max( dp1[0..i], dp2[0..i] )
+```
+
+**Proof.**
+
+By definition of `best(i)` it is the maximum among all subarrays ending
+at any index `k ≤ i`.  
+Using Lemma&nbsp;1, the length of a subarray ending at `k` equals either
+`dp1[k]` or `dp2[k]`.  
+Thus `best(i)` equals the maximum of all `dp` values up to `i`.  
+The algorithm keeps a running maximum in a variable `ans` that is updated
+with `dp1[i]` and `dp2[i]` at each iteration, hence after processing
+`i` it contains exactly `best(i)`. ∎
+
+
+
+##### Theorem  
+The algorithm returns the maximum possible length of a non‑decreasing
+contiguous subarray of a constructed array `nums3`.
+
+**Proof.**
+
+Let `n` be the array length.  
+After processing the last index `n-1`, by Lemma&nbsp;2 the variable `ans`
+equals `max( dp1[0..n-1], dp2[0..n-1] )` which, by Lemma&nbsp;1,
+is the length of the longest feasible subarray that ends at some position
+`k ≤ n-1`.  
+Every non‑decreasing subarray must end at some index, therefore this
+value is the global optimum.  
+The algorithm returns `ans`, so the output is optimal. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis  
+
+For each of the `n` positions we perform a constant amount of work.
+Hence
+
+```
+Time   :  O(n)
+Memory :  O(1)         (only two previous lengths are stored)
+```
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def maxNonDecreasingLength(self, nums1: List[int], nums2: List[int]) -> int:
+        """
+        Returns the maximum possible length of a non‑decreasing contiguous
+        subarray after optimally choosing one element from each pair
+        (nums1[i], nums2[i]).
+        """
+        n = len(nums1)
+        if n == 0:
+            return 0
+
+        # dp1 = length ending at i with chosen nums1[i]
+        # dp2 = length ending at i with chosen nums2[i]
+        dp1, dp2 = 1, 1
+        best = 1
+
+        for i in range(1, n):
+            cur1 = 1
+            cur2 = 1
+
+            # extend with nums1[i]
+            if nums1[i - 1] <= nums1[i]:
+                cur1 = max(cur1, dp1 + 1)
+            if nums2[i - 1] <= nums1[i]:
+                cur1 = max(cur1, dp2 + 1)
+
+            # extend with nums2[i]
+            if nums1[i - 1] <= nums2[i]:
+                cur2 = max(cur2, dp1 + 1)
+            if nums2[i - 1] <= nums2[i]:
+                cur2 = max(cur2, dp2 + 1)
+
+            # update best length seen so far
+            best = max(best, cur1, cur2)
+
+            dp1, dp2 = cur1, cur2
+
+        return best
+```
+
+The implementation follows exactly the algorithm proven correct above
+and conforms to the required function signature.

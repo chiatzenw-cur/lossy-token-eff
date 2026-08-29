@@ -1,0 +1,311 @@
+<|channel|>analysis<|message|>We need to understand problem: Two arrays length n. For each index, choose one of the two values to build array nums3. We want to maximize length of longest non-decreasing contiguous subarray in nums3. We can choose element per index independently, but subarray must be contiguous in final array; we can choose assignments that maximize longest contiguous run of nondecreasing elements.
+
+We can think dynamic programming: For each position i, consider choosing either options, track current run length and last value? Need to find maximum over all subarrays after optimal assignment. Equivalent: we have two possible values at each index; we need to choose a sequence of length n from two options each to maximize longest contiguous non-decreasing subsequence.
+
+Approach: Since we only care about longest, we can compute DP that tracks current run length ending at i, for each choice at i. Additional variable: last value of previous chosen element. But we can just consider options for current i value v1 or v2. For each we can compute longest run ending at i if we choose v1/v2, based on previous state's last value.
+
+We maintain two states: the longest run ending at i when picking val = nums1[i] OR val=nums2[i]. Also maintain last value of that run. But run length depends on last value. So we need to know current run length and the last value (which is v chosen). But if we choose val=nums1[i], the run length ending at i is either 1 (start new run) or previous run length + 1 if previous value <= chosen value. But we need to know which previous value to compare. Both previous states have different last values (prev val could be nums1[i-1] or nums2[i-1] and associated run length). So we can compute new length for each option:
+
+Let dp1[i] = length of longest non-decreasing run ending at i using nums1[i]
+Let dp2[i] = same using nums2[i]
+Also we may need to consider case where we choose a different value at i to continue run from either of previous states. For each state at i, we look at both previous states: if prev value <= current value then we can extend.
+
+Thus:
+dp1[i] = 1
+dp2[i] = 1
+For j in {1,2}? Actually for each choose:
+if nums1[i-1] <= nums1[i], dp1[i] = max(dp1[i], dp1[i-1] + 1)
+if nums2[i-1] <= nums1[i], dp1[i] = max(dp1[i], dp2[i-1] + 1)
+Similarly for dp2[i]:
+if nums1[i-1] <= nums2[i], dp2[i] = max(dp2[i], dp1[i-1] + 1)
+if nums2[i-1] <= nums2[i], dp2[i] = max(dp2[i], dp2[i-1] + 1)
+
+Return max over all dp1[i], dp2[i].
+
+But is this correct? We need to consider that we might decide to start a new run even if last value > current value; but dp values are computed per state. Since we take max over all runs, we can always start new run (1). So formula seems fine.
+
+Let's test with examples.
+
+Example 1:
+nums1=[2,3,1], nums2=[1,2,1]
+i=0: dp1[0]=1, dp2[0]=1
+i=1: v1=3, v2=2. dp1[1]:
+- from dp1[0] if 2<=3 -> 2
+- from dp2[0] if 1<=3 -> 2
+so dp1[1]=2.
+dp2[1]:
+- from dp1[0] if 2<=2 -> 2
+- from dp2[0] if 1<=2 -> 2
+dp2[1]=2
+i=2: v1=1, v2=1
+dp1[2]:
+- from dp1[1] if 3<=1 no
+- from dp2[1] if 2<=1 no
+=> dp1[2]=1
+dp2[2]:
+- from dp1[1] if 3<=1 no
+- from dp2[1] if 2<=1 no
+=>1
+Max dp=2. Good.
+
+Example2:
+nums1=[1,3,2,1], nums2=[2,2,3,4]
+i=0: dp1=1, dp2=1
+i=1: v1=3,v2=2
+dp1[1]: check 1<=3 =>2, 2<=3 =>2 =>2
+dp2[1]: 1<=2 =>2, 2<=2 =>2 =>2
+i=2: v1=2, v2=3
+dp1[2]:
+- from dp1[1] if 3<=2 no
+- from dp2[1] if 2<=2 =>dp2[1]+1=3? Actually dp2[1] is 2, so 3
+dp1[2]=3
+dp2[2]:
+- from dp1[1] if 3<=3 => 3
+- from dp2[1] if 2<=3 => 3
+dp2[2]=3
+i=3: v1=1, v2=4
+dp1[3]:
+- from dp1[2] if 2<=1 no
+- from dp2[2] if 3<=1 no
+=>1
+dp2[3]:
+- from dp1[2] if 2<=4 => dp1[2]+1=4
+- from dp2[2] if 3<=4 => dp2[2]+1=4
+=>4
+Max=4. Good.
+
+Edge cases: If both options equal, dp computations still fine.
+
+Complexity O(n). Works up to 1e5. Need to store only previous values to reduce memory.
+
+Implementation: iterate i from 0 to n-1. Keep prev1 and prev2. For each i compute curr1, curr2 based on prev values and given arrays. Use variables.
+
+Pseudo:
+prev1=1
+prev2=1
+ans=1
+for i in range(1,n):
+   v1=nums1[i]; v2=nums2[i]
+   prev_v1=nums1[i-1]; prev_v2=nums2[i-1]
+   curr1=1
+   if prev_v1<=v1: curr1=max(curr1, prev1+1)
+   if prev_v2<=v1: curr1=max(curr1, prev2+1)
+   curr2=1
+   if prev_v1<=v2: curr2=max(curr2, prev1+1)
+   if prev_v2<=v2: curr2=max(curr2, prev2+1)
+   ans=max(ans, curr1, curr2)
+   prev1, prev2 = curr1, curr2
+
+Edge: n==0? constraints say n>=1.
+
+Return ans.
+
+Let's test additional scenarios: suppose nums1=[5,4], nums2=[1,2]
+i=0 prev1=1 curr1=1 curr2=1
+i=1: prev_v1=5, prev_v2=1
+v1=4, v2=2
+curr1: 5<=4? no, 1<=4? yes => curr1=prev2+1=2
+curr2: 5<=2? no, 1<=2? yes => prev2+1=2
+ans=2. Best we can get is [1,2]? yes.
+
+Check scenario: can longer run start with second value of previous? Suppose dp updated accordingly.
+
+Edge: at i=1 we need to use prev values from consistent previous dp. Works.
+
+Ok.
+
+Proof: We consider all possibilities because state dp1[i] is maximum run ending at i with nums1[i]. Since we consider extensions from either previous state (1 or 2) with condition satisfied, we cover all possible runs. Since we maximize, we choose optimal extension. So DP is correct.
+
+Return ans.
+
+Let's produce code. Use typing List. Provide solution class with function.
+
+Complexities: O(n), O(1) space.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every index `i` we may write either `nums1[i]` **or** `nums2[i]`
+into `nums3`.  
+After the whole array is fixed we look at the longest *contiguous*
+non‑decreasing subarray inside `nums3`.  
+We want to decide the choices in such a way that this longest length is as
+large as possible.
+
+--------------------------------------------------------------------
+
+#### 1.   Observations
+
+* The length of the longest subarray that ends at position `i` depends
+  only on the value that we put at position `i` and on the
+  “longest run that ends at `i-1`”.
+* At every position we have exactly two choices – it is enough to keep
+  two DP values  
+  `dp1[i]` – best length *ending at `i`* when we pick `nums1[i]`  
+  `dp2[i]` – best length *ending at `i`* when we pick `nums2[i]`.
+
+With these two values we can extend a run:
+
+*If the previous value is not larger than the current value, we can
+continue the run, otherwise the run must start at `i`.*
+
+--------------------------------------------------------------------
+
+#### 2.   DP Recurrence
+
+Let
+
+```
+v1   = nums1[i]
+v2   = nums2[i]
+pv1  = nums1[i-1]
+pv2  = nums2[i-1]
+```
+
+For the first element
+
+```
+dp1[0] = dp2[0] = 1   # any single element is a run of length 1
+```
+
+For `i > 0`
+
+```
+dp1[i] = 1                                    (start new run)
+if pv1 <= v1:     dp1[i] = max(dp1[i], dp1[i-1] + 1)
+if pv2 <= v1:     dp1[i] = max(dp1[i], dp2[i-1] + 1)
+
+dp2[i] = 1
+if pv1 <= v2:     dp2[i] = max(dp2[i], dp1[i-1] + 1)
+if pv2 <= v2:     dp2[i] = max(dp2[i], dp2[i-1] + 1)
+```
+
+The answer is the maximum value among all `dp1[i]` and `dp2[i]`.
+
+--------------------------------------------------------------------
+
+#### 3.   Correctness Proof  
+
+We prove that the algorithm returns the maximum possible length of a
+non‑decreasing subarray.
+
+---
+
+##### Lemma 1  
+For every index `i`, after processing it the algorithm has computed the
+maximum length of a non‑decreasing subarray that ends at `i`
+and uses `nums1[i]` (respectively `nums2[i]`).  
+That is, `dp1[i]` (respectively `dp2[i]`) equals that optimum.
+
+**Proof.**
+
+Induction over `i`.
+
+*Base (`i=0`)*:  
+Any subarray ending at position 0 has length 1, and the algorithm
+stores `dp1[0] = dp2[0] = 1`. ✓
+
+*Induction step:*  
+Assume the lemma holds for `i-1` – we have optimal lengths for runs
+ending at `i-1` using either value.  
+When we choose `nums1[i]` we can obtain a run that
+
+* starts at `i` → length 1   (the algorithm assigns 1)
+* continues from a run that ended at `i-1` and whose last value
+  (`pv1` or `pv2`) is ≤ `v1`.  
+  The best such run is either the optimal run ending at `i-1`
+  with `nums1[i-1]` or with `nums2[i-1]`.  
+  Their lengths are `dp1[i-1]` and `dp2[i-1]`; the algorithm tests both
+  possibilities (`pv1 <= v1` & `pv2 <= v1`) and chooses the larger.
+  Thus `dp1[i]` is the optimum.
+
+The same reasoning applies to `dp2[i]`.  
+Therefore the lemma holds for index `i`. ∎
+
+
+
+##### Lemma 2  
+Let `L` be the maximum length of a non‑decreasing subarray that can be
+obtained by any choice of `nums3`.  
+After the whole array is processed `ans = L`.
+
+**Proof.**
+
+From Lemma&nbsp;1, for each `i` the algorithm knows the optimal length of
+a non‑decreasing subarray that ends at `i` and
+uses either `nums1[i]` or `nums2[i]`.  
+Any non‑decreasing subarray has a last index `k`, and its length is
+exactly `dp1[k]` or `dp2[k]`.  
+`ans` is the maximum of all such values, so it equals the length of the
+longest achievable subarray. ∎
+
+
+
+##### Theorem  
+The algorithm returns the maximum possible length of a non‑decreasing
+subarray in `nums3`.
+
+**Proof.**
+
+By Lemma&nbsp;2, after processing all indices the variable `ans`
+equals the optimum length `L`.  
+The algorithm outputs `ans`; therefore it outputs the optimum. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.   Complexity Analysis
+
+For each of the `n` positions we perform a constant amount of work.
+
+```
+Time   :  O(n)
+Memory :  O(1)   (only the two previous DP values are kept)
+```
+
+--------------------------------------------------------------------
+
+#### 5.   Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def maxNonDecreasingLength(self, nums1: List[int], nums2: List[int]) -> int:
+        n = len(nums1)
+        # handle trivial case
+        if n == 0:
+            return 0
+
+        # initial values for i = 0
+        prev_dp1 = 1
+        prev_dp2 = 1
+        answer = 1
+
+        for i in range(1, n):
+            v1 = nums1[i]
+            v2 = nums2[i]
+            pv1 = nums1[i - 1]
+            pv2 = nums2[i - 1]
+
+            # Compute dp for current index
+            cur_dp1 = 1   # start new run at i
+            if pv1 <= v1:
+                cur_dp1 = max(cur_dp1, prev_dp1 + 1)
+            if pv2 <= v1:
+                cur_dp1 = max(cur_dp1, prev_dp2 + 1)
+
+            cur_dp2 = 1
+            if pv1 <= v2:
+                cur_dp2 = max(cur_dp2, prev_dp1 + 1)
+            if pv2 <= v2:
+                cur_dp2 = max(cur_dp2, prev_dp2 + 1)
+
+            answer = max(answer, cur_dp1, cur_dp2)
+
+            # shift for next iteration
+            prev_dp1, prev_dp2 = cur_dp1, cur_dp2
+
+        return answer
+```
+
+The code follows exactly the algorithm proven correct above and satisfies
+the required time and memory limits.

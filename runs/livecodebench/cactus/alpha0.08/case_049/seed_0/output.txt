@@ -1,0 +1,275 @@
+<|channel|>analysis<|message|>We need to maximize profit: choose subset of intervals (offers non-overlapping) such that total gold_i maximum. The houses are 0..n-1. Each offer covers contiguous interval [start, end]. We cannot exceed overlapping constraints. This is Weighted Interval Scheduling problem. For each interval, reward up to 1000. We have up to 1e5 intervals, n up to 1e5. Maximum total possible neutral? But we can use DP on intervals sorted by end, using dp for each interval index.
+
+Need efficient implementation. Since n up to 1e5 and intervals up to 1e5, we can sort by end, compute positions - DP with binary search. Complexity O(m log m).
+
+We can also choose efficient arrays.
+
+Complexities: O(m log m).
+
+We lose nim glimpsing at finishing 0..n-1: option to skip all intervals, they may not cover some houses because not all houses sold, but not needed.
+
+Edge: if invoices may be same intervals? Yes.
+
+Implement:
+
+- input n, offers list of size m
+- Build intervals item: (start, end, profit)
+- Add dummy arr? The dp array E[0..m] where E[i] costs max profit for first i intervals in sorted order.
+
+- For each interval i, with sorted by end.
+
+index i (0-indexed). prev = binary search j < i > maximum index where arr[j].end < curr.start. Since arr sorted by end ascending. Use bisect_right (end list). The dp recurrence: dp[i] = max(dp[i-1], dp[prev]+profit). where prev is index (0-based). Actually dp index shift: dp[0] = 0; intervals = sorted. For i from 1..m: interval_i = intervals[i-1]; compute bound via bisect_right of start.
+
+Algorithm in Python:
+
+```
+from bisect import bisect_right
+class Solution:
+    def maximizeTheProfit(self, n: int, offers: List[List[int]]) -> int:
+        intervals = sorted(offers, key=lambda x: x[1])  # sort by end
+        ends = [e for _, e, _ in intervals]
+        dp = [0]*(len(intervals)+1)
+        for i in range(1, len(intervals)+1):
+            s, e, g = intervals[i-1]
+            # binary search largest interval ending <= s-1
+            j = bisect_right(ends, s-1, 0, i-1)  # find last index < i
+            dp[i] = max(dp[i-1], dp[j] + g)
+        return dp[-1]
+```
+
+We must ensure O(m log m). m <= 100k, fine.
+
+Edge Cases: maybe overlapping inclusive? Odd. Our condition is "different buyers can't buy same house", so condition: two intervals must not overlap such that union indices never double. So satisfied with <= s-1 condition. Because if current interval starts exactly at s, e< s? Actually if last interval ends at s-1, OK, since must not share single house. So `(endPrev < startCurr)`.
+
+Additionally: need to handle "multiple buyers can't buy same house" exclusive. Good.
+
+Pseudocode: Use Python's list.
+
+Complexities: sorting O(m log m). Insert into dp.
+
+Check example1:
+
+n=5, offers: [[0,0,1],[0,2,2],[1,3,2]]
+Sort by end relative: [0,0,1], [0,2,2], [1,3,2]. Ends: [0,2,3]. For i=1: for start=0: j = bisect_right(ends, -1, 0, 0) = 0 => dp[1] = max(dp[0], dp[0]+1)=1
+i=2: end=2; start=0; j= bisect_right(ends, -1, 0,1)=0 => dp[2] = max(dp[1], dp[0]+2)=2
+i=3: start=1; j= bisect_right(ends,0,0,2)=1 => dp[3] = max(dp[2], dp[1]+2)=max(2,1+2)=3. Good.
+
+Example2: offers with [0,2,10] compare intervals: [0,0,1], [0,2,10], [1,3,2] ...
+Sorted by end: [0,0,1], [0,2,10], [1,3,2]. No max stays.
+
+Compute DP: i=1: candidate prev=0 -> dp1=1
+i=2: start=0; j=0 -> dp2 = max(1, 0+10)=10
+i=3: start=1; j=1 -> dp3 = max(10, 1+2)=10
+
+Answer 10.
+
+Working.
+
+Time complexity: O(m log m). Memory: uses dp and lists for ends of ~m.
+
+We output integer result.
+
+Edge: concurrent of 0 length intervals? Items have start <= end. Works.
+
+We might need to process for exceed n? but OK.
+
+Thus final solution with code.
+
+Note: '1000' bound is enough for DP integer; but dp may be large so sum up to 1e8? But fine. Use int.
+
+Return step.
+
+Also maybe store dp as list of ints.
+
+Also check possibility of M offers 1e5. Sorting with lambda fine.
+
+Ok.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+The houses are numbered `0 … n‑1`.  
+`k` buyers give offers  
+`[start_i , end_i , gold_i]` – they want to buy all houses in
+`[start_i , end_i]` for `gold_i` gold.
+
+Two different buyers cannot obtain a single house.  
+We have to choose a subset of the offers whose ranges do **not** overlap
+and whose total gold is maximum.
+
+This is exactly the classic **Weighted Interval Scheduling** problem.
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* The order of houses is linear, so an offer can be described by its
+  `start` and `end` only.
+* Two offers are compatible iff
+
+```
+previous.end < current.start      (no house overlapped)
+```
+
+Thus we only have to take care of the partitioning of `start` and `end`
+values.
+
+--------------------------------------------------------------------
+
+#### 2.  Algorithm
+
+1. **Sort** the plans by their finishing house (`end`) – ascending order.
+2. For every plan `i` in the sorted order we try the two possibilities
+
+   * exclude it: profit = `dp[i-1]`
+   * include it: profit = `gold_i + product_profit wo’ s that end before i`
+
+   where `product_profit` is the best profit among all plans that finish
+   **strictly before** the current plan starts.  
+   (`dp[j]` where `end_j < start_i`, `j` is the largest index with this property).
+
+   Use binary search on the sorted `end` values to obtain `j` in  
+   `O(log m)` time.
+
+3. Update `dp[i]` with the maximum of the two possibilities.
+
+The answer is `dp[m]` where `m` is the number of offers.
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the maximum total gold.
+
+---
+
+##### Lemma 1  
+For any interval `i` (in the sorted order) there exists a `j` such that
+`j ≥ 0` and `end[j] < start[i]`.  
+All later intervals `k > i` have `end Technology` equality.  
+Therefore the algorithm correctly finds `j` with binary search.
+
+**Proof.**  
+Because the intervals are sorted by `end`, for each `i` all
+intervals with `end < start[i]` contain indices `< i`  
+and all intervals with `end ≥ start[i]` have indices `≥ i`.  
+By binary search on `[0, i-1]` we retrieve the largest index `j`
+with `end[j] < start[i]`. ∎
+
+
+
+##### Lemma 2  
+Let `best[i]` be the value returned by the algorithm for the
+first `i` intervals.
+`best[i]` equals the maximum total gold obtainable using only
+intervals among the first `i` intervals.
+
+**Proof.**  
+Induction over `i`.
+
+*Base (`i = 1`).*  
+Only one interval is available.  
+Budget of the algorithm: `dp[1] = max(dp[0], 0 + gold[0]) = max(0, gold[0])`.  
+Optimal: either sell it or keep it unsold.  
+Thus the equality holds.
+
+*Induction step.*  
+Assume the lemma true for all smaller indices.
+
+When processing interval `i` the algorithm considers two possibilities:
+
+1. **Exclusion** – profit = `dp[i-1]`.  
+   By induction hypothesis this is the optimum, using only intervals
+   among the first `i-1`.
+
+2. **Inclusion** – profit = `gold[i] + dp[prev]`  
+   where `prev` is the largest index with `end[prev] < start[i]`.  
+   By induction hypothesis, `dp[prev]` is the maximum profit that can be
+   formed from non‑overlapping intervals without touching interval `i`,
+   and adding `gift[i]` yields a feasible profit that uses interval `i`.
+
+The algorithm takes the maximum of those two totals, therefore it
+produces the optimum for the first `i` intervals.
+By induction the lemma holds for all `i`. ∎
+
+
+
+##### Theorem  
+The algorithm returns the maximum possible total gold that can be earned
+without selling any house twice.
+
+**Proof.**  
+`full` is the last index of the sorted list, i.e. `full = m`.
+By Lemma&nbsp;2 at every stage `dp[full]` equals the optimum profit for
+all intervals.  
+Thus `dp[m]` is exactly the desired optimum. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+*Let* `m = len(offers)`  
+*Let* `n ≤ 100000`  
+
+* Sorting: `O(m log m)`  
+* For each of the `m` intervals  
+  * binary search on the first `i-1` elements: `O(log m)`  
+  * additional `O(1)` work.
+
+Total time: `O(m log m)`  
+Memory: arrays `dp` (size `m+1`), `end` (size `m`) → `O(m)`.
+
+Both satisfy the constraints `m ≤ 10^5`.
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation (Python 3)
+
+```python
+import sys
+from bisect import bisect_right
+from typing import List
+
+class Solution:
+    def maximizeTheProfit(self, n: int, offers: List[List[int]]) -> int:
+        # ------------------------------------------------------------------
+        # 1. Sort offers by end
+        # ------------------------------------------------------------------
+        sorted_offers = sorted(offers, key=lambda x: x[1])  # sort by end
+        ends = [e for _, e, _ in sorted_offers]           # helper for bs
+
+        m = len(sorted_offers)
+        # dp[i] : best profit using the first i intervals (0‑based)
+        dp = [0] * (m + 1)                    # dp[0] = 0
+
+        # ------------------------------------------------------------------
+        # 2. DP with binary search for the previous compatible interval
+        # ------------------------------------------------------------------
+        for i in range(1, m + 1):
+            s, e, g = sorted_offers[i - 1]
+            # Find the largest index j < i such that ends[j] < s
+            # bisect_right returns the insertion point; subtract 1
+            j = bisect_right(ends, s - 1, 0, i - 1)
+            # dp[i] = max( exclude it, mp + include it )
+            dp[i] = max(dp[i - 1], dp[j] + g)
+
+        # ------------------------------------------------------------------
+        # 3. Result
+        # ------------------------------------------------------------------
+        return dp[m]
+
+
+# The following lines are an example of how to test the function inside
+# the script into the environment; they are not required by the platform.
+if __name__ == "__main__":
+    # Example 1
+    sol = Solution()
+    print(sol.maximizeTheProfit(5, [[0, 0, 1], [0, 2, 2], [1, 3, 2]]))    # expected 3
+
+    # Example 2
+    print(sol.maximizeTheProfit(5, [[0, 0, 1], [0, 2, 10], [1, 3, 2]]))  # expected 10
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required time and memory limits.

@@ -1,0 +1,381 @@
+<|channel|>analysis<|message|>We need efficient counting per query. For each server, we have times of requests. For each query Q, we need count of servers with no request in [Q-x, Q]. Equivalent to total servers n minus servers having at least one request in interval.
+
+We can preprocess logs by server.
+
+For each query let's check each server individually would be heavy. We can process server-wise last request time? But we need if any request in interval, not necessarily the last one. But we can keep earliest/times.
+
+Observation: For each server, for each query, we only need to know if there existed a log within [q-x, q]. For fixed query range, we can compute for each server the latest request time ≤ q. If that latest request_time >= q-x, then server has a request. So we can precompute per server the list of log times sorted. Then for each query, we can binary search latest ≤ q, check if >= q-x.
+
+But queries up to 100k, servers up to 100k, logs up to 100k. For each query scanning all servers would be 1e10. Not feasible.
+
+Need better method: We can think of scanning through sorted queries, use sweep line and update active servers that have request in window.
+
+We have sliding window [t-x, t] for each query time t. We can process time in increasing order. Maintain a boolean array active[server] indicating whether the server has at least one request in current window. Need count of servers that are inactive. We can maintain a counter of currently active servers.
+
+Processing:
+
+Sort logs by time. For each query time t sorted ascending. We'll maintain two pointers: left index for logs that are out of window (< t-x). We'll also need to remove servers whose all requests are out of window. However if a server had multiple requests, removal only when no remaining requests inside window.
+
+Need to maintain for each server the minimal time in the window? Actually we can maintain a multiset of times per server; but we can process via event of request arrival and departure time. Each request at time s contributes to active window for queries t in [s, s+x]. Because if query time t is between s and s+x inclusive, then s is within [t-x, t] meaning s >= t-x and s <= t. So we can think each request influences queries in that interval.
+
+We process queries sorted ascending. For each request time L, we add that server to "active" when query time reaches L, and remove when query time surpasses L+x.
+
+But careful: If a server gets multiple requests within window, it remains active until all requests have departed. So for each server we need to count how many active requests currently present, and keep active if count>0.
+
+We can process events: For each log (sid, time t). Create event at time t: +1 to active count for server sid. Create event at time t+x+1: -1 (server's request expires). Actually interval closed [t, t+x]. For query t_q, active window includes any logs with times <= t_q and > t_q-x. Equivalent to logs where t <= t_q <= t+x. So event at time t (arrival) and at time t+x+1 (departure). That's typical.
+
+Then we sweep times in increasing order of queries. For each query time t_q, we process all events with time <= t_q, applying deltas to server counts. Then after processing, the active servers are those with cur_count>0. We need number of inactive servers = n - active_count. Note active_count is count of servers with cur_count>0.
+
+Implementation details:
+
+- Logs up to 100k, so events up to 200k.
+
+- Preprocess events list: For each log: event_arrival: (time, 'add', server_id). event_departure: (time+x+1, 'sub', server_id). Sort by time ascending.
+
+- Sort queries with original indices.
+
+- Keep array cur_count[1..n] to count active request count per server. Initially zero.
+
+- Maintain active_servers = 0.
+
+- For processing events: while events[idx].time <= query_time: if event is add: cur_count[sid] +=1; if cur_count[sid]==1: active_servers++ ; else subtract similar.
+
+But note that there may be multiple events at same time; we can process all before query.
+
+When processing departure: cur_count[sid] -=1; if cur_count[sid]==0: active_servers--.
+
+Edge Cases: x may be large up to 1e5. Ensure t+x+1 can overflow: logs time up to 1e6, x up to 1e5, so t+x+1 <= 1.1 million. fine.
+
+Time complexity O((logs + queries) log (logs+queries)) sorting, plus linear sweep.
+
+Memory: cur_count array of size n+1.
+
+Testing with example:
+
+n=3, logs: [1,3],[2,6],[1,5], x=5. events: [1,3+5+1=9] for 1. [2,6+5+1=12] for 2. [1,5+5+1=11] for 1. times: 3 (+1 for srv1), 5 (+1 for srv1), 6 (+1 for srv2), 9 (-1 for srv1), 11 (-1 for srv1), 12 (-1 for srv2). Sort.
+
+Queries sorted: [10,11].
+
+Processing:
+
+query 10: events <=10: process 3(add1),5(add1),6(add1),9(-1). After events: cur_count: srv1=1? Wait after 3+5 arrivals: srv1 gets 2 at time 5, then -1 at 9 leaves one active. So cur_count 1. srv2 1. active_servers=2. inactive =1. Good.
+
+query 11: process events <=11: 11 (-1 for srv1). After this, srv1 cur_count becomes0, active_servers=1. Result inactive=2. OK.
+
+Edge 2 example: n=3, logs: [2,4],[2,1],[1,2],[3,1], x=2. events: 2,1,4->? Wait compute: (sid,time). [2,4] -> event add at 4, depart at 7. [2,1] -> add at1, depart at4. [1,2] add at2, depart at5. [3,1] add at1, depart at4. queries 3,4. sorted.
+
+Process events <=3: at 1 add srv2; 1 add srv3; 2 add srv1. Now active: all 3. Process departures at 4? no <=3. So query3: all 3 active -> inactive 0. Good.
+
+Next query4: process events <=4: include departure at 4 for srv2, at4 for srv3, arrival at4 for srv2 (same id but new). Because we have addition at 4 for server2. Order at time 4: we first apply events at 4 before query? Since we process events with time <= query_time inclusive. So we process 4 events: add at 4 for srv2; depart at 4 for srv2 (from time 1). depart at 4 for srv3. That results: for srv2: arrival+1 => from 1 to 2 => cur_count 2; departure-1 => 1. So still active. For srv3: cur_count goes 1->0. So after these events: srv1:1, srv2:1, srv3:0. active_servers=2. So inactive=1. Good.
+
+Edge: What if multiple events same time, arrival before departure? In above we processed add then departure but we apply all events in any order; result same? Might differ. Let's check: Suppose both add and depart at same time. If processing depart first, then capacity may drop to 0. Example: Suppose srv2 had 1 active from previous times. At time 4 we have arrival and departure. If depart first, srv2 count 0 -> active_servers decrement -> then arrival increases to 1 -> active inc. Net same. So order not critical.
+
+But we need to assure we process all events <= query_time before computing result. The order of events at same time doesn't matter if we process all.
+
+Implement with two lists: events list of tuples (time, delta, sid). delta = +1 or -1. sort by time.
+
+Sweep:
+
+i=0
+res = [0]*len(queries)
+for q_time, idx in sorted_queries:
+    while i < len(events) and events[i][0] <= q_time:
+        t, delta, sid = events[i]
+        cur_count[sid] += delta
+        if delta == 1 and cur_count[sid] == 1:
+            active_servers += 1
+        elif delta == -1 and cur_count[sid] == 0:
+            active_servers -= 1
+        i += 1
+    res[idx] = n - active_servers
+
+Edge: logs may be unsorted. Use Python lists.
+
+Constraints: logs length up to 1e5, n up to 1e5. We'll use list of size n+1 for counts.
+
+Complexities: O((n+log_size+queries) logSize). But we only sort events and queries. query sorting O(q log q). events sorting O(E log E).
+
+Answer.
+
+Considering note: logs[i][0] is 1 to n inclusive.
+
+Edge: large n, many servers not present in logs. cur_count zeros. active_servers will include only those servers that had at least one active log. This method works.
+
+Let's test manually.
+
+Also need to handle when queries are not sorted originally: store results by index.
+
+Edge: logs might have same timestamp for same server; events accordingly. If for same server we have two arrival events at time t and t+x+1 at same time? Not typically. Fine.
+
+Time boundary: inclusive intervals. We treat departure at time t+x+1 exclusive. In query at time t+x, it should still be active. So our departure event at t+x+1 is correct.
+
+Ok produce final code. Provide explanation.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every server we know the times when it received a request.  
+For a query `q` we have to decide whether the server received **at least one
+request in the interval**
+
+```
+[q - x , q]          (both ends inclusive)
+```
+
+The answer for the query is
+
+```
+#servers  –  #servers that received a request in that interval
+```
+
+`n , logs , queries` can be up to `10^5`.  
+Checking every server for every query would be `O(n * |queries|)` – far too
+slow.  
+We have to process all queries together.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* A request that happened at time `t` influences **exactly** the queries
+  whose time `q` satisfies  
+  `t <= q <= t + x`.  
+  In other words the request is *active* inside the interval  
+  `[t , t + x]`.
+
+* If we sweep the time line from left to right, for every server we can
+  maintain a counter `active_cnt[server]` – how many of its requests are
+  active *currently* (i.e. belong to the interval `[current_time,
+  current_time + x]`).
+
+* A server is *active* (it has at least one request in the current interval)
+  iff `active_cnt[server] > 0`.  
+  We can keep `active_servers` – the number of servers with non‑zero counter.
+
+* While we sweep through time, the set of active servers changes only
+  at two kinds of moments:
+
+  * **Arrival** : a request `t` appears – the counter of its server +1
+  * **Departure** : the request `t` is no longer in the interval – the
+    counter of its server –1 (the time just after `t + x`)
+
+  Therefore for every request we create two events:
+
+  ```
+  (time = t          , +1, server)
+  (time = t + x + 1  , -1, server)       # +1 because the query time
+                                         # is inclusive
+  ```
+
+  All events are sorted by time.  
+  Every event changes only a single server counter, and we update
+  `active_servers` accordingly.
+
+* Queries are processed in increasing order of the query time:
+  before answering a query we apply *all* events whose time is <= query
+  time.  
+  After that `active_servers` is the number of servers that received at
+  least one request in that query’s interval, so
+
+  ```
+  answer = n - active_servers
+  ```
+
+--------------------------------------------------------------------
+
+#### 2.  Algorithm
+```
+build list events:
+    for each (server, t) in logs:
+        events.append( (t,           +1, server) )
+        events.append( (t + x + 1,  -1, server) )
+
+sort events by time
+
+create list sorted_queries = [(q_time, original_index), ...]
+sort sorted_queries by q_time
+
+cur_cnt = array[1 .. n] initialized to 0          # active requests
+active_servers = 0
+i = 0                                            # pointer in events
+ans = array of length |queries|
+
+for q_time, idx in sorted_queries:
+    while i < len(events) and events[i].time <= q_time:
+        (_, delta, server) = events[i]
+        cur_cnt[server] += delta
+        if delta == +1 and cur_cnt[server] == 1:
+            active_servers += 1
+        elif delta == -1 and cur_cnt[server] == 0:
+            active_servers -= 1
+        i += 1
+    ans[idx] = n - active_servers
+
+return ans
+```
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the correct answer for every query.
+
+---
+
+##### Lemma 1  
+For every server `s` and every time `t` processed by the sweep,
+`cur_cnt[s]` equals the number of requests of `s` whose timestamps are
+in the interval `[t, t + x]`.
+
+**Proof.**
+
+Consider a request of server `s` at time `r`.
+
+* At time `r` the algorithm processes the event `+1` –  
+  `cur_cnt[s]` is increased by `1`.  
+  So the request contributes to the counter **exactly** for times
+  `>= r`.
+
+* At time `r + x + 1` the algorithm processes the event `-1` –  
+  `cur_cnt[s]` is decreased by `1`.  
+  Thus the request no longer contributes to the counter **starting** at
+  time `r + x + 1`.
+
+Consequently the request contributes to `cur_cnt[s]` for all times in
+`[r, r + x]` and for none outside this interval.  
+Because events are processed in increasing time order and we process
+*all* events that happened `<= t` before evaluating time `t`,
+the counter therefore contains exactly all requests of `s` whose times
+lie in `[t, t + x]`. ∎
+
+
+
+##### Lemma 2  
+At the moment a query with time `q` is answered,  
+`active_servers` equals the number of servers that have at least one
+request in the interval `[q - x , q]`.
+
+**Proof.**
+
+From Lemma&nbsp;1, for every server `s`
+
+```
+cur_cnt[s] > 0    ⇔   server s has a request in [q , q + x]
+```
+
+But the sweep processes *all* events up to the current query time `q`,
+so the state of `cur_cnt` exactly reflects the number of requests in
+`[q , q + x]`.  
+However our queries ask for the interval `[q - x , q]`.  
+The two intervals are just reversed in time: by the symmetry of the
+definition, the set of requests in `[q - x , q]` is the same as the set
+of requests that will be active at time `q` (the time `q` is the
+right border of the interval, `q - x` the left).  
+Therefore a server has `cur_cnt[s] > 0` **iff** it has at least one
+request in `[q - x , q]`.
+
+`active_servers` is incremented (decremented) exactly when a server’s
+counter changes from 0 to 1 (from 1 to 0).  
+Hence `active_servers` equals the number of servers with `cur_cnt[s] > 0`, which by the
+previous argument is the number of servers that received at least one
+request in `[q - x , q]`. ∎
+
+
+
+##### Lemma 3  
+For every query `q` the algorithm outputs the number of servers **that
+did not** receive any request in `[q - x , q]`.
+
+**Proof.**
+
+Let `A` be the set of servers that received at least one request in
+that interval.  
+By Lemma&nbsp;2 `|A| = active_servers` at the moment of answering.
+The algorithm returns `n - active_servers`.  
+Since there are exactly `n` servers in total, `n - active_servers` is
+the size of the complement of `A`, i.e. the number of servers that
+did not receive any request in the interval. ∎
+
+
+
+##### Theorem  
+`countServers` returns an array whose `i`‑th element is exactly the
+number of servers that did not receive any requests during the time
+interval `[queries[i] - x, queries[i]]`.
+
+**Proof.**
+
+The algorithm processes all queries in sorted order.
+For every query the answer computed, according to Lemma&nbsp;3, is
+exactly the desired value.  
+The answers are stored in the correct positions using the original
+indices, so the returned array contains the correct value for every
+query. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis  
+
+*Number of events* : `2 * |logs| ≤ 2 · 10^5`.  
+*Number of queries* : `≤ 10^5`.
+
+*Sorting*  
+`O( |events| log |events| + |queries| log |queries| )`.
+
+*Sweep*  
+Each event and each query is processed once → `O( |events| + |queries| )`.
+
+*Memory*  
+Events array : `O( |events| )`.  
+Counts array : `O( n )`.  
+Total : `O( n + |events| + |queries| )` ≤ `O( 3·10^5 )`.
+
+Both time and memory easily satisfy the constraints.
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+from typing import List, Tuple
+
+class Solution:
+    def countServers(self, n: int, logs: List[List[int]], x: int,
+                     queries: List[int]) -> List[int]:
+        # Build events: (time, delta, server)
+        events: List[Tuple[int, int, int]] = []
+        for sid, t in logs:
+            events.append((t, +1, sid))
+            events.append((t + x + 1, -1, sid))
+        events.sort(key=lambda e: e[0])
+
+        # Sort queries while keeping original indices
+        sorted_q = sorted([(q, idx) for idx, q in enumerate(queries)],
+                          key=lambda p: p[0])
+
+        cur_cnt = [0] * (n + 1)          # 1‑based server ids
+        active_servers = 0
+        ans = [0] * len(queries)
+        e_idx = 0
+
+        for q_time, orig_idx in sorted_q:
+            # process all events that occur up to and including q_time
+            while e_idx < len(events) and events[e_idx][0] <= q_time:
+                _, delta, sid = events[e_idx]
+                cur_cnt[sid] += delta
+                if delta == +1 and cur_cnt[sid] == 1:
+                    active_servers += 1
+                elif delta == -1 and cur_cnt[sid] == 0:
+                    active_servers -= 1
+                e_idx += 1
+
+            ans[orig_idx] = n - active_servers
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

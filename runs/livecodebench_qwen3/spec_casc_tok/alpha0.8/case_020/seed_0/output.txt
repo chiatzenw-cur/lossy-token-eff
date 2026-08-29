@@ -1,0 +1,715 @@
+<think>
+Okay, let's see. I need to solve this problem where after each query, I color an index and then count the number of adjacent elements with the same color. The challenge is to do this efficiently because n and the number of queries can be up to 1e5, which means a naive approach of checking all adjacent pairs after each query would be O(n) per query, leading to O(n^2) time overall. That's probably going to be too slow for the constraints given. So I need a smarter way.
+
+Let me think about the example. For instance, when you color an index, the only adjacent pairs that could change are the ones involving that index. Like, if I color index i, then I need to check the left neighbor (i-1) and the right neighbor (i+1). Because before coloring, those neighbors might have been colored or not. So maybe I can track the changes locally around each query.
+
+So here's an idea: maintain a count of the current number of adjacent pairs. For each query, when we color an index, we first check what color it was previously. If it was colored before, then we need to subtract the contributions from the previous color. Then, we set the new color and add the contributions from the new color. But how?
+
+Let me break it down. Let's say the current index is i. Before changing the color, check the left and right neighbors. For each neighbor, if they have the same color as the previous color of i, then that adjacent pair contributes to the count. So when we change the color, we need to subtract those contributions. Then, after changing the color, check again the left and right neighbors. If they have the same color as the new color, add those contributions.
+
+For example, suppose the previous color of i was c_prev. Let's look at the left neighbor (i-1). If c_prev was equal to nums[i-1], then that pair (i-1, i) was contributing to the count. Similarly for the right neighbor (i+1). So when we change the color, we need to check those two pairs and subtract their contributions if they were present.
+
+Then, after setting the new color, we check again the left and right. If the new color is the same as the left or right neighbor, then we add those contributions.
+
+So the steps for each query would be:
+
+1. For the index i, check its current color (let's call it old_color).
+2. For each of the neighbors (left and right), check if they have the same color as old_color. If so, decrement the count (since after changing the color, those pairs may no longer be valid).
+3. Then, set the new color (new_color) for index i.
+4. Again, check the same neighbors. If they have the same color as new_color, increment the count.
+5. Append the current count to the answer array.
+
+But wait, how do I handle the case where the old color was 0 (uncolored)? Because if the old color was 0, then the previous pairs didn't contribute. For example, if the previous color was 0, and the left neighbor was also 0, then that pair wasn't counted because the elements were uncolored. But when we change the color, we need to check if the new color matches the neighbor's color (which could be non-zero or zero).
+
+Wait, the problem says that the count is for elements where nums[j] == nums[j+1] and nums[j] != 0. So, even if the old color was 0, but the neighbor was also 0, that pair wasn't counted. So when we color the index, if the previous color was 0, then we need to check whether the neighbor was colored (non-zero) before. But how?
+
+Wait, let's think again. The initial array is all zeros. So for any pair of adjacent elements, they are both zero, but since they are uncolored, they are not counted. So, when we color an index, let's say the previous color was zero. Then, when we color it, we need to see if the left or right neighbor is non-zero. Because if they are, then after coloring, the pair might be same or not.
+
+But how to track this? Let's think for each query:
+
+Let me take an example. Let's say we have index i. Before changing the color, the color was old_color. For each neighbor (left and right), we check whether the neighbor's color is same as old_color. But if the old_color is zero, then the neighbor's color could be zero (uncolored) or non-zero. But since the old_color is zero, the pair (i-1, i) was not counted. So, when we change the color, for the old color, the previous contribution is only if the neighbor's color was also non-zero. Wait, no. Because for the pair (i-1, i), if the old color was zero and neighbor's color is also zero, then that pair was not counted. But when we change the color of i, if the new color is same as the neighbor's color, then that pair would be counted. So for the previous color (old_color), when we check if the neighbor's color was same as old_color, if the old_color was zero, then the neighbor's color could be non-zero. But in that case, the previous pair was not counted, so we don't subtract anything.
+
+Wait, perhaps the way to think about it is:
+
+For each query, when we change the color of index i, we need to check the adjacent pairs that involve index i. Each of those pairs (i-1 and i, and i and i+1) could have been contributing to the count before the change. So before the change, we need to check whether those pairs were contributing. If they were, then we subtract them. Then, after the change, check again if they are contributing now, and add them.
+
+But how do we know if they were contributing before?
+
+For example, let's say before changing the color, the current color of i is old_color. For the pair (i-1, i), if the old_color is not zero and nums[i-1] is equal to old_color, then that pair was contributing. Similarly for the pair (i, i+1). So for each neighbor, we check if the previous color of i and the neighbor's color are same and non-zero.
+
+So, the process for each query would be:
+
+Initialize an array nums with zeros. Also, a variable count to track the total number of adjacent pairs.
+
+For each query (index, color):
+
+- old_color = nums[index]
+- For each neighbor (left and right):
+   - if the neighbor exists (i.e., index is not 0 or n-1), then check if old_color is non-zero and equal to the neighbor's color. If so, decrement count by 1.
+- Now, set nums[index] to the new color.
+- For each neighbor (left and right):
+   - if the neighbor exists, check if new color is equal to the neighbor's color. If so, increment count by 1.
+- Append the current count to the answer.
+
+Wait, but this approach could have a problem. Because when you change the color of index i, you might have multiple neighbors. Let's take the example from Example 1.
+
+Let's go through the first example:
+
+n = 4, queries = [[0,2],[1,2],[3,1],[1,1],[2,1]]
+
+Initially, nums = [0,0,0,0], count = 0.
+
+First query: index 0, color 2. 
+
+old_color is 0. So for left neighbor (none), right neighbor is index 1 (color 0). 
+
+Since old_color is 0, we don't subtract anything. Then, set new color 2. Now check neighbors. Left neighbor is non-existent. Right neighbor is 0. So new color is 2, neighbor is 0. Not equal. So count remains 0. So answer is 0.
+
+Second query: index 1, color 2. 
+
+old_color is 0. Check neighbors:
+
+Left neighbor is index 0 (color 2). Since old_color is 0, no subtraction. Right neighbor is index 2 (color 0). Also no subtraction.
+
+Set new color 2. Now check left and right neighbors.
+
+Left neighbor (index 0) is 2. So same as new color. So add 1. Right neighbor (index 2) is 0. Not same. So count becomes 1. So answer is 1.
+
+Third query: index 3, color 1. 
+
+old_color is 0. Check neighbors. Left neighbor is index 2 (color 0). No subtraction. 
+
+Set new color 1. Check left neighbor (index 2, color 0) and right neighbor (none). So no addition. So count remains 1. So answer is 1.
+
+Fourth query: index 1, color 1. 
+
+old_color is 2. Check neighbors:
+
+Left neighbor is index 0 (color 2). So old_color is 2, which is same as left neighbor. So subtract 1 (count was 1, becomes 0). 
+
+Right neighbor is index 2 (color 0). old_color is 2, not same as 0. So no subtraction. 
+
+Now set new color 1. Check left neighbor (index 0 is 2, not same as 1). Check right neighbor (index 2 is 0, not same as 1). So no addition. So count is 0. Answer is 0.
+
+Fifth query: index 2, color 1. 
+
+old_color is 0. So check neighbors. 
+
+Left neighbor is index 1 (color 1). Since old_color is 0, nothing subtracted. Right neighbor is index 3 (color 1). Also nothing subtracted. 
+
+Set new color to 1. Check left (index 1 is 1, same as new color) → add 1. Check right (index 3 is 1, same as new color) → add 1. So count becomes 0 + 2 = 2. Answer is 2.
+
+Which matches the example. So that approach works. 
+
+So the key is, for each query, for the old color, check the left and right neighbors. If they are same as old color and not zero, then subtract from count. Then, after updating the color, check the same neighbors again. If they are same as new color and not zero, add to count.
+
+But wait, the old color could be zero. So when the old color is zero, then the previous pairs (with the neighbors) would not contribute. So for example, if the neighbor is non-zero, and the old color is zero, then the pair (i-1, i) would not have been counted. So when we change the color of i, we need to check whether the new color is same as the neighbor's color. 
+
+So the steps for each query:
+
+For the current index i:
+
+- Get old_color = nums[i]
+- For each neighbor (left and right):
+   - if neighbor exists (i.e., within 0 <= j < n):
+      - if old_color != 0 and nums[neighbor] == old_color: count -= 1
+- Then, set new_color = color_i. 
+- For each neighbor (left and right):
+   - if neighbor exists:
+      - if new_color != 0 and nums[neighbor] == new_color: count += 1
+- Then, append the count to the answer.
+
+Wait, but why do we check if new_color is not zero? Because the problem says that the count is for elements where nums[j] == nums[j+1] and nums[j] != 0. So, for example, if the new color is 1, and the neighbor is 1, then that pair contributes. But if the new color is zero, then it's not considered. But in the problem, the queries are given with color_i being at least 1. So when we apply a query, the new color is non-zero. So when we set new_color, it's non-zero. 
+
+Wait the problem says that queries[i] has color_i >= 1. So the new color is always non-zero. So in the queries, for each query, the color is non-zero. So when we set new color, it's non-zero. Therefore, for the new color, the check is if the neighbor's color is same as new color. But since new color is non-zero, we don't need to check whether new color is zero. 
+
+But the old color could be zero. So for the old color, when we check, we need to see if it's non-zero. Because if the old color is zero, then the previous pair (with the neighbor) wasn't contributing. 
+
+So during the process, when we check the old color, we need to check whether old_color is non-zero. Because if it was zero, then even if the neighbor is same as old_color (which is zero), the pair wasn't counted. So in that case, we shouldn't subtract anything. 
+
+So the code steps would be:
+
+Initialize nums as a list of zeros.
+
+count = 0
+
+answer = []
+
+for each query in queries:
+
+   index, color = query
+
+   old_color = nums[index]
+
+   for each neighbor in [index-1, index+1]:
+
+      if neighbor is within 0 <= neighbor < n:
+
+         if old_color != 0 and nums[neighbor] == old_color:
+
+             count -= 1
+
+   nums[index] = color
+
+   for each neighbor in [index-1, index+1]:
+
+      if neighbor is within 0 <= neighbor < n:
+
+         if nums[neighbor] == color:
+
+             count += 1
+
+   answer.append(count)
+
+Wait, but why do we check if nums[neighbor] == color? Because if the neighbor is non-zero and same as the new color, then that pair contributes. 
+
+But what if the neighbor is zero? Then even if the new color is same as neighbor (which is zero), but since the new color is non-zero, the neighbor is zero. So the pair is not counted. So in that case, the check is whether the neighbor is same as the new color, but since the new color is non-zero, and neighbor is zero, that's not a contribution. 
+
+So the code for the new color is: check if neighbor's color is equal to the new color. If yes, increment count. 
+
+But for the old color, we need to check if the neighbor's color was equal to the old color and old color was not zero. 
+
+So this approach should work.
+
+Let me test this with the first example.
+
+Let me walk through the first example:
+
+n = 4, queries = [[0,2],[1,2],[3,1],[1,1],[2,1]]
+
+nums starts as [0,0,0,0]
+
+count = 0
+
+First query: index 0, color 2.
+
+old_color = 0.
+
+Check neighbors: index -1 (invalid) and index 1. 
+
+For index 1, since old_color is 0, we don't subtract anything. 
+
+Then set nums[0] = 2.
+
+Check neighbor index 1 (0). nums[1] is 0. So 2 != 0 → no addition. 
+
+So count remains 0. Answer is [0].
+
+Second query: index 1, color 2.
+
+old_color = 0. 
+
+Check neighbors: index 0 and index 2. 
+
+For index 0: old_color is 0, so no subtraction. 
+
+For index 2: old_color is 0, so no subtraction. 
+
+Set nums[1] = 2. 
+
+Check neighbors: index 0 (2) and index 2 (0). 
+
+For index 0: nums[0] is 2, same as new color. So count += 1. 
+
+For index 2: nums[2] is 0, not same. So count is 1. Answer is [0,1].
+
+Third query: index 3, color 1. 
+
+old_color = 0. 
+
+Check neighbors: index 2 (0) and index 4 (invalid). 
+
+For index 2: old_color is 0 → no subtraction. 
+
+Set nums[3] = 1. 
+
+Check neighbors: index 2 (0) and index 4 invalid. 
+
+nums[2] is 0, not same as 1. So no addition. count remains 1. Answer is [0,1,1].
+
+Fourth query: index 1, color 1. 
+
+old_color = 2. 
+
+Check neighbors: index 0 and 2. 
+
+For index 0 (2) and old_color (2) → same. So subtract 1. 
+
+For index 2 (0) and old_color (2) → not same. So no subtraction. 
+
+count is 1 -1 = 0.
+
+Set nums[1] = 1. 
+
+Check neighbors: index 0 (2) and index 2 (0). 
+
+For index 0: 2 != 1 → no. 
+
+For index 2: 0 != 1 → no. 
+
+So count remains 0. Answer is [0,1,1,0].
+
+Fifth query: index 2, color 1. 
+
+old_color = 0. 
+
+Check neighbors: index 1 (1) and index 3 (1). 
+
+Since old_color is 0, no subtraction. 
+
+Set nums[2] = 1. 
+
+Check neighbors: index 1 (1) and index 3 (1). 
+
+For index 1: 1 == 1 → add 1. 
+
+For index 3: 1 == 1 → add 1. 
+
+count becomes 0 + 2 = 2. Answer is [0,1,1,0,2]. Which matches the example.
+
+Great. So this approach seems correct.
+
+Now, let's think about the case where the same index is colored multiple times. For example, if an index is colored again with a different color. 
+
+Like, suppose index 1 is first colored 2, then later colored 1. 
+
+In the first case, when we color it 2, we check the neighbors and add contributions. When we color it 1, we first check the old color (2) and subtract any contributions from neighbors. Then, check the new color (1) and add contributions.
+
+Another example: if an index is colored with the same color again. Like, if index 1 is colored 2, then again colored 2. 
+
+In that case, the old color is 2. When we check neighbors, we subtract any contributions from previous color. But since the new color is same as old color, the process would do nothing. So the count remains the same. 
+
+But how?
+
+Let's say index 1 is colored 2 again. So old_color is 2. For neighbors, we check if they are same as old color. For example, if the left neighbor is 2 and the right neighbor is 2. Then, before changing, we subtract the contributions. But since the new color is same as old color, after setting the new color, we add again. So the net effect is zero. 
+
+But in reality, the color hasn't changed. So the count should remain the same. 
+
+So this approach handles that case correctly.
+
+Now, the code. 
+
+We need to create a list nums of size n, initialized to 0. Then, for each query, process as described.
+
+But since n can be up to 1e5, and queries up to 1e5, this approach would be O(q) time, since each query is processed in O(1) time (checking two neighbors each time). 
+
+Yes, that's acceptable.
+
+Now, let's code this.
+
+In Python, the code would be:
+
+Initialize nums as a list of zeros. Then for each query, do the steps.
+
+But let's think about possible edge cases. For example, when n is 1. In that case, there are no adjacent pairs. So all queries would result in 0. 
+
+Like example 2: n = 1, queries [[0,100000]], output is [0]. Which the code would handle, because for index 0, the neighbors are index -1 and 1, which are invalid. So no changes to count.
+
+Another edge case: when a query is on the first index (index 0) and the next index (index 1) has same color. 
+
+So, for example, n=2, queries [[0,1], [1,1]]. 
+
+After first query, nums is [1,0]. count is 0. 
+
+After second query, nums is [1,1]. 
+
+Processing second query:
+
+old_color is 0. Check neighbors. For index 0 (left neighbor is invalid), and index 1 (right neighbor is 0). 
+
+So for the old color (0), no subtraction. Then set new color 1. Check neighbors: index 0 (1) and index 1 (0). 
+
+Wait, for the new color (1), check left and right. 
+
+Left neighbor is index -1 (invalid). Right neighbor is index 1. 
+
+So nums[1] is 0, which is not equal to 1. So no addition. But wait, after the new color is set, the new color is 1, and the neighbor is index 1 (which is 0) → no. 
+
+Wait, but the query is [1,1], which is the second query. 
+
+So after the first query, nums is [1, 0]. 
+
+Second query is index 1, color 1. 
+
+old_color is 0. 
+
+Check neighbors:
+
+for index 0 (left neighbor of 1), and index 2 (invalid). 
+
+So for index 0: old_color is 0. So no subtraction. 
+
+Set new color 1. 
+
+Check neighbors: index 0 (value 1) and index 2 (invalid). 
+
+So nums[0] is 1, which is same as new color (1). So count += 1. 
+
+So after this query, the count is 1. 
+
+Which is correct. Because after the second query, nums is [1,1], so adjacent pair is counted. 
+
+So code would work here.
+
+Another example: when a query changes a color that was previously part of a pair, but the new color is different. 
+
+Let's see. 
+
+So the code seems to handle all cases.
+
+Now, implement in Python.
+
+Now, for the code.
+
+We need to create a list nums, and for each query, process as follows:
+
+Initialize nums as [0] * n
+
+count = 0
+
+ans = []
+
+for each query in queries:
+
+   index, color = query
+
+   old_color = nums[index]
+
+   for delta in [-1, 1]:
+
+      neighbor = index + delta
+
+      if 0 <= neighbor < n:
+
+          if old_color != 0 and nums[neighbor] == old_color:
+
+              count -= 1
+
+   nums[index] = color
+
+   for delta in [-1, 1]:
+
+      neighbor = index + delta
+
+      if 0 <= neighbor < n:
+
+          if nums[neighbor] == color:
+
+              count += 1
+
+   ans.append(count)
+
+Wait, but when we check for the old color, we need to check whether the neighbor is same as old_color and old_color is not zero. 
+
+Yes.
+
+But in the code, during the first loop, for each neighbor, if old_color is non-zero and neighbor's color is same as old_color, then subtract 1.
+
+Then, after setting the new color, check for each neighbor if their color is same as new color, and add 1.
+
+So this code should work.
+
+Now, let's test for example 2.
+
+n = 1, queries = [[0,100000]]
+
+nums = [0]
+
+count = 0
+
+for the query:
+
+index is 0, color is 100000.
+
+old_color is 0. 
+
+check neighbors for delta -1 and +1. 
+
+neighbor for delta -1 is -1, invalid. 
+
+for delta +1: 1, invalid. 
+
+so no subtraction. 
+
+then set nums[0] = 100000.
+
+check neighbors again. same as before. no addition. 
+
+so count remains 0. ans is [0], which is correct.
+
+Another example: n=2, queries [[0,1], [1,1]]
+
+After first query, nums is [1, 0]. count is 0.
+
+Second query: index 1, color 1. 
+
+old_color is 0. 
+
+Check neighbors for index 1: delta -1 (index 0) and delta +1 (index 2, invalid). 
+
+so check neighbor 0. old_color is 0. So no subtraction. 
+
+Then set color 1. 
+
+Check neighbor 0. nums[0] is 1, same as color (1). So add 1. 
+
+count is 0 + 1 = 1. 
+
+ans is [0, 1]. 
+
+Which is correct.
+
+But wait, the first query's answer is 0. The second query's answer is 1. So the answer array would be [0, 1]. 
+
+Yes.
+
+Now, code.
+
+Now, the problem says that queries is a list of lists, and each query has index_i and color_i. 
+
+So in the code, for each query in queries, we get index and color.
+
+But in Python, the list is 0-based. 
+
+Now, implement the code.
+
+Now, for the function:
+
+class Solution:
+
+    def colorTheArray(self, n: int, queries: List[List[int]]) -> List[int]:
+
+        nums = [0] * n
+
+        count = 0
+
+        ans = []
+
+        for index, color in queries:
+
+            old_color = nums[index]
+
+            # check neighbors for old color
+
+            for delta in (-1, 1):
+
+                neighbor = index + delta
+
+                if 0 <= neighbor < n:
+
+                    if old_color != 0 and nums[neighbor] == old_color:
+
+                        count -= 1
+
+            # set new color
+
+            nums[index] = color
+
+            # check neighbors for new color
+
+            for delta in (-1, 1):
+
+                neighbor = index + delta
+
+                if 0 <= neighbor < n:
+
+                    if nums[neighbor] == color:
+
+                        count += 1
+
+            ans.append(count)
+
+        return ans
+
+Wait, but what about when the same index is processed multiple times. For example, if a query is [0,2], then [0,3]. The first query sets index 0 to 2. Then, the second query changes it to 3. 
+
+In the first query, when we check the old color (0) and the neighbor (index 1, which is 0). So nothing is subtracted. Then, set to 2. Then check neighbor (index 1, which is 0. So no addition. count remains 0.
+
+Second query: index 0, color 3. 
+
+old_color is 2. 
+
+Check neighbors: index -1 (invalid) and index 1. 
+
+For index 1, which is 0. 
+
+old_color is 2. So check if nums[neighbor] == old_color. 0 != 2. So no subtraction. 
+
+Then set new color to 3. 
+
+Check neighbor index 1 (0) → not equal. So count remains 0. 
+
+ans would be [0, 0]. 
+
+But if after the first query, the array is [2, 0], then after the second query, array is [3, 0]. So no adjacent pairs. 
+
+So that's correct. 
+
+Another example: suppose index is 1, and color is changed from 2 to 2 again. 
+
+old_color is 2. 
+
+Check neighbors. Let's say for index 1, neighbors are 0 and 2. 
+
+Suppose nums[0] is 2 and nums[2] is 2. 
+
+So for old_color 2, during the first loop:
+
+for delta -1 (index 0) and delta +1 (index 2). 
+
+for both, nums[neighbor] == old_color. So subtract 2 from count. 
+
+Then set new color to 2 (same as old). 
+
+check the same neighbors again. 
+
+nums[neighbor] == new color → yes, so add 2. 
+
+so count is 0. 
+
+So the code would do count -= 2 and then count += 2. So the count remains the same. 
+
+Which is correct. 
+
+So the code seems to handle that.
+
+Now, let me check for the first example. 
+
+In the first example, the code returns the correct answer.
+
+But wait, in the first example, when the fifth query is processed, the code checks index 2. 
+
+old_color is 0. 
+
+for delta -1 (index 1) and delta +1 (index 3). 
+
+for index 1, old_color is 0, so no subtraction. 
+
+for index 3, old_color is 0, so no subtraction. 
+
+Then set color to 1. 
+
+Check delta -1 (index 1) → nums[1] is 1. So new color (1) is same as neighbor → add 1. 
+
+Check delta +1 (index 3) → nums[3] is 1. So add 1. So count increases by 2. 
+
+So the code seems correct. 
+
+So this approach should work.
+
+Now, what about the time constraints? 
+
+Each query is O(1) time. So for 1e5 queries, it's O(1e5) time. 
+
+Space is O(n) for nums. 
+
+Which should be acceptable. 
+
+Now, let's code this.
+
+But in Python, lists are 0-based. So the code is okay. 
+
+But let's test for n=1. 
+
+Yes, as in example 2.
+
+Another test case: n=2, queries [[0,1], [1,1], [0,2], [1,2]]
+
+Let's see:
+
+Initial nums = [0, 0]. count = 0.
+
+After first query: index 0, color 1. 
+
+old_color is 0. check left and right. 
+
+neighbor is 1 (index 0 +1 = 1). 
+
+old_color is 0, so no subtraction. 
+
+set nums[0] = 1. check neighbor index 1 (0). 
+
+not same. so count remains 0. ans [0].
+
+Second query: index 1, color 1. 
+
+old_color is 0. check neighbors. 
+
+index 0 (left neighbor) and index 2 (invalid). 
+
+so check index 0. old_color is 0 → no subtraction. 
+
+set nums[1] = 1. check index 0 (1). same as color. count +=1. ans [0, 1].
+
+Third query: index 0, color 2. 
+
+old_color is 1. check neighbors (index -1 invalid and index 1 (1). 
+
+since old_color is 1 and nums[1] is 1. so subtract 1. count becomes 0. 
+
+set nums[0] = 2. check neighbor index 1 (1). not same. so count remains 0. ans [0,1,0].
+
+Fourth query: index 1, color 2. 
+
+old_color is 1. check neighbors index 0 (2) and index 2 (invalid). 
+
+so for index 0, old_color is 1. nums[0] is 2. not same. so no subtraction. 
+
+set nums[1] = 2. check neighbor index 0 (2), same as new color. add 1. count is 1. ans [0,1,0,1].
+
+So the final answer would be [0,1,0,1]. 
+
+Which is correct. 
+
+So this code works. 
+
+So the code seems correct.
+</think>
+
+To solve this problem, we need to efficiently track the number of adjacent elements with the same color after each query. The challenge is to handle up to 100,000 queries on an array of up to 100,000 elements, which requires an optimal approach to avoid excessive time complexity.
+
+### Approach
+1. **Initialization**: Start with an array `nums` initialized to zeros, representing uncolored elements.
+2. **Tracking Changes**: Maintain a count of adjacent elements with the same color. This count is updated dynamically as each query is processed.
+3. **Processing Queries**: For each query, adjust the count based on the previous color of the index and the new color:
+   - **Before Updating**: Check the neighbors (left and right) of the current index. If the previous color was non-zero and matched the neighbor's color, decrement the count.
+   - **After Updating**: Check the same neighbors again. If the new color matches the neighbor's color, increment the count.
+4. **Efficient Updates**: Each query operation only affects the immediate neighbors of the index being colored, allowing for constant-time updates.
+
+### Solution Code
+```python
+class Solution:
+    def colorTheArray(self, n: int, queries: List[List[int]]) -> List[int]:
+        nums = [0] * n
+        count = 0
+        answer = []
+        
+        for index, color in queries:
+            old_color = nums[index]
+            # Check left and right neighbors for old color
+            for delta in (-1, 1):
+                neighbor = index + delta
+                if 0 <= neighbor < n:
+                    if old_color != 0 and nums[neighbor] == old_color:
+                        count -= 1
+            # Update the color
+            nums[index] = color
+            # Check left and right neighbors for new color
+            for delta in (-1, 1):
+                neighbor = index + delta
+                if 0 <= neighbor < n:
+                    if nums[neighbor] == color:
+                        count += 1
+            answer.append(count)
+        
+        return answer
+```
+
+### Explanation
+1. **Initialization**: The array `nums` is initialized with zeros, and `count` is initialized to zero to keep track of the number of adjacent pairs with the same color.
+2. **Processing Each Query**:
+   - **Old Color Check**: For each query, the previous color of the index is checked against its neighbors. If the previous color was non-zero and matched a neighbor's color, that pair is no longer counted, so the count is decremented.
+   - **New Color Check**: After updating the color, the new color is checked against its neighbors. If the new color matches a neighbor's color, that pair is now counted, so the count is incremented.
+3. **Efficiency**: Each query is processed in constant time, O(1), because only the immediate neighbors of the index are checked. This ensures the overall time complexity is O(q), where q is the number of queries, making the solution efficient even for large input sizes.
+
+This approach ensures that we efficiently update the count of adjacent elements with the same color after each query, adhering to the constraints and providing the correct results in optimal time.

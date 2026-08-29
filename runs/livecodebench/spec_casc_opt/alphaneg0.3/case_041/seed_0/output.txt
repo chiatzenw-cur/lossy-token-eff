@@ -1,0 +1,463 @@
+<|channel|>analysis<|message|>We need find longest substring of word that does not contain any forbidden substring. Forbidden lengths 1-10. word up to 1e5, forbidden array up to 1e5 but each short. We can build Aho-Corasick automaton to find all occurrences of a forbidden string in word. Then we need longest substring that avoids these as substrings. Equivalent to find longest interval [l,r] such that none of the forbidden substrings occurs fully inside. Equivalent to we need longest segment where no occurrence of forbidden substring occurs within it.
+
+We get positions of all forbidden starts? For each occurrence, it covers [pos, pos+len-1]. Any substring that includes such a substring is invalid. We want longest segment without covering any full forbidden substring. This is like we have banned intervals. The substring cannot include any of these intervals fully. If a substring contains a forbidden substring, it must include its entire span. So we want to find max length L such that there is no banned interval completely inside [l,r]. Equivalent to for any banned interval [a,b], either a<l or b>r. So we need final segment where no banned interval within. This reduces to we can compute for each position i, the nearest banned interval that starts at or after i? Actually algorithm: for each position i, we want list of intervals that start >= i. If there is an interval whose start >= i and end <= r, then it's inside. So we need a window such that no interval is fully inside.
+
+We can use approach: compute for each position start, the minimal end among banned intervals that start at that position. That is, for each start, among intervals starting at that start, we need the minimal end among them. Similarly for multiple could be same start with different lengths; we can take minimal end. Then we need to find maximum length window [l,r] where for any start in [l,r], its minimal end > r. So we need to process.
+
+Alternatively, we can use sliding window with the following: we keep a left pointer l; as we extend r rightwards, we need to check if any banned interval ends at r. If there is an interval [l,r] that r is ending, then that interval is contained inside [l,r] only if it starts after l. So we need to keep track of the minimal start among intervals that ended at r? Wait.
+
+Better: because forbidden string lengths <=10, we can also simply convert through two pointers O(n*len). Approach: For each position i, we can compute earliest forbidden substring that ends at or after i? I think easiest is to use DP: we find for each position i, the earliest start of a forbidden substring that ends at i. Let's build array bad_start[i] = earliest start among intervals that end at i (i.e., that are forbidden ends at i). If none, set bad_start[i] = -1. Then we can maintain a sliding window: left pointer l starts at 0. For each right r, we check if there is any banned interval fully inside [l,r]. A banned interval ending at r with start s >= l would be inside. So we need to set l = max(l, s+1) for each such s. Because if s>=l, then interval [s,r] lies inside [l,r], so we need to move l to s+1 to exclude it. Since we iterate r increasing, and we only need to process intervals ending at r, we just need to know all intervals ending at r. We'll have array of lists of starts per end. Since forbidden length <=10, we can precompute all matches via naive scanning: for each position i from 0 to n-1, for each pattern from forbidden list, if word[i:i+len(p)]==p -> record interval [i,i+len(p)-1]. Complexity O(n * len_patterns * avg_length) maybe too large for 1e5 patterns of length up to 10? naive cross would be huge.
+
+Thus need Aho-Corasick to find all matches efficiently O(n + total_pattern_length + occurrences). This is fine. Then we will have list of intervals. For each match (s, e), we push s into list end_at[e]. That's a vector of starts for each end.
+
+Now algorithm: l=0, ans=0. For r from 0 to n-1: for each s in end_at[r], if s>=l: l = max(l, s+1). After processing all ends at position r, ans = max(ans, r - l + 1). Done.
+
+After loop, return ans.
+
+Edge cases: empty substring length 0 is allowed? Problem says substring possibly empty. But we search for longest valid substring. If no valid substring? For example word="a", forbidden=["a"]. Then all substrings length 1 contain "a", so only empty substring valid. We return 0. Our algorithm: l = 0, r=0: end_at[0] contains start 0. s>=l => l=1. ans = max(0, 0-1+1=0). So ans 0. Good.
+
+Need to build Aho-corasick. Setup: Node with next[26], fail, outputs list. Since max patterns 1e5, nodes up to sum of pattern lengths <=1e6. Manage memory accordingly.
+
+Implementation steps:
+
+- Build trie: each node has next array of size 26 using dict maybe. Use list of dict or arrays. For performance use list of array of ints initialized to -1. Use list of dict might be slower but fine. We'll use arrays, because alphabet size small. Node: next: list of 26 ints, fail int, output list of patterns lengths? Actually we need length of shortest pattern to compute start? We just need to store start positions when traversing. Actually we need to know for each match the start index, we can compute by r - pattern_len + 1. So we need to store pattern lengths. So Node store output list of pattern lengths (list). Build fail links BFS.
+
+- Then traverse word: for each char c, move state. When at state, for each pattern length in state.output, we record interval [i-len+1, i]. Keep start list for end_at[i] index.
+
+- Complexity of traversing: for each char we'll walk following output list maybe large if many patterns share same string? But lengths up to 10; number of patterns may be large but the occurrence of each pattern might be many. But each output will be processed once, e.g., total output triggers equals number of matches. That's fine.
+
+Let's code.
+
+Potential memory: end_at list: n lists of starts. n up to 1e5 -> list of lists 1e5 may be heavy but ok. Instead use list of lists of int arrays. Alternatively can use list of lists dynamic. We'll precreate list of lists.
+
+We need to handle many intervals, possibly up to big. But each match has length <=10; occurrences may be e.g., each position many matches but maximum maybe 1e5 patterns but each overlapping? In worst case, patterns all length 1: 'a', 'b', 'c', etc. For each letter, algorithm will match all patterns of that letter, all will be substrings. So at each character a pattern 'a', 'b', etc. So each position may add up to 1e5 matches -> huge. But constraints: forbidden length <=10, but size can be 1e5. For each char, exploring all matches for that char would be many. Are we allowed to handle such? Potential bound: each time we traverse output list, we iterate over all patterns ending at that char. Suppose patterns all single char distinct letters: 26 patterns. Worse: many duplicates? Each pattern maybe same string repeated but duplicates allowed? Not specified but may be. If duplicates, could lead to many match per character. Acceptable? 1e5 times 1e5 char -> 1e10. Too big.
+
+We need to manage duplicates: If duplicates, we can deduplicate patterns to smaller set. Since duplicates produce same matches; we can store unique patterns. So we can deduplicate forbidden list as set of unique strings. Observed constraints: 1e5 patterns but duplicates possible. We'll deduplicate by converting to list(set(forbidden)). That reduces memory. For example if all patterns are length 1, max 26 unique. So good.
+
+But duplicates might still cause many patterns of length 1 but same char repeated? We remove duplicates ensures each char only once. Good.
+
+Thus we keep unique patterns.
+
+Now building Aho automaton and capturing matches.
+
+Edge: patterns may have same length but different strings; fine.
+
+Implementation of build:
+
+class Node:
+    def __init__(self):
+        self.next = [-1]*26
+        self.fail = 0
+        self.out = []  # pattern lengths
+
+Create root node 0.
+
+Insert each pattern: for each char, go to next, create new node if -1. At end, node.out.append(len(pattern))
+
+After inserting all, BFS to build fail links:
+
+queue = collections.deque()
+
+For each child of root: if child != -1: set fail to 0 and enqueue.
+
+For each char indep: if child != -1: fail of child = root's child for that char? Actually we need to set fail to fail of parent then push along edges. Standard.
+
+We also need to propagate outputs: node.out += nodes[node.fail].out.
+
+During BFS, for each current node, for each char 'a'..'z', get child; if child != -1: set fail for child: v = nodes[current].fail; while v != 0 and nodes[v].next[char] == -1: v=nodes[v].fail; then if nodes[v].next[char] != -1: set child.fail = nodes[v].next[char] else child.fail=0; else if child == -1: stubs? For performance we can only compute for actual '.'.
+
+Actually we can simpler: For each node, for pushing the next char from current, we can compute fail.
+
+Implementation details.
+
+After building base, we traverse word:
+
+state = 0
+
+end_at = [[] for _ in range(n)]
+
+for i, ch in enumerate(word):
+    c = ord(ch)-97
+    while state != 0 and nodes[state].next[c] == -1:
+        state = nodes[state].fail
+    if nodes[state].next[c] != -1:
+        state = nodes[state].next[c]
+    # else remains 0
+    for length in nodes[state].out:
+        start = i - length + 1
+        end_at[i].append(start)
+
+Now sliding: l=0, ans=0
+
+for r in range(n):
+    for s in end_at[r]:
+        if s >= l:
+            l = s + 1
+    ans = max(ans, r - l + 1)
+
+return ans
+
+Note that we dedupe patterns to reduce output size. We'll convert to set(forbidden). uniq.
+
+Time complexity: building automaton O(total pattern length). Traversal O(n + total matches). With unique patterns.
+
+Memory: nodes up to sum length <=1e6; okay.
+
+Let's code.
+
+Potential bug: while building fail incorrectly for root's children? We'll implement standard BFS:
+
+from collections import deque
+
+nodes = [Node()] # root
+
+for each pattern:
+    add
+
+queue = deque()
+
+for c in range(26):
+    child = nodes[0].next[c]
+    if child != -1:
+        nodes[child].fail = 0
+        queue.append(child)
+    else:
+        nodes[0].next[c] = 0? Wait to speed up transitions; we can keep sentinel but not needed.
+
+While queue:
+    r = queue.popleft()
+    for c in range(26):
+        child = nodes[r].next[c]
+        if child != -1:
+            queue.append(child)
+            f = nodes[r].fail
+            while nodes[f].next[c] == -1 and f != 0:
+                f = nodes[f].fail
+            if nodes[f].next[c] != -1:
+                nodes[child].fail = nodes[f].next[c]
+            else:
+                nodes[child].fail = 0
+            nodes[child].out += nodes[nodes[child].fail].out
+        else:
+            # if we want to use goto automaton with computed transitions we avoid -1
+            # but no need
+            pass
+
+But we also need to process while state traversal using 'while state != 0 and nodes[state].next[c] == -1: state = nodes[state].fail', and then state = nodes[state].next[c] if not -1 else 0. Works.
+
+Edge: root's transition missing char remains -1: we use while loop above to fallback to root. Good.
+
+Now produce code.
+
+Test with given examples.
+
+Example 1:
+
+word="cbaaaabc", forbidden= ["aaa","cb"]
+
+Unique patterns: same.
+
+Matches: "cb" at positions 0-1? "c" at 0, char 1 "b" -> yes. So interval [0,1].
+"aaa" at 2-4? positions: index 2 'a', 3 'a', 4 'a' -> yes.
+Also at 3-5? 3 'a',4 'a',5 'a'? Wait 5 is 'a', yes 3-5 also? but pattern "aaa" should match at 3-5 as well. However our algorithm will capture both (as matches). Our l slide will adjust accordingly.
+
+Let's simulate quickly: r=0: end_at[0] empty? maybe not. r=1: start=0. l>=0? l=0, s=0>=l => l=1. So substring length 1? r=1,r-l+1=1. ans=1. Continue.
+
+But final ans should be 4. Good.
+
+Edge cases: Should handle requirement that substring possibly empty returns 0. Our algorithm handles.
+
+Complexities ok.
+
+Let's produce code.
+
+Ensure import List.
+
+Also handle case word length maybe 0? but >0.
+
+Time.
+
+We'll finalize.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a substring `word[l … r]` we are not allowed to contain a forbidden substring.
+A forbidden substring is a contiguous block of characters, its length is at most `10`.
+
+We may think of every forbidden occurrence as an interval  
+`[start , end]` in the string.
+A substring that contains a whole forbidden interval is **invalid**.
+Therefore a valid substring is a maximal contiguous part of `word` that
+contains **no** forbidden interval completely inside it.
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* All forbidden patterns are short (`≤ 10`), but their number can be very big
+  (`≤ 10^5`).  
+  Many of them can be identical, we can safely keep only the *unique* ones –
+  all equal patterns give the same set of occurrences.
+
+* We need to know **all** occurrences of all forbidden patterns in `word`.
+  Naïve `O( |word| · |forbidden| · 10 )` scanning is far too slow.
+  The classic way to find many short patterns in one run is the
+  *Aho–Corasick* automaton, which works in  
+  `O( |word| + Σ|pattern| + number_of_occurrences )`
+
+* After we know all intervals `[s , e]` we can slide a window over the
+  string.  
+  When the right end of the window, `r`, reaches the right end of an
+  interval `[s , r]` we must move the left border `l` to `s+1`,
+  otherwise ( `s ≥ l` ) the interval would actually lie inside the
+  current window – that is forbidden.
+
+--------------------------------------------------------------------
+
+#### 2.  Algorithm
+```
+make the list of unique forbidden patterns
+build Aho‑Corasick automaton for them
+for every character position i in word
+        walk the automaton, emitting all pattern lengths
+        for each emitted length L
+                store the start i-L+1 in  list_of_starts[i]   // i is the end
+
+l = 0
+ans = 0
+for r from 0 to |word|-1
+        for each s in list_of_starts[r]          // all intervals that end at r
+                if s >= l
+                        l = s+1                   // drop the interval
+        ans = max(ans, r - l + 1)
+return ans
+```
+
+*`list_of_starts` is a list of `n` lists (`n = |word|`).*  
+Every element of the inner lists is an interval start that ends at the
+corresponding `r`.  
+The inner lists are processed only once, when each `r` is reached.
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the length of the longest valid
+substring.
+
+---
+
+##### Lemma 1  
+During the scan of `word` the algorithm records every occurrence of a
+forbidden substring as an interval `[s , e]` with `e` the current
+position `r`.
+
+**Proof.**
+
+The automaton is constructed from all unique forbidden patterns.  
+While walking the automaton, for the current state `v` we look at
+`v.out` – a list of lengths of all patterns that end at this state.
+For each length `L` the automaton guarantees that the substring
+`word[r-L+1 … r]` equals a pattern, therefore `[r-L+1 , r]` is an
+occurrence, and `r-L+1` is appended to `list_of_starts[r]`. ∎
+
+
+
+##### Lemma 2  
+At any moment of the algorithm, the current window `[l , r]` contains
+no forbidden substring fully inside it.
+
+**Proof.**
+
+When the algorithm processes position `r`, it considers all intervals
+ending at `r`.  For each such interval `[s , r]` the algorithm does
+the following:
+
+* If `s < l`, the interval starts before the current window, so it
+  cannot be inside `[l , r]`.
+* If `s ≥ l`, the interval lies **inside** `[l , r]`.  
+  The algorithm then sets `l = s+1`, thereby removing the interval from
+  the current window.
+
+No other intervals can be created inside `[l , r]` because we only
+remove intervals that end at the current `r`.  
+Thus after processing `r`, `[l , r]` contains no forbidden interval
+completely inside it. ∎
+
+
+
+##### Lemma 3  
+Every valid substring of `word` appears as a subset of some considered
+window `[l , r]` during the algorithm, and therefore its length is
+candidate for `ans`.
+
+**Proof.**
+
+Let `V = word[x … y]` be a valid substring.  
+Assume while scanning the string the algorithm reached `r = y`.  
+All forbidden intervals that end at `y` are processed.
+None of them can have a start `s ≥ x`, otherwise that interval would
+lie completely inside `V`, contradicting brackets that `V` is valid.
+
+Therefore `l` at `r = y` cannot be larger than `x`; therefore  
+`x ≤ l ≤ y`.  
+Consequently `[l , y]` contains `V` as a sub‑substring and its length  
+`y-l+1 ≥ y-x+1` is the length of `V`.  
+Since the algorithm keeps the maximum over all `r`, the length of
+`V` influences `ans`. ∎
+
+
+
+##### Lemma 4  
+`ans` is the maximum possible length of a valid substring.
+
+**Proof.**
+
+From Lemma&nbsp;2 every window `[l , r]` considered by the algorithm is
+valid; thus `ans` is **at least** the length of the longest valid
+substring.
+
+From Lemma&nbsp;3 each valid substring is contained in some window
+which ends at its last character.  
+Thus its length is **at most** the maximum over all windows, i.e.
+`ans`.
+
+Therefore `ans` equals the global maximum. ∎
+
+
+
+##### Theorem  
+`longestValidSubstring` returns the length of the longest valid substring
+of `word`.
+
+**Proof.**
+
+Directly from Lemma&nbsp;4.  
+
+∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+*Let `n = |word|`, `m = Σ|forbidden|` (after dedupping), `k`
+  be the number of occurrences of all forbidden patterns.*
+
+* Building the automaton: `O(m)` time, `O(m)` memory  
+  (every node stores 26 integers + two fields).  
+* Scanning the automaton: `O(n + k)` time, `O(n)` additional memory  
+  (the array of start lists).  
+* Sliding window: `O(n + k)` time, `O(1)` extra memory.
+
+Overall
+
+```
+Time   :  O(n + m + k)   <  1.5·10^6   (well below limits)
+Memory :  O(n + m)       <  2·10^6 integers
+```
+
+Both are easily fast enough for the given constraints.
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+import sys
+import collections
+from typing import List
+
+class Solution:
+    def longestValidSubstring(self, word: str, forbidden: List[str]) -> int:
+        # ------------------------------------------------------------------
+        # 1.  Remove duplicate patterns – they are irrelevant.
+        # ------------------------------------------------------------------
+        patterns = set(forbidden)                # reduce size of automaton
+        if not patterns:
+            return len(word)                    # nothing forbidden
+
+        # ------------------------------------------------------------------
+        # 2.  Build the Aho–Corasick automaton
+        # ------------------------------------------------------------------
+        # Each node: next[26] int, fail int, out list of pattern lengths
+        class Node:
+            __slots__ = ('next', 'fail', 'out')
+            def __init__(self):
+                self.next = [-1] * 26
+                self.fail = 0
+                self.out = []
+
+        nodes = [Node()]          # root node 0
+
+        pos = 0
+        for pat in patterns:
+            v = 0
+            for ch in pat:
+                c = ord(ch) - 97
+                if nodes[v].next[c] == -1:
+                    nodes[v].next[c] = len(nodes)
+                    nodes.append(Node())
+                v = nodes[v].next[c]
+            nodes[v].out.append(len(pat))
+
+        # ------------------------------------------------------------------
+        # 3.  Build fail links (BFS)
+        # ------------------------------------------------------------------
+        q = collections.deque()
+        for c in range(26):
+            nxt = nodes[0].next[c]
+            if nxt != -1:
+                nodes[nxt].fail = 0
+                q.append(nxt)
+            else:
+                # keeping -1 is fine – during traversal we walk fail links
+                pass
+
+        while q:
+            r = q.popleft()
+            for c in range(26):
+                nxt = nodes[r].next[c]
+                if nxt == -1:
+                    continue
+                q.append(nxt)
+                f = nodes[r].fail
+                while f != 0 and nodes[f].next[c] == -1:
+                    f = nodes[f].fail
+                if nodes[f].next[c] != -1:
+                    nodes[nxt].fail = nodes[f].next[c]
+                else:
+                    nodes[nxt].fail = 0
+                nodes[nxt].out += nodes[nodes[nxt].fail].out
+
+        # ------------------------------------------------------------------
+        # 4.  Scan the word, collect all interval starts
+        # ------------------------------------------------------------------
+        n = len(word)
+        starts_at_end = [[] for _ in range(n)]   # starts_at_end[i] -> list of starts of intervals ending at i
+
+        state = 0
+        for i, ch in enumerate(word):
+            c = ord(ch) - 97
+            while state != 0 and nodes[state].next[c] == -1:
+                state = nodes[state].fail
+            if nodes[state].next[c] != -1:
+                state = nodes[state].next[c]
+            for L in nodes[state].out:
+                starts_at_end[i].append(i - L + 1)
+
+        # ------------------------------------------------------------------
+        # 5.  Sliding window
+        # ------------------------------------------------------------------
+        l = 0
+        ans = 0
+        for r in range(n):
+            for s in starts_at_end[r]:
+                if s >= l:
+                    l = s + 1
+            ans = max(ans, r - l + 1)
+
+        return ans
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required function signature.

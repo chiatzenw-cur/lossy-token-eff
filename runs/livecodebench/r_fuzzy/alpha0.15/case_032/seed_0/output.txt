@@ -1,0 +1,508 @@
+<|channel|>analysis<|message|>We need sum of imbalance numbers of all subarrays. n up to 1000, values up to n <=1000. Brute force O(n^3) too slow. n^2 subarrays, each with sorting maybe O(k log k). So worst-case 10^6 * 10^3 ~ 1e9. Need optimize.
+
+Observation: Imbalance number is number of gaps >1 in sorted subarray. Equivalent to count of distinct sorted elements that are not equal to previous+1. Equivalent: Count number of distinct consecutive pairs where gap >1. We can think as: count of distinct values minus (max - min + 1) + number of repeated gaps? Wait typical formula: For sorted unique elements, gaps>1 count equals number of unique values - number of consecutive sequences.
+
+Alternatively, we could compute the imbalance number as sum over distinct values. Another approach: For a subarray, imbalance number is the number of positions where sarr[i+1] - sarr[i] > 1.
+
+Observation: Suppose array values bounded by 1..n. We could build prefix counts for each value? Might compute number of distinct values in subarray with value v difference with v+1? Could use counting sort.
+
+We can compute for each subarray what are its sorted elements. But maybe simpler: Imbalance number occurs for each pair of distinct values x<y with no values between them in subarray. That is we count pairs not consecutive in value but present. For each pair of distinct values u<v where no integer between exists in subarray but both distinct? Not exactly.
+
+But we can compute imbalance number as number of types where value appears and there's a missing value between it and its predecessor among the subarray. For each subarray, if we list distinct integers sorted, then number of gaps is (#distinct) - (#distinct consecutive segments?). Actually each segment of consecutive values forms a chain. Gaps count = number of segments - 1. If the distinct values sorted form d1<d2<...<dk, gaps occur when di+1 - di >1. So gap count = count of i where diff>1. That's same as number of times the difference between consecutive distinct values >1.
+
+Thus we can compute imbalance number of subarray as number of distinct integers present that have a missing integer between them. But computing for all subarrays quickly?
+
+We can attempt O(n^2) enumeration of subarrays but need O(1) incremental update to imbalance number when extending subarray by 1 element.
+
+We can maintain a frequency array freq[1..n]. Also maintain number of distinct numbers (distinct count). We also need to know gaps count. Gaps can be updated when adding a suffix element to subarray; we need to know if insertion introduces new number which may create or remove gaps.
+
+Let func add value v. Suppose that before adding, freq[v] maybe zero. If freq[v] increases from 0 to 1, then new val appears. It will potentially disturb gaps between v and neighbors. At that point, we consider neighbors v-1: does freq[v] >1? Neighbors maybe present. We'll have neighbor left L- = neighbor value v-1 if freq[max(1,v-1])>0? Wait values range: 1..n. We need to know if v-1 present and v+1 present. The gaps are defined between sorted distinct values. Thus the presence of v may reduce gaps if it fills a missing number between two other existing numbers. For missing gaps we have diff of >1. Thus insertion of v may remove a gap between v-1 and v+1 if both present and differ >1.
+
+Before insertion: we have some "edges" between consecutive present values in sorted order. When adding v at zero freq, consider whether neighbors v-1 and v+1 exist. Cases:
+
+- If neither neighbor present => v forms a new segment of size 1, but previously the subgraph of numbers had no consecutive relation with v. This may create no new gaps? Actually before adding, v not present; the sorted list didn't include v. So if neighbors absent, then no effect on gaps. After insertion: v is a single isolated segment; it will not create any new gap with others due to absence. So number of gaps unchanged.
+
+- If only one neighbour present, say v-1 present but not v+1 -> before insertion, non-gap between v-1 and others; after insertion, we add a new element contiguous to v-1; v-1 and v now diff =1? Likely v-1 present; v-1 and v diff =1 difference? Since v-1 may not be consecutive? But v-1 present means values v-1 and v differ by 1: diff=1 not counted as gap, so no new gap. Also there is no new gap with v+1 because not present. So gaps unchanged.
+
+- If both neighbours present but they were not consecutive (because diff between v-1 and v+1 >1). That means previously there might be a gap between v-1 and v+1? Wait if v-1 and v+1 are not consecutive ints? Actually diff=2 between them. Eg v-1=4, v=5, v+1=6. That case diff between 5 and 6 is 1, det? This is consecutive. If v-1 present and v+1 present and diff between them >1? For only values when 5 present? Wait we consider v_i = v. w=1 diff between v-1 and v+1 is 2. Wait bigger. Suppose v=5, neighbors 4,6 exist. Diff=2 >1? Actually if both neighbours present, diff between v-1 and v+1 = 2 via v-1< v < v+1 is 2? Actually we need to consider if there is a gap between y=4 and z=6, but 5 now inserted. Before insertion, gap existed between 4 and 6: diff=2 > 1. After insertion, gap eliminated. So number of gaps decreased by 1.
+
+Also scenario: neighbors 4 and 6: difference=2 >1 but they were two separate segments; after insertion, they join into a new segment of consecutive values 5 bridging them as 4,5,6. Thus gap count reduces by one.
+
+Thus algorithm: maintain a set of present values; maintain a variable gaps count. When adding v with frequency increases from 0 to 1:
+
+- check left = μ = v-1; right = v+1; The existence of left/right can be tracked by freq>0. Then:
+
+- If left present and right present:
+-- If diff(left, right) >1? Since left = v-1, right = v+1, diff = 2 >1 (unless v-1+1= v? So diff always 2). So yes it is >1. So previously a gap exists between left and right. After insertion, this gap disappears; gaps decrease by 1.
+
+- If left present and right not present: unchanged.
+
+- If left not present and right not present: unchanged.
+
+- If left not present but right present: unchanged.
+
+Edge cases: duplicates inserted: freq increase >1 leads to no change.
+
+Now what about removal when decreasing freq? But we need to compute all subarrays for each starting index direction. For each fixed left index i, we can extend right j increasing. This only involves adding elements at right, not removing. Therefore dynamic updating works (monotonic extension). So we can for each i, initialize freq zero, gaps zero, and iterate j from i to n-1, adding nums[j] each step, update gaps accordingly, and add gaps to answer.
+
+But need to handle presence of duplicates. As we include duplicates, freq increase may not change gaps, others unaffected.
+
+Implementation details: need efficient check of left/right presence. With freq array up to n. freq[v] >0 indicates presence.
+
+Time complexity O(n^2) loops each addition constant 1 to 2 checks. n up to 1000 => 1e6 operations.
+
+Edge: v may be 0, but array 1-indexed? Value >0. Ai up to n. But we must also ensure left > 0: v-1 >=1. Similarly right <= n.
+
+Also check: divisibility? Input constraints: 1 <= nums[i] <= nums.length, so within 1..n.
+
+Ok.
+
+Now compute gaps variable: initially 0.
+
+When adding a new value v that is not present:
+
+- if freq[v] == 0 before: freq = 1
+
+- presence of left  if (v-1 >= 1 && freq[v] > 0)? Actually after making v present, left present status depends on freq[v-1] > 0.
+
+- presence of right: freq[v+1] > 0
+
+We need to distinguish gap existed before between left and right. But left and right only present if freq>0. Even if multiple duplicates removed? last removal only occurs only when starting new left; not reduced.
+
+But we need to ensure that when both left present and right present, but left and right were not adjacent originally, but maybe there is still no gap if difference <=1? In our case, left = v-1, right = v+1 due to adding new v. So left+1 = v and right-1 = v. So left and right are separated from each other by 2. So diff>1 always. So gap exists. So we reduce gaps by 1.
+
+However, need to consider possibility that left and right are present via earlier duplicates. Suppose we had earlier v present? Wait if left and right present but v already present, duplicating v won't cause change. Edge with duplicates: If v removed earlier? But x removed? Not considered.
+
+Thus algorithm:
+
+Initialize gaps 0 for each start i.
+
+For j from i to n-1:
+- v = num[j]
+- if freq[v] == 0:
+    # Add new value
+    left_present = v > 1 and freq[v-1] > 0
+    right_present = v < n and freq[v+1] > 0
+    if left_present and right_present:
+        gaps -= 1
+    freq[v] += 1
+- else:
+        freq[v] += 1
+- answer += gaps
+
+Query: Are we adding gaps after the subarray has been constructed? Actually imbalance number is number of gaps in the sorted array, which is current gaps. So we add gaps after including current element.
+
+Now test with examples.
+
+Example 1: arr [2,3,1,4]
+i=0: freq all 0
+j=0 v=2: new value, neighbors: 1? freq[0]? left=1 not exist -> no left? left_present false; right=3? freq[3] not exist. gaps = 0. answer +=0: remain 0
+j=1 v=3: new val; left=2 present -> true; right=4 not present; both true? no. gaps remains 0.
+answer+=0
+j=2 v=1: new val; left=0? f? no. black. right=2 present -> false both? no. gaps 0.
+answer+=0 -> 0
+j=3 v=4: new val; left=3 present -> true; right=5? none. gains 0. gaps 0. answer +=0.
+
+i=1: resets freq, gaps=0
+j=1 v=3: new, left=2? no; right=4? no. gaps0. answer0.
+j=2 v=1: new, left=0? no. right=2? no. gaps 0.
+answer0.
+j=3 v=4: new, left=3 present -> true; right=5? none. gaps 0.
+
+i=2: freq 0
+j=1? maintain? Wait j from i: j=2 v=2? Wait arr[2]=1? Actually arr[2]=1 (two?). Let's compute: arr[2]=1. new at freq 1. left=0? no. right=2? no. ack. gaps0.
+j=3 v=4: new, left=3? none. right=5? none. gaps0. answer0
+i=3: freq 0
+j=3 v=4: new, left=3? no. right=5? none. gaps0.
+
+But I forgot that subarray [3,1] appears as i=1, j=2 maybe? Wait arr[2] is which? Let's index: arr[0]=2, arr[1]=3, arr[2]=1, arr[3]=1? Actually array [2,3,1,4]. So arr[2]=1. Subarray [3,1] has indices 1,2. For start i=1, j=1 v=2? Wait i=1 index 1 is 3. j=1: v=3. j=2: v=1. We added 2 numbers: 2 dist. Let's compute again after adding 3 and 1.
+
+When j=1: gaps 0, answer after j=1 0.
+
+When j=2: v=1 is new. left=0? no. right=2 present? freq[2]?? Wait freq[2] after j=1 is 0? yes only 3 present. So right=2 not exist. left=0 not exist. So no left_present, no right_present. So gaps unchanged 0. Actually there is no gap because only two distinct values: 3 and 1. Sorted [3,1] -> sorted: [1,1? Wait there is duplicate? duplicates none; values 1,3. Sorted 1,3 diff=2 >1 => there is gap (imbalance 3?). That would be a gap indeed! However our algorithm didn't detect gap because left/right logic fails: We inserted 1 location v=1, left=2? There was no 2 present. right=2? maybe 2 present? Wait 2 not present; but 1's neighbor left=0? no. But R=2. In our algorithm, left and right references refer to immediate values adjacent to v. but the concept of gap is not only with immediate neighbors; we needed x and y such that there is no integer between them present. Example 1 and 3: We have no 2 present. So gap from 1 to 3. But in our algorithm, when inserting 1, we considered left neighbor 0? not present. Right neighbor 2? not present. So we never discovered a gap. So the algorithm fails.
+
+Therefore our assumption fails. We need to consider general gap between existing distinct values that are not consecutive. When adding a new value, we may create new adjacent pairs between that new value and the nearest existing values to its left and right? Wait we only need to consider the sorted distinct terms. When inserting a new value v, the sorted list might change: existing distinct numbers around v may not be immediate neighbor by value; the nearest smaller value present on left side is maybe u < v+1? We need to differentiate.
+
+Observation: For sorted list of distinct values, we cannot just look at v-1 and v+1; they may not exist or may not exist but still the new value may create new gaps between it and the greater nearest and left nearest present values.
+
+Example: existing distinct values 3 only. Gap? None. Insert 1 => Now distinct values 1,3. Gap between 1 and 3 => diff=2 >1. But 1's neighbors existing are 3 (since they exist). So we need to detect if there is a nearest right value r > v, and nearest left value l < v assigned missing. For l= none; r=3. So we need to verify that r-l>1? Wait r=3, l=none. Gap between them? Actually we need to consider gap between r and l? The difference between r and l is undefined. But r and l adjacent in sorted distinct list (since l none). But perhaps the gap in sorted list after insertion is between i? Suppose before insertion, the only distinct value 3. No gaps. After insertion, distinct values 1 and 3. The sorted distinct list: [1,3]. The gap occurs between 1 and 3. We need to detect that gap.
+
+This occurs when inserting value v with the presence of neighbor values >v and <v in a way that they were not adjacent originally to each other but now they become new adjacent pair? Wait the gap arises that previously there were 0 distinct values between them? Actually before insertion, there were no two values left and right to compare. But after insertion, the neighbors become 1 and 3? The pattern earlier where we had l=1 and r=3 then there is a gap from 1 to 3. But we cannot detect gap by just checking v-1 and v+1.
+
+Thus we need to track the set of present distinct values and keep track positions. We need to compute gaps easily when adding new value. Complexity: we need to maintain structure (like sorted set) for distinct values in subarray. We can use balanced BST to find predecessor and successor.
+
+We can maintain an ordered set of values that are present (unique). In Python, maintain sorted array or some custom data structure, but we need O(log n) each addition. For n=1000, O(n^2 log n) ~ 1.6e7 operations fine. But we can optimize to O(n^2) maybe still acceptable.
+
+But we can also compute in O(1) using approach with adjacency between values, but to find predecessor and successor values we need to quickly check presence. With unique values limited to 1..n, we can maintain an array present[1..n] and maintain an array next[1..n] and prev[1..n]? For dynamic insertion we can maintain doubly linked list of present values sorted by value. Because we only insert (not delete). So loops from i to n-1 we only add new values, never remove. For each start i, we reset structures. So we can maintain prev and next arrays pre-initialized to -1; we process j extension.
+
+Implementation approach: For each starting index i, we maintain arrays:
+
+- freq[1..n] (counts).
+- prev[val] : the largest value less than val that is present.
+- next[val] : the smallest value greater after val that is present.
+
+But we only need to compute difference of gap count: Initially 0. After adding a new value v that is not present already, we need to find its predecessor l and successor r. Since values are small, we can get l by scanning downwards from v-1 until we find a value with freq >0; similarly for r scanning up. But that would be O(n) each add; worst-case n^2 * n = n~1e9 > too slow.
+
+Alternatively we can maintain a set of present values, like sorted list of values, and find position using bisect each time. Complexity O(log n) per addition. That's fine.
+
+Implementation details: store present_set list, sorted. Use bisect.insort. But we also need to know freq. We can use freq array; for insertion of v: if freq[v]==0 -> new value. We'll use bisect.insort. Insert at index to keep list sorted. Use bisect.insort as typical.
+
+For each new value, we need to find left and right indices from sorted list: idx = bisect.bisect_left(present_list, v). Then left = present_list[pos-1] if pos>0 else None; right = present_list[(pos+1)]? Wait after insertion, present_list updated. But we need to compute effect before insertion? Suppose we have present_list list of existing distinct values. But we need to detect gap changes due to addition of v. Suppose new v not present; we should find positions pos via bisect.bisect_left(present_list, v). In current present list before insertion, we have left_prev = present_list[pos-1] if pos>0 else None; right_next = present_list[pos] if pos < len else None. After insertion, left_new becomes left(prev) maybe left prev; right_new becomes right next.
+
+But algorithm: before inserting, list doesn't contain pos. After inserting, new v will be adjacent to left_prev and right_next with indices pos to new list.
+
+Then we must update the gaps:
+- If left_prev exists and right_next exists: The gap between left_prev and right_next previously existed? Evaluate numbers: if right_next - left_prev >1 when there was no intermediate values. But we have not stored gaps between them, but we know that currently there existed no value between them. But our list didn't contain any value in between since list sorted distinct of present values; so the difference between x and x+1 >1? Indeed if there's no integer between them, the gap existed. But we need to detail.
+
+Let's test: Suppose list [3]; we insert 1. pos before insertion: 0. left_prev none; right_next = 3. left, right not both present, so no gaps to remove. But we still need to account if inserting a new value might create a new gap between left_prev and v or v and right_next? Let's analyze:
+
+Given leftPrev and rightNext are neighbors in the sorted distinct set before insertion. After insertion, v will become between them. The old gap between leftPrev and rightNext is removed after insertion, since it's no longer adjacent? Wait leftPrev and rightNext were adjacent in the sorted property; there was no other distinct values between them. After insertion, leftPrev and rightNext will no longer be consecutive - they will be separated by v. So if previously there were gaps between leftPrev and rightPrev? Actually the gap between leftPrev and rightNext existed when rightNext - left_prev is >1. That indicates imbalance. After insertion between them, their adjacency becomes separated; still we might consider their gap? That's not counted because they are no longer adjacent; but they are not consecutive, but the definition counts gaps between consecutive sorted elements in new order. So previous unordered pair leftPrev's adjacency to rightNext no longer considered as consecutive pair. So the loop of gaps needs to adjust accordingly.
+
+Thus effect on gaps when inserting a new distinct value v that had left prev and right next:
+
+- If left prev exists, leftprev and v become adjacent after inserted. Gap = v - leftprev. If this diff >1, include new gap. Similarly for v and right next: gap = right_next - v. We need to account for these.
+
+If left prev is None or right next is None, adjacency may only formed one fall between existing or new.
+
+But we may double count or need to handle previously existed gap between left prev and right next. Actually leftprev and rightnext were adjacent before insertion; after inserting v, adjacency between leftPrev and rightNext removed. So we need to adjust gaps accordingly:
+
+- If left_prev exists and right_next exists:
+    - Before insertion, we had counted gap between left_prev and right_next if right_next - left_prev > 1. So we need to subtract that if it existed.
+    - After insertion, we will have two new adjacencies: left_prev-v and v-right_next. Each may produce gaps. So we need to add gaps for those two adjacencies. We also may need to keep track of gaps counted before.
+
+- If leftPrev exists but rightNext not exist:
+    - Before insertion, leftPrev had adjacency to something else; no change to gap between leftPrev and others. After insertion, adjacency leftPrev-v may be new. So we need to add gap for leftPrev-v if needed.
+
+- Similarly for rightNext only.
+
+Thus algorithm:
+
+- Before insertion: we need to know whether leftPrev exists and rightNext existed and if rightNext - leftPrev >1. Which is easy for difference.
+
+But we also need to know if leftPrev and rightNext already were counted for a gap when they were adjacent. In our data, we maintain leaps between adjacent distinct values. So difference >1 indicates a gap between them. Thus to maintain correct gap count, we need to remove this old gap when we break it.
+
+Let's implement:
+
+Let present list = sorted list of distinct values present.
+
+We can check left_prev exists => left = present_list[pos-1]; if pos>0. Right_next = present_list[pos] if pos < len(list). And we compute old_gap= bool(right_next is not None and left_prev is not None and right_next - left_prev -1 > 0). In that case, we decrement gaps by 1.
+
+But we need to ensure the oldgap existed before insertion for adjacency. But the presence of left_prev and right_next as adjacent distinct values means that there was a gap count possibly included if >1. But the adjacency may produce a gap if diff>1. But that's exactly the gap count we want.
+
+Thus steps:
+- Before insertion: if left_prev and right_next: if right_next - left_prev > 1: gaps -= 1
+- After insertion:
+  - new left adjacency distance = v - left_prev if left_prev else False -> if left_prev: if v - left_prev > 1: gaps += 1
+
+  - new right adjacency size = right_next - v if right_next else False: if right_next: if right_next - v > 1: gaps += 1
+
+Add value to list via bisect.insort.
+
+But we also need to maintain gaps for duplicates? duplicates do not change present list.
+
+Edge: if duplicate inserted changes freq >0, we just freq[v]+1. No change to gaps.
+
+Let's test small example.
+
+Example 1: arr[0]. We'll track each subarray.
+
+Start i=1? Wait compute.
+
+We'll implement algorithm descr.
+
+Suppose we test subarray by building:
+
+Start i=1 (value 3). present list empty.
+
+Add v=3: freq[3]==0. pos left? list empty. pos==0. left_prev None. right_next None. No old_gap. Insert v. After insertion, left adjacency none, right none; gaps unchanged 0. answer +=0.
+
+Add v=1: list [3], freq[1]==0. pos= bisect_left([3],1) -> pos=1? Wait sorted list [3] => bisect_left returns 0? Wait 1 < 3, so pos=0. left_prev None; right_next=3, present. Old_gap? left_prev None. After insertion, gap left adjacency none; right adjacency: 3 - x? difference 3-1=2 >1. So gaps +=1. gaps=1. present sorted list [1,3].
+
+Now answer: after adding v=1 should be gap count 1. So answer add 1. Works.
+
+Now subsequent v=4: list [1,3]. freq[4]==0. pos=bisect_left([1,3],4) -> pos=2. left_prev=3, right_next none. no old gap. After insertion: left adjacency diff=4-3=1 <=1 => no gap. right none; gaps unchanged to 1. answer add 1, total 2. However subarray [3,1,4] imbalance 1? Wait earlier example had imbalance 1 for first 3-1-4. But our calculation 1. But after adding v=4, we got gaps 1 again. We added 1, total 1+? Hmm earlier we had first subarray [3,1] had the imbalance of 1; but [3,1,4] also had 1. But our algorithm gave both 1, good. Subarray [1,4] with starting i=2? For subarray [1,4], swapping diff 3? Wait sorted [1,4] difference 3 >1 => imbalance 1.
+
+Thus algorithm works.
+
+Let's test the second example [1,3,3,3,5].
+
+We will do simulation for correct totals.
+
+Better verify.
+
+Will output 8.
+
+Let's test via quick run mentally.
+
+When i=0: start freq=0, present=[], gaps=0.
+
+j=0 value=1 -> new, pos=0, left none, rightNone => dp gaps=0. present [1,]. ans +=0? Actually sarr: [1] diff none => 0. correct.
+
+j=1: value=3 -> freq 3==0. pos=1? list [1] => pos=1 -> left_prev=1, right_none
+oldgap: left_prev only so none. After insertion: left adjacency diff=3-1=2>1 => gap +1. gaps 1. after insertion present [1,3]. ans +=1.
+
+j=2: value=3 duplicate.
+
+freq[3]=3? but duplicates no change; gaps unchanged: 1, ans +=1. That subarray [1,3,3] => imbalance 1. Good.
+
+j=3: value=3 duplicate again. ans +=1.
+
+j=4: value=5 -> distinct new. list now [5]? Wait present [1,3]. pos=2? list [1,3]. pos=2? value 5 >3; pos=2. left_prev=3, right_none. oldgap none. After insertion: left adjacency diff=5-3=2>1 => gap +1. gaps return to 2. present [1,3,5]. ans +=2. Now total ans: 0+1+(1)+1+2 =5? Let's compute: 0+1+1+1+2 =5. But expected sum for subarrays starting at index0 is: subarrays [1], [1,3], [1,3,3], [1,3,3,3], [1,3,3,3,5] -> imbalance numbers: 0,1,1,1,2 => 5. correct.
+
+Now i=1: start at index1 value value=3. freq=0. present empty.
+
+j=1 value=3 -> gaps 0. ans add0.
+
+j=2 value=3 duplicate -> gaps 0. ans add0.
+
+j=3 value=3 duplicate -> 0. ans add0.
+
+j=4 value=5 distinct new, list [] -> pos=0, leftNone; rightNone: gaps 0; presence [5].
+ans add0.
+
+Thus subarrays [3], [3,3], [3,3,3], [3,3,3,5] imbalance numbers: 0,0,0,1? Wait compute [3,3,3,5]: sorted [3,3,3,5] distinct values {3,5} difference 2 >1 => 1. But our ans for i=1 when j=4 should be 1. Our algorithm gave 0. Let's track again: for i=1 start, we built present list: j=1 v=3 -> present [3]; gaps=0. Next duplicates 3. None. j=4 v=5 produce new entry. At this moment, present list before insert: [3]; pos=1? actually list[0]=3. So pos=1 (since 5 >3). left_prev=3, right_none none. oldgap none. After insert: new left adjacency diff=5-3=2>1 => gaps +=1. Since we add gaps? Wait we previously set gaps =0; after insertion, we add 1, gaps becomes 1. Then ans add 1. So we add 1. Good.
+
+So ans added for subarray [3,3,3,5] is 1. Good.
+
+Thus totals for i=1: 0+0+0+1=1, correct.
+
+Now i=2: start at index2 value=3.
+
+Subarray [3], [3,3], [3,3,5].
+
+Simulate: present []. j=2 v=3 -> gaps 0. ans0.
+
+j=3 v=3 dup -> ans 0.
+
+j=4 v=5 -> present [3]; pos=1 (5 >3). left_prev=3; diff=2>1 => gaps=1; ans total 1.
+
+So subarray [3,3,5] imbalance 1; S. Good.
+
+Now i=3: start at index3 value=3.
+
+Subarray [3], [3,5].
+
+Simulate: present []. j=3 v=3 -> gaps0. ans0.
+
+j=4 v=5 -> present [3]; pos=2? Actually 5>3. left_prev=3 diff=2>1 to gaps=1. ans0+1=1.
+
+Now i=4: start at id4 value=5.
+
+Subarray [5] -> imbalance 0.
+
+Thus totals: i=0 ->5; i=1 ->1; i=2 ->1; i=3 ->1; i=4 ->0.
+
+Sum=8 matches expected. Good.
+
+So algorithm works.
+
+Implementation details: use bisect.insort (in python) or list insert. For operations 1e6 log n, n ~ 1e3, log ~ 10, loops 1e6 * 10 ~ 1e7 operations fine.
+
+But we need to consider actual worst-case loops: For each starting index i, we iterate j values maybe up to ~n; building freq array each time by resetting to 0 each iteration. We can reuse freq array across start loops by resetting quickly using list of zeros length n+1. Each start set freq= [1]*(n+1)? Actually zeros. We'll just reinitialize.
+
+This might be okay, but we can also reinitialize freq with global array and then resetting only those that changed. For each subarray start i+1, we can't reuse freq arrays, but we might use dictionary or use arrays and reset. n=1000 so resetting entire array of 1001 to zero each time is about O(n^2) ~ 1e6. fine.
+
+Simplify: have freq array of size n+1. For each start index i, we start with freq= [0]*(n+1). gaps used 0; list_empty; iterate j from  i to n-1: insertion.
+
+Also need to account duplicate values that don't break gap unless insertion of new value like we handle. We'll also store freq.
+
+We need to use sorted list for present distinct values (present_list). Sorting each time we insert via bisect insert. Use bisect.insort.
+
+Pseudo:
+
+```
+import bisect
+def sum_imbalance(self, nums):
+    n= len(nums)
+    ans=0
+    for i in range(n):
+        freq= [0]*(n+1)
+        present= []
+        gaps=0
+        for j in range(i, n):
+            v= nums[j]
+            if freq[v]==0:
+                pos= bisect.bisect_left(present, v)
+                left = present[pos-1] if pos>0 else False
+                right = present[pos] if pos < len(present) else False
+                if left != False and right != False:
+                    if right - left != 1:
+                        gaps -= 1
+                new_left_gap = False
+                new_right_gap = False
+                if left:
+                    if v - left > 1:
+                        gaps += 1
+                    # else diff=1 => no gap
+                if right:
+                    if right - v > 1:
+                        gaps += 1
+                bisect.insort(present, v)
+                freq[v] += 1
+            else:
+                freq[v] += 1
+            ans+= gaps
+    return ans
+```
+
+But careful: In "if left != False" etc. In Python bool False can't be compared to number; we can just use None. Or use left is not None. We'll be careful.
+
+Implementation steps:
+
+```
+for i in range(n):
+    freq=[0]*(n+1)
+    present=[]
+    gaps=0
+    for j in range(i, n):
+        v=nums[j]
+        if freq[v]==0:
+            pos=bisect.bisect_left(present, v)
+            left=present[pos-1] if pos>0 else None
+            right=present[pos] if pos < len(present) else None
+            if left is not None and right is not None:
+                if right - left > 1:
+                    gaps -= 1
+            if left is not None:
+                if v - left > 1:
+                    gaps += 1
+            if right is not None:
+                if right - v > 1:
+                    gaps += 1
+            bisect.insort(present, v)
+            freq[v] = 1
+        else:
+            freq[v] += 1
+        ans += gaps
+```
+
+Edge: freq[v] increments but we use only freq[v]==0 to decide added. If freq[v]==0 but we set freq[ v ] = 1 after arr.
+
+But we might also need to update freq[v] before or after insertion? It doesn't matter; we only use freq for later duplicates.
+
+Finally return ans.
+
+Let's test with given sample.
+
+Test on small arr [0], but constraints 1..n. Example arr [1] -> answer 0; algorithm: i=0 freq[1]==0, present empty, left None, right None, gaps stays 0, add ans 0, good.
+
+Test arr [1,2]. Subarray [1,2] sorted [1,2] diff=1 -> 0. Totals 0. algorithm: i=0 both first 1 add left none. Next j=1 v=2; difference 2-1=1 => no gap (implementation: left is 1, v-left=1 -> no addition. After insertion, no gap. ans after each step 0. Good.
+
+arr [1,3]? Subarray [3,1]: gap diff=3-1=2>1 -> 1. Let's test: i=0 1: first 1 present gap0. ans1? Wait last step after j=1 shift: v=3 inserted left=1, right none => left diff=3-1=2>1 -> gaps +=1. ans adds 1; then after i=1 subarray [3] gap 0; ans total 1. This matches.
+
+Test len>3 duplicates.
+
+Edge: large n 1000.
+
+Potential issues: complexity O(n^2 log n) ~ 1e6 * ~10 log ~ 1e7. 1e6 loops each also with bisect and list insertion O(k) maybe 500 average? Actually insertion into list requires shift of elements O(k) ~ size n; O(n) difference. So worst-case complexity ~ O(n^3) maybe 1e9? Wait. len(n)=1000, insertion into list is O(n) (list shift). For each addition, each start i we may insert each element up to n times. In worst-case for each first start, window size up to n. Inserting into list each insertion may shift up to O(n) elements, giving total O(n^3). Let's approximate: For each start, we may insert at most n distinct elements. Number of insert operations per start roughly distinct values count. Outer loops n. For each start i, we may deposit n - i positions within list. Complexity per start val distinct: average distinct <= n. So total element insertions across all starts = sum_{i=1}^{n} (len of subarray) ~ n(n+2)/2 = O(n^2). Each insertion shift O(k) up to n. But across average maybe O((n-i)/2) shift. But overall complexity ~ sum_{i} O(n * (limit)) ~ O(n^3) worst-case.
+
+But we can do better: we can use bisect to identify insertion index but also use a set of present values and maintain gaps via counts for left and right adjacency using arrays that track previous and following present values? We can use a union find or linked list to maintain adjacency in O(1). Because insertion only; we can build prev and next using a dictionary sorted by values? But bridging that might not be trivial.
+
+However n <= 1000, n^3 ~ 1e9 might be heavy but perhaps still borderline due to small ops. However Python may take ~2 seconds per 1e8 maybe not.
+
+Consider optimizing: Use a boolean list present[1..n] to indicate presence. After each insertion, we can find the neighboring present values using scanning left (v-1 downwards) up to while not present but there might be many empty. Not allowed.
+
+Alternate approach: Use a Fenwick Tree or Balanced BST of present values to find predecessor and successor quickly, but we also need to compute shift cost. Since we only insert, maintain a sorted list of present values but insertion cost maybe O(log n) by using bisect + list insert; but insertion shift O(k) as well.
+
+Maybe we can combine two arrays: maintain a linked list via two arrays prev and prev and next next. Considering values are small, we can maintain arrays leftmost and rightmost etc.
+
+We can do this: I will maintain a bool present and also a next array like is neighbor by value. After insert v, we do:
+
+```
+prev_val = exists_in_present? find largest present < v via scanning downward until found pos. Since there is at most 1 inserted difference? But scanning downward may be O(n^2). But we have at most 1000 inserted per subarray but will scan many times each insertion.
+
+Another approach: we can precompute all neighbor relationships for each call? Let's think of referencing a Balanced BST.
+
+But maybe n=1000 still acceptable with list insert into small lists: Each start i of length k. Inserting values could shift at most k elements each. Sum over all insert is O(n^3). But n=1000 => 1e9 operations. Might be too slow (couple seconds?). Might be borderline.
+
+We can better maintain a set of present values with keys sorted; we can use "bisect" on a list of ints but list insertion uses shifting; but we can avoid shifting by using arrays that only record presence and compute predecessor/successor via binary search over indexes? Actually we don't need to maintain sorted list of values; we can compute predecessor/successor by scanning the presence from v-1 downwards until we find present. Since presence array length <= n, scanning could be O(n^2) if repeated for each insertion, too heavy.
+
+But we can optimize by using precomputed arrays of next present to the left and right: The values are limited to 1..n. We can maintain arrays leftmost and rightmost but they are fixed across subarray but changed as we add values. When we add v, we can compute predecessor by scanning leftwards until find freq >? That's still O(n) per insertion.
+
+But we could maintain a binary indexed tree of frequencies to find predecessor/successor via prefix sums: we can query using bit operations to find predecessor (largest value <= v with freq>0). We can implement a Fenwick tree is O(log n). And we can update tree when freq increases from 0 to 1. When it becomes 0, we remove but we don't need removal in this problem.
+
+Thus we can compute predecessor and next using fenwick tree: we could query freq prefix sums? To find predecessor, we need the largest index less than v that also has freq>0. We can use binary search on prefix sums. But we can compute rank of v? Not immediate. But we can maintain a Balanced BST using sortedcontainers or use typical techniques. For n up to 1000, we can implement simple custom Fenwick tree built on freq array. Operation can be logN ~ 10.
+
+Let's implement Fenwick for prefix sums. To find first >0 before v, we can use binary search over tree, but we can use fenwick.find_predecessor(v-1) that returns largest index <= v-1 that has freq>0. Standard Fenwick function can find k-th element by top bit search. But that's for k-th by cumulative count; we need number of distinct present before v? We can compute prefix sums to get count of present <= v-1. Then when we want to find predecessor, we just need largest index <= v where freq>0; we can binary search over [1, v-1], but each query log N. sliding.
+
+Because n small, we can just binary search using freq array to check existence. But could still be O(log n) per insertion. Which we will do.
+
+Simplify: implement for each start i:
+
+- freq array size n+1 (bool). Use fenwick or just use sorted list but still shift.
+
+But we can quickly find predecessor and successor using bisect on a sorted list of present values but not shifting? Wait we can maintain a sorted list of values via array; to insert we need to shift. But we can maintain list of length distinct number of values <= n, shift cost could be at most n=1000. For each subarray, each insertion could shift up to 1000 - maybe 500 average. Number of insertions overall is n^3/2 ~ 500k. Shifting 500 each -> 250 million operations, still high but maybe okay in C but Python may be heavy.
+
+We can use "bisect" to find insertion index but we can use "array module" or "list" insertion; still shift.
+
+Potentially we can maintain a balanced BST via 'bisect' on list of ints and also keep a "set" of present values; but adding to list still shift.
+
+Wait maybe we can maintain a bitset and compute predecessor/successor via sentinel arrays: For each start i, for each v, we compute predecessor and next using loops scanning by leaps/steps. But we might handle duplicates: scanning downward O(n) each addition. For each subarray, we will scan j positions, for each j maybe we scan partially. But we can also do incremental scanning: For each start, we can maintain two pointers l_ptr and r_ptr? Hmm.
+
+But maybe better: Use arrays of rank and we can maintain next/prev 'linkable' arrays. Approach: we maintain arrays prev, next indexes for values we already inserted. This way obtaining predecessor and successor is O(1). Let's design:
+
+When a new value v appears:
+
+- We need to know previous present value less than v: we can use a 'nextRight' that expresses the nearest present to the left? Actually we can just maintain a balanced binary tree of present values with adjoined indices.
+
+But we can maintain for each value, the immediate neighbor present to its left and right (like a doubly linked list of values). Precomputations:
+
+We can maintain an array leftmost[i], rightmost containing neighbors.
+
+- Initially we have empty set presence for each start possible. So we cannot precompute because we add incrementally in arbitrary order.
+
+But to get the predecessor, we look at the preceding smaller value that is present. In an integer domain of size up to n, we can maintain a data structure 'for each value index we know whether present' and we also need to find the nearest present less than v. We can compute by scanning downward by while freq[k] == 0; but that could be O(n^2). But we could use union find 'next' pointer: when we add a value v, we can compute its predecessor by while freq[v-1]==0? But if we maintain the 'next present to left' for each value, we can skip unknown quickly. Similarly for right.
+
+We can pre-allocate arrays nextleft[i] and nextright[i] which for next existing value to left; but their values change each time we add v. But we cannot compute them quickly without known set - we could use DSU to find the last present less than v as we add.
+
+We can use DSU 'disjoint set union with path compression' where we maintain for each index the next index to left that is not present (or is present). Inverse.
+
+Alternatively we can maintain adjacency via built set and use 'bisect' to find neighbor in sorted list; but we want to avoid shifting; but for insertion we may still shift.
+
+But maybe list insertion isn't that bad; 250 million operations maybe > 2 seconds? But could be okay? Let's approximate: Each insertion shift average 500 elements; that's like copying 500 ints ~ 4 KB memory. For 500k insertions, that's 250 million ints => 2GB memory copies, heavy.
+
+But we can reduce shift by iterating over subarray and only building present list via adding values in sorted order? maybe we can just insert at correct position but not shift? Actually we don't track sorted list after all; we can compute predecessor and successor by accessing freq arrays with binary search but not shifting. Example: we can maintain pointer arrays of present; but we can compute predecessor via scanning left but maybe O(n^2). But we can maybe store previous present values in arrays sorted by value. For each start i, we can fill freq array gradually. But we need to compute predecessor quickly. We may set arrays 'nextPresentAfter[v]' to store nearest expected neighbor maybe discovered after we add.
+
+But we only need predecessor and successor according to values of numbers inserted so far.
+
+We can implement DSU with union find for next available present index after adding. Approach: For each value v, we maintain parent pointers such that find(v)=v if freq[v]>0 else find(v-1) or something.
+
+But we want to directly get previous v that has freq>0. We can find prev by iterating with while freq[k]==0: k-1; but that's too slow.
+
+Better: For each start we can maintain set of present values as a tree set like 'bisect'. For retrieving predecessor and successor, we can use 'bisect.bisect_left(present, value)' to get index. This uses O(log n). We still need to pop? But not removal. In insertion we insert new value relative to list. But we can circumvent need to shift by using 'bisect' on a 'sorted array of values' to find index but storing in adjacency lists we can use 'unordered set'? Actually each insertion would still cause shift; but we can use 'bisect.insort' which has shift anyway: It will shift to insert at index but not too big.
+
+But we can implement as: 'present' not a list but a 'sorted array of values' using `array` module like 'array('H', sorted values)'. But insertion still shift.
+
+Thus we might consider using 'bisect.bisect_left' on a list and then 'present.insert(pos, v)'. The shift is the heavy part.
+
+But we can reduce shift by using incremental incremental: maintain a bitset of present values, array length n+1. To compute predecessor and suffix, we can binary search over that bitset.
+
+Implementation structure: we maintain a sorted list of present values using 'bisect' on range 1..n but we can maintain a sorted list of values as `sorted_vals`? But we also need to find predecessor and successor.
+
+But we can implement predecessor as next lower index such that freq>0. For each start i, we may build an array next_lower[v] that points to lowest present value <= v. But if we add v in arbitrary order, we can update this for all indices > v? That may be O(n^2).
+
+But we can store an array of 'nextPresent' for each index- but we might not need ability to update all indices; only need to find predecessor and successor at time of insertion. We can compute them iteratively: for each insertion from left to right (by j), we might choose v's order not monotonic. We can compute predecessor using a simple while loop scanning leftwards until freq>0. Because number of times we may traverse each index at most once per start i? We can use 'next smaller present index' representation after each insertion: we can keep previous array 'prev_present' as an array of size n. When no present values less than v, return -1. But we also need to update neighbors.
+
+Observation: After we add v, earlier inserted values are fixed and present. But we may skip scanning again for each insertion: we can maintain a 'dp' that for each index, after it's being present, we set its leftmost neighbor maybe?
+
+Let's think of simpler: Use bisect on list of present values. We can do insertion but with small overhead, okay because n=1000.
+
+Let's estimate actual time: O(n^3) shift approximated 500 million operations. In Python memory movement maybe slower in C; but actual loops? But np loops: each insertion into list of ints uses C-level memmove, about 8 bytes per int, so 500 million * 8 bytes = 4GB mem moves. Might be okay maybe ~0.30 secs? It's still big.
+
+But we can optimize by implementing its neighbor detection via scanning but without shifting: For each start, we collect all unique values inserted so far into a bitset; to determine predecessor and successor we can use binary search on sorted list we maintain but not shift by storing them as a set and store indices O(1) to get neighbor? We can't get neighbor quickly from set.
+
+Given small n 1000, we could precompute list of prefixes of array that correspond each start? Actually we can compute imbalance numbers as function: For each subarray, we can track distinct values sorted. That we can keep by sliding window: for each left i, we extend j and maintain a set of seen values, but we need to identify gaps. We can maintain a boolean array present of size 1001. For each new element we can update present. For gaps, we need to know if after adding v we create new gap.
+
+But use the following trick: Since values are small but distinct, edges between consecutive integers that exist are those consecutive positions where both exist present. We can maintain array 'adjacent' bool for each integer difference of length n: adjacent[i][i+1] indicates whether both present. But we also need two-wise gap detection maybe we need to detect adjacency across two difference? Wait we can skip.
+
+Another approach: Because values are <= n, we can treat present set in bitset. For each subarray, we can compute imbalance number = number of distinct values - number of blocks of consecutive integers present (segments). Because each consecutive block is a maximal consecutive sequence separated by gaps >1. Distinct values count minus number of blocks = gaps. Example: [1,3] distinct=2, blocks=1, gaps 1. [1,2,3,5] distinct=4, blocks=2,? let's check: values 1,2,3 block1. 5 block2. gaps = distinct (4) - blocks (2) =2? Actually sorted distinct [1,2,3,5]. Gaps counted: difference between 3 and 5 >1 => gap >1 => edges? We count 1? Actually distinct=4, and blocks=2, so gaps=2 (?), but actual imbalance number responds? Let's test: sarr: [1,2,3,5] diff 2 >1 between 1 and 2 etc? Wait difference between 1 and 2 is 1; between 2 and 3 is 1; between 3 and 5 distinct diff >1 -> 1 gap. So imbalance number 1. But distinct(4) - blocks(2). 4-2=2, too high. So formula wrong.
+
+Wait our earlier notion: For sorted list of contiguous integer sequences, each gap between sequences is counted once. So number of breaks between consecutive blocks (segments) equals number of gaps = number of segments minus 1. But if we have k segments, imbalance number is 0 if only 1 segments. But we also have inside segments no gaps.
+
+So imbal = segments - number_of_segments? Actually segments = (# of consecutive sequences). For example [1,3] where distinct values 1,3 difference >1. The distinct values sorted produce segments: 1 is isolated, 3 isolated -> segments=2. So gaps=1= segments-1.
+
+Example [1,2,3,5]: dis=4; segments: {1,2,3},{5} => 2 segments each consecutive. gaps=1=2-1.
+
+Thus imbalance = number_of_segments - 1.
+
+Thus we can compute number of segments a subarray. We can maintain this while adding elements. Because when adding

@@ -1,0 +1,286 @@
+<|channel|>analysis<|message|>We need to compute sum of per each row's max values after each removal.
+
+Observations: In typical known LeetCode problem "Maximum Sum by Removing Elements from Rows" no. Actually there's a known problem: "Matrix Sum" [problem 1728?]. Let's analyze.
+
+We have matrix of size m×n (rows m=nums.length; each row has length n). Operation: from each row, select largest number and remove it. That means we remove one element at each row. Then we gather the removed ones (m numbers) and pick the maximum among them (highest removed value). Add that to score. Repeat until matrix empty.
+
+Essentially we repeatedly remove the largest from each row; after each round we score the maximum of those removed numbers. We're asked to compute sum of the sequence of maximal values for each round.
+
+Observation: We can think of each row's sorted values in descending order. At each step on row i, we pick the remaining largest value. So across all rows, each row's values are sequentially consumed in descending order.
+
+Therefore, overall the list of removed numbers across all rows consists of all elements of nums sorted by row-independently: for each row i, we output its values in descending order. So overall removal sequence: each step we take one element from each row. But at each step we compute rewards by picking the maximum among those removed numbers.
+
+Thus the reward sequence is:
+
+Let sortedRows[i] = sorted(nums[i], reverse=True). For each of k steps (k = max row length), we pick from each row such that we can only pick from rows that still have elements. Then we pick the maximum among the taken elements for this step and add.
+
+Equivalently, we can think of each row's values sorted descending. Then we align them in rows of length n. When a row is shorter than max row length, there are missing values at that step. But we only take from each row that still has at least one element.
+
+But we can compute the reward per step by considering the list of maximum among all rows' current largest values, and picking the maximum among those: But we need to account that each row's largest values are known.
+
+Simplify approach: Since we always pop the maximum from each row, we could treat each row's elements sorted descending, and we can compute the list of "maxes" across all rounds. Let's derive algorithmic formula.
+
+Let m rows, each row has length l_i. We will have max(l_i) rounds. Let L = max(l_i). At round t (1-indexed), we would pick from each row i if t <= l_i, the element sortedRows[i][t-1] (1-index). Then we take that set of values and pick the maximum among them.
+
+Hence the reward to add at round t is max_{i: t <= l_i} sortedRows[i][t-1].
+
+Therefore the final score sum over t=1..L of max( sortedRows[i][t-1] for i where t <= l_i).
+
+Thus we just need to compute for each t, across i, the maximum of those values. We can compute by scanning each row and for each index t, we consider that element and keep track of maximum across rows.
+
+Simpler, we can store an array best[t] initially 0. For each row i: for j from 0 to l_i-1: best[j] = max(best[j], sortedRows[i][j]). After processing all rows, we sum best[j] for j=0..L-1. This yields total score.
+
+Edge cases: Some rows may have shorter length; we must ensure the max length of all rows. Complexity: O(m*n) time, O(L) memory <= 500? Actually 500 max length per row, but m can be up to 300; L <= 500. So O(m*n) <= 300*500=150k. Good.
+
+But we also must consider numbers up to 1000; sum may overflow? Keep as int.
+
+Now implement.
+
+Implementation details:
+
+- Input is List[List[int]].
+- For each row in nums:
+    - ensure it is sorted descending: we can sort descending O(k log k). But also we can just sort ascending and then iterate reversed? But row length up to 500, sorting 300*500 log 500 ~ 300*500*9 ~ 1.35M compar, fine.
+
+Implementation steps:
+
+- Determine maxLen = max(len(row) for row in nums).
+- Initialize best = [0] * maxLen.
+- For each row in nums:
+   - sortedRow = sorted(row, reverse=True)
+   - For j,val in enumerate(sortedRow):
+        best[j] = max(best[j], val)
+- After all rows, answer = sum(best)
+- Return answer.
+
+Edge-case: Multiple rows can have same size; we just compute. Works.
+
+Complexity: O(m*n log n) due to sorting each row.
+
+We can also optimize by sorting each row ascending and then loop from end. Equivalent.
+
+Now produce final code.
+
+Testing with given examples:
+
+Example 1: rows = [[7,2,1],[6,4,2],[6,5,3],[3,2,1]]
+Sorted rows:
+row1: [7,2,1]
+row2: [6,4,2]
+row3: [6,5,3]
+row4: [3,2,1]
+Compute best:
+
+maxLen=3
+initialize best=[0,0,0]
+
+Process row1:
+j=0 val 7 -> best[0]=7
+j=1 val 2 -> best[1]=2
+j=2 val 1 -> best[2]=1
+process row2:
+j=0 val6 -> best[0]=max(7,6)=7
+j=1 val4 -> best[1]=max(2,4)=4
+j=2 val2 -> best[2]= max(1,2)=2
+row3:
+j=0 val6: best[0]=7
+j=1 val5: best[1]=max(4,5)=5
+j=2 val3: best[2]=max(2,3)=3
+row4:
+j=0 val3: best[0]=7
+j=1 val2: best[1]=max(5,2)=5
+j=2 val1: best[2]=max(3,1)=3
+
+Sum best=7+5+3=15 => correct.
+
+Example 2: row [1] -> sorted: [1] => best[0]=1 ; sum=1.
+
+Edge-case: row lengths varying: row1 [5,4], row2 [3] -> sorted: [5,4], [3]; bestLen=2. best[0]=max(5,3)=5 ; best[1]=max(4,0)=4 => sum 9.
+
+Let's check manual: Step1: Remove 5 from row1 and 3 from row2; max=5 ->score 5. Step2: Remove 4 from row1; max=4 ->score 4. Score 9.
+
+Works.
+
+Return ans.
+
+Now produce final solution code.
+
+Additionally, we can consider retrieving sorted row ascending and then reversed.
+
+Edge-case: row length =0? Not allowed because constraints 1 <= nums[i].length.
+
+Now produce code:
+
+```
+from typing import List
+
+class Solution:
+    def matrixSum(self, nums: List[List[int]]) -> int:
+        max_len = max(len(r) for r in nums)
+        best = [0] * max_len
+        for row in nums:
+            sorted_row = sorted(row, reverse=True)
+            for j, val in enumerate(sorted_row):
+                if val > best[j]:
+                    best[j] = val
+        return sum(best)
+```
+
+Time complexity O(m*n log n). Memory O(L).
+
+Alternatively, we can skip sorting by using max each step? But easier with sorting.
+
+But maybe we can avoid sorting entirely: Since we need to know the maximum of each row's element at index j after sorting descending, we can just find the j-th largest in each row. But we can use nth_element or partial selection: but due to small size, sorting suffices.
+
+Thus produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every row we repeatedly remove the largest remaining element.
+After each round we add the *maximum* among the removed elements of this round
+to your score.
+
+--------------------------------------------------------------------
+
+#### Observation
+
+From a single row `r` the elements will be removed in the order
+`r[0] >= r[1] >= r[2] ...` (largest first).
+So if we sort each row in **descending** order, the element that will be
+removed from that row in round `t` is simply `sorted_r[t-1]`.
+
+When we look at all rows together:  
+in round `t` we take the element `sorted_r[t-1]` from every row that still has
+an element (`t <= len(r)`), and we add the maximum of all these taken elements.
+
+Therefore, for every round `t`
+
+```
+round_t_value = max( sorted_r[t-1] for every row r that has at least t elements )
+```
+
+--------------------------------------------------------------------
+
+#### Algorithm
+```
+maxLen   = maximum of all row lengths
+best[t]  = maximum removed value in round t   (0‑based indexing)
+
+for every row in nums:
+        sort the row in descending order
+        for j=0,1,2,...,len(row)-1:
+                best[j] = max(best[j], row[j])
+
+answer = sum(best)
+```
+
+`best[j]` is exactly the maximum of all elements removed in round `j+1`,
+hence its sum is the required score.
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the correct final score.
+
+---
+
+##### Lemma 1  
+After sorting a row `r` in descending order,
+`sorted_r[k]` is the value that will be removed from `r`
+in round `k+1` (1‑based).
+
+**Proof.**
+
+The algorithm removes the largest element of a row in each round.
+In a sorted row the largest element is `sorted_r[0]`, the second largest
+`sorted_r[1]`, etc.  
+Thus after removing the previous `k` elements, the next one to remove is
+`sorted_r[k]`. ∎
+
+
+
+##### Lemma 2  
+For every round `t` (`1 ≤ t ≤ maxLen`) the variable `best[t-1]`
+after the loop equals the maximum of all numbers removed in round `t`.
+
+**Proof.**
+
+During the processing of a row `r` of length `l`  
+the algorithm updates `best[j]` for `j = 0 … l-1` with
+`sorted_r[j]`.  
+By Lemma&nbsp;1, `sorted_r[j]` is the value removed from `r` in round `j+1`.
+`best[j]` is updated to the maximum of all such values from all rows,
+because it is processed independently for each row.
+Therefore after all rows are processed, `best[j]` equals the maximum of
+all numbers removed in round `j+1`. ∎
+
+
+
+##### Lemma 3  
+The score added by the algorithm equals the real score after all rounds.
+
+**Proof.**
+
+The real score is the sum over all rounds of the maximum of the removed
+numbers in that round.  
+By Lemma&nbsp;2 `best[j]` is exactly that maximum for round `j+1`.  
+The algorithm sums all `best[j]` (`j = 0 … maxLen-1`), obtaining precisely
+the real score. ∎
+
+
+
+##### Theorem  
+`Solution.matrixSum` returns the correct final score.
+
+**Proof.**
+
+By Lemma&nbsp;3 the algorithm outputs the exact sum of the value added in
+each round, i.e. the final score. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+Let `m` be the number of rows (`≤ 300`) and `n` the maximum row length
+(`≤ 500`).
+
+```
+Sorting each row:
+    O(m · n log n)          (at most 300 × 500 log 500 ≈ 1.4·10⁶ operations)
+
+All other operations:
+    O(m · n)
+
+Memory:
+    O(maxLen) = O(n) ≤ 500  integers
+```
+
+Both time and memory satisfy the limits easily.
+
+--------------------------------------------------------------------
+
+#### Reference Implementation (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def matrixSum(self, nums: List[List[int]]) -> int:
+        """
+        Compute the final score as described in the problem statement.
+        """
+        max_len = max(len(row) for row in nums)   # maximum number of rounds
+        best = [0] * max_len                      # best score per round
+
+        for row in nums:
+            # sort each row descending
+            row_sorted = sorted(row, reverse=True)
+            for j, val in enumerate(row_sorted):
+                if val > best[j]:
+                    best[j] = val
+
+        return sum(best)
+```
+
+The implementation follows exactly the algorithm proven correct above.

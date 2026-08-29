@@ -1,0 +1,365 @@
+<|channel|>analysis<|message|>We need minimal length after performing n-1 joins where each step can choose to join previous string and next word either left or right. Each operation uses join function: concatenate, but if last char of first equals first char of second, delete one of them. So joining reduces length by 1 if overlap at boundary.
+
+We can view state as current string, but we only care about first and last character and length? Actually the effect of future joins depends on the last character of current string and last char of words[i] etc. For join (prev, next), if last char of prev == first char of next we delete one char: effectively overall length = len(prev)+len(next)-1. But if not, length = len(prev)+len(next). Also the resulting string has first char of prev and last char of next. So we only need to know first and last character of current string and its length. Because merging other internal chars irrelevant.
+
+Thus dynamic programming: DP[i][c][d] minimal length of str_i when first char c, last char d? But c and d are letters a-z. State size 1000*26*26 ~ 676k, fine. But we also need to know possibility of leading/trailing? Actually we can compute minimal length for each pair (first, last) by iterating over options.
+
+Initialization: str_0 = words[0], length len0, first = w0[0], last = w0[-1]. DP[0][first][last] = len0.
+
+Transition: For i from 1 to n-1 with word = words[i]. Let lenw = len(word), first_w = word[0], last_w = word[-1]. For each state (f, l) with cost len_prev (length of str_{i-1} with first f and last l), we consider two possibilities:
+
+1) str_i = join(str_{i-1}, word): new first = f, new last = last_w. If l == first_w: cost = len_prev + lenw - 1 else cost = len_prev + lenw.
+
+2) str_i = join(word, str_{i-1}): new first = first_w, new last = l. If last_w == f: cost = len_prev + lenw - 1 else cost = len_prev + lenw.
+
+We choose minimal cost for each resulting pair.
+
+We need to maintain DP as 2D array of size 26x26, initialized to INF. For each i iterations, we update nextdp. Complexity O(n*26*26). n up to 1000, fine.
+
+Edge Cases: words length 1, answer len(first word). Also some words may have same length. Ensure to use small INF.
+
+Finally, answer is min over dp entries for last i.
+
+Potential additional optimization: Since char mapping to index 0-25.
+
+Implementation details: map char to index via ord(c)-97.
+
+Let's test with examples.
+
+Example 1: words = ["aa","ab","bc"].
+
+i=0: dp[0][0][0] (a,a) = 2.
+
+i=1: word "ab" (a,b). For state (a,a) cost=2:
+
+- join(prev, w): l==first_w? a==a yes -> cost 2+2-1=3. new pair (a,b). 
+- join(w, prev): last_w==f? b==a? no -> cost 2+2=4. new pair (a,a). So dp[1][a][b] = 3, dp[1][a][a] = 4.
+
+i=2: word "bc" (b,c). For each state:
+
+state (a,b) cost=3:
+- join(prev,w): l==first_w? b==b yes -> cost 3+2-1=4. new pair (a,c).
+- join(w,prev): last_w==f? c==a? no -> cost 3+2=5. new pair (b,b).
+
+state (a,a) cost=4:
+- join(prev,w): l==first_w? a==b no -> cost 4+2=6. new pair (a,c).
+- join(w,prev): last_w==f? c==a? no -> cost 4+2=6. new pair (b,a).
+
+Thus min for (a,c) is 4, others 5,6. So answer min cost 4. Works.
+
+Example 2: words ["ab","b"]. i=0: dp[0][a][b] = 2.
+
+i=1: word "b" (b,b). For state (a,b) cost=2:
+
+- join(prev,w): l==first_w? b==b yes -> cost 2+1-1=2. new pair (a,b)
+- join(w,prev): last_w==f? b==a? no -> cost 2+1=3. new pair (b,b)
+
+Thus min cost overall 2. Good.
+
+Example 3: words ["aaa","c","aba"]. i=0: "aaa" length 3 first a last a.
+
+i=1: word "c" (c,c). For state (a,a) cost=3:
+- join(prev,w): l==first_w? a==c no -> cost 3+1=4. new pair (a,c)
+- join(w,prev): last_w==f? c==a? no -> cost 3+1=4. new pair (c,a)
+
+i=2: word "aba" (a,a). For state (a,c) cost=4:
+- join(prev,w): l==first_w? c==a? no -> cost 4+3=7. new pair (a,a)
+- join(w,prev): last_w==f? a==a? yes -> cost 4+3-1=6. new pair (a,c)
+
+For state (c,a) cost=4:
+- join(prev,w): l==first_w? a==a? yes -> cost 4+3-1=6. new pair (c,a)
+- join(w,prev): last_w==f? a==c? no -> cost 4+3=7. new pair (a,a)
+
+Thus min after i=2: pair (a,a)=6, (a,c)=6, (c,a)=6. answer 6. Good.
+
+Edge Cases: n=1, answer len(words[0]).
+
+Complexities fine.
+
+Now produce final solution code.
+
+Need to import List from typing.
+
+Return integer.
+
+Let's produce code.
+
+Also note that we may have many states but we only store minimal cost for each pair. We'll use list of lists for dp of size 26x26.
+
+Implementation: use INF = 10**9.
+
+Initialize dp as list of lists of INF.
+
+Set dp[fi][li] = len0.
+
+Then for i in range(1,n):
+    nextdp = [[INF]*26 for _ in range(26)]
+    for f in 0..25:
+        for l in 0..25:
+            if dp[f][l] != INF:
+                prev_len = dp[f][l]
+                # join prev -> word
+                if l == first_w: cost = prev_len + lenw -1 else cost= prev_len + lenw
+                new_f = f, new_l = last_w
+                if cost < nextdp[new_f][new_l]: update
+                # join word -> prev
+                if last_w == f: cost = prev_len + lenw -1 else cost= prev_len + lenw
+                new_f = first_w, new_l = l
+                if cost < nextdp[new_f][new_l]: update
+    dp = nextdp
+
+After loop, answer = min(dp[f][l] for f,l in 0..25 if dp[f][l] != INF). But we can compute as min(min(row) for row in dp). Edge case: only one word, answer precomputed.
+
+Return ans.
+
+Test with given examples.
+
+Let's also test with other random.
+
+Edge: words = ["a","a"]. i=0 dp[a][a]=1. i=1 word "a": first_w=last_w=0. For state (a,a) cost=1: join(prev,w): l==first_w? a==a yes cost 1+1-1=1 new pair (a,a). join(w,prev): last_w==f? a==a yes cost 1+1-1=1 new pair (a,a). So dp[1][a][a] =1. answer 1. Not surprising.
+
+Edge: overlapping but not overlapping: need to check deletion only when last char of first equals first char of second.
+
+Yes.
+
+Let's produce final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every word we may join it to the left or to the right of the string that has already been built.
+Only the *first* and *last* character of the current string are important for future joins:
+
+* When we join `A` and `B`  
+  * if `A.last == B.first` the length decreases by `1`  
+  * otherwise the length increases by `len(B)`  
+  * the new string starts with `A.first` and ends with `B.last`
+
+So the whole problem can be solved with dynamic programming that keeps only  
+`first character`, `last character` and the minimal length of the string.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.   State
+
+```
+dp[i][c][d] = minimal length of the string after processing words[0..i]
+              if the first character is 'c' and the last character is 'd'
+```
+
+`c` and `d` are letters `a … z` → 26 possibilities each → at most 26 · 26 = 676 states.
+
+--------------------------------------------------------------------
+
+#### 2.   Initialization
+
+```
+first = words[0][0]
+last  = words[0][-1]
+len0  = len(words[0])
+dp[0][first][last] = len0
+```
+
+--------------------------------------------------------------------
+
+#### 3.   Transition
+
+For the next word `w = words[i]` (`first_w`, `last_w`, `len_w`):
+
+For every state `(f, l)` of the previous step
+
+```
+prev_len = dp[i-1][f][l]          # not INF
+
+# 1) put w on the right side
+if l == first_w:
+    cost = prev_len + len_w - 1
+else:
+    cost = prev_len + len_w
+new_f = f
+new_l = last_w
+dp[i][new_f][new_l] = min(dp[i][new_f][new_l], cost)
+
+# 2) put w on the left side
+if last_w == f:
+    cost = prev_len + len_w - 1
+else:
+    cost = prev_len + len_w
+new_f = first_w
+new_l = l
+dp[i][new_f][new_l] = min(dp[i][new_f][new_l], cost)
+```
+
+The transition costs `O(26²)` per word, therefore the whole algorithm is
+`O(n · 26²)` – easily fast enough for `n ≤ 1000`.
+
+--------------------------------------------------------------------
+
+#### 4.   Result
+
+After the last word we take the minimum over all states:
+
+```
+answer = min(dp[n-1][c][d] for all c,d)
+```
+
+If `n = 1` the answer is simply the length of that single word.
+
+--------------------------------------------------------------------
+
+#### 5.   Correctness Proof  
+
+We prove that the algorithm returns the minimal possible length.
+
+---
+
+##### Lemma 1  
+For any step `i` the value `dp[i][c][d]` equals the minimal length of any
+string that can be produced after processing the first `i+1` words
+(`words[0] … words[i]`) and whose first character is `c` and last character is `d`.
+
+**Proof.**
+
+We use induction over `i`.
+
+*Base (`i = 0`).*  
+The only possible string is `words[0]`.  
+Its length is `len0`, first character `first`, last character `last`.  
+The algorithm sets `dp[0][first][last] = len0`, all other states are `INF`.  
+Thus the statement holds.
+
+*Induction step.*  
+Assume the lemma holds for `i-1`.  
+Consider any optimal string `S` after processing `i` words.
+Let `S_prev` be the string before adding `words[i]`.
+Let `f, l` be the first and last character of `S_prev`.  
+By the induction hypothesis the minimal length of `S_prev` with
+those characters is `dp[i-1][f][l]`.
+
+`S` is obtained by either
+
+1. `S = join(S_prev , words[i])`  
+   Its first character is `f`, last character is `last_w`.  
+   The algorithm creates exactly this state and updates it with the
+   correct length (sum of previous length and `len_w` minus one if the
+   boundary characters match).  
+   Therefore `dp[i][f][last_w]` is at most the length of `S`.
+
+2. `S = join(words[i] , S_prev)`  
+   Symmetric – the algorithm creates the state `(first_w, l)` with the
+   correct length, so `dp[i][first_w][l]` is at most the length of `S`.
+
+Thus every optimal string is represented by one of the two states
+generated by the algorithm, and the value stored for that state is
+at most the length of the string.  
+Conversely, whenever the algorithm updates a state, the corresponding
+construction is feasible, so the stored value cannot be smaller than the
+minimal possible length for that state.
+
+Therefore the lemma holds for `i`. ∎
+
+
+
+##### Lemma 2  
+After the last word (`i = n-1`) the minimum over all states equals the
+minimal possible length of any valid final string.
+
+**Proof.**
+
+By Lemma&nbsp;1 every feasible final string of length `L` appears in some
+state `(c,d)` with value `dp[n-1][c][d] = L`.  
+Thus the minimum over all states cannot be larger than the optimum.  
+Conversely, each state corresponds to a feasible final string (by the
+construction in the transition), so the minimum over all states
+cannot be smaller than the optimum. ∎
+
+
+
+##### Theorem  
+`minimizeConcatenatedLength` returns the minimum possible length of the
+string after performing the `n-1` join operations.
+
+**Proof.**
+
+From Lemma&nbsp;2 the algorithm outputs the minimum of all states after
+processing all words, which is exactly the optimum length. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.   Complexity Analysis
+
+```
+Number of states  : 26 × 26 = 676
+Per word processing  : O(676)  updates
+Total time          : O(n · 676)  ≤ 7.7 · 10^5 operations
+Memory usage        : 2 × 26 × 26 integers  ≈ 13 kB
+```
+
+Both are well within the limits.
+
+--------------------------------------------------------------------
+
+#### 7.   Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def minimizeConcatenatedLength(self, words: List[str]) -> int:
+        n = len(words)
+        if n == 0:
+            return 0
+        if n == 1:
+            return len(words[0])
+
+        # helper: map a-z to 0..25
+        def idx(c: str) -> int:
+            return ord(c) - 97
+
+        INF = 10 ** 9
+        # dp with 26x26 matrix
+        dp = [[INF] * 26 for _ in range(26)]
+
+        first0 = idx(words[0][0])
+        last0 = idx(words[0][-1])
+        dp[first0][last0] = len(words[0])
+
+        for i in range(1, n):
+            w = words[i]
+            lenw = len(w)
+            first_w = idx(w[0])
+            last_w = idx(w[-1])
+
+            nxt = [[INF] * 26 for _ in range(26)]
+
+            for f in range(26):
+                for l in range(26):
+                    cur = dp[f][l]
+                    if cur == INF:
+                        continue
+
+                    # join prev -> word
+                    if l == first_w:
+                        cost = cur + lenw - 1
+                    else:
+                        cost = cur + lenw
+                    if cost < nxt[f][last_w]:
+                        nxt[f][last_w] = cost
+
+                    # join word -> prev
+                    if last_w == f:
+                        cost = cur + lenw - 1
+                    else:
+                        cost = cur + lenw
+                    if cost < nxt[first_w][l]:
+                        nxt[first_w][l] = cost
+
+            dp = nxt
+
+        # answer: minimal value in dp
+        ans = min(min(row) for row in dp)
+        return ans
+```
+
+This implementation follows exactly the algorithm proven correct above.

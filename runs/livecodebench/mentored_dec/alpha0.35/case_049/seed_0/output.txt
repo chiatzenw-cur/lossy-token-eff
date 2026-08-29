@@ -1,0 +1,245 @@
+<|channel|>analysis<|message|>We need max gold profit selecting subset of offers that are disjoint (intervals must be non-overlapping) with no overlapping houses. Classic Weighted Interval Scheduling with up to 100k intervals, n up to 100k, weight up to 1e3. Need O(m log m) where m = len(offers). Sort offers by end. For each offer, compute p[i] = index of last non-overlapping interval before i (end < start_i). Then DP: dp[i] = max(dp[i-1], profit[i] + dp[p[i]+1])? Use 1-indexed. We'll need to build arrays: ends sorted. Use bisect_right to find rightmost end < start_i. Complexity O(m log m). We'll compute dp array of size m+1 where dp[0]=0.
+
+Edge cases: intervals may have same end, etc.
+
+Let's produce explanation. Ensure we use standard Python libraries.
+
+Potential alternative: dynamic programming across n; but sorting by end and binary search works.
+
+Return dp[m].
+
+Let's craft solution:
+
+class Solution:
+    def maximizeTheProfit(self, n: int, offers: List[List[int]]) -> int:
+        offers.sort(key=lambda x: x[1]) # sort by end
+        m = len(offers)
+        ends = [offers[i][1] for i in range(m)]
+        dp = [0]*(m+1)
+        import bisect
+        for i in range(m):
+            start, end, gold = offers[i]
+            # find p: index of last interval ending < start
+            j = bisect.bisect_left(ends, start) - 1
+            # j is index of previous interval (0-based). If j==-1 then no previous.
+            dp[i+1] = max(dp[i], gold + (dp[j+1] if j != -1 else 0))
+        return dp[m]
+
+But check: For j==-1, dp[j+1] = dp[0] = 0. So we can use j+1 indexing. For j=-1 -> -1+1=0. But dp index 0: ok. So dp[j+1] would be 0. So we can simply use dp[j+1] as long as we guard j. If j==-1 => dp[0] correct. But j+1 then 0. So in Python, dp[-1] would be last element -> wrong. So if j==-1, use dp[0]. So we handle separately.
+
+Let's implement:
+
+for i in range(m):
+    start, end, gold = offers[i]
+    j = bisect.bisect_left(ends, start) - 1
+    if j >= 0:
+        use = gold + dp[j+1]
+    else:
+        use = gold
+    dp[i+1] = max(dp[i], use)
+
+Return dp[m].
+
+Test examples.
+
+Example 1: offers sorted: [0,0,1], [0,2,2], [1,3,2]. ends = [0,2,3]. For i=0: start=0: bisect_left(ends,0)=0 -> j=-1 => use=1, dp[1]=max(0,1)=1. i=1: start=0: same j=-1 => use=2, dp[2]=max(dp1=1,2)=2. i=2: start=1: bisect_left(ends,1)=1? ends[0]=0<1 so index 1? Actually bisect_left(ends,1) returns index 1; j=0. So use=2+dp[1]=2+1=3. dp[3]=max(dp2=2,3)=3. Answer 3.
+
+Example2: offers sorted [0,0,1], [0,2,10], [1,3,2]. i=1: start 0 again j=-1; use=10; dp[2]=max(1,10)=10. i=2: start 1: j=0; use=2+dp[1]=2+1=3; dp[3]=max(10,3)=10. Answer 10.
+
+Edge case: intervals may overlap; sorted ensures correct.
+
+Complexities fine.
+
+Let's produce final answer with explanation and code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every buyer we know
+
+* `start` – first house number he wants
+* `end`   – last house number he wants
+* `gold`  – amount of gold he will pay for *all* houses in the interval
+
+The salesman can **sell a house to at most one buyer**.
+Hence we have to choose a set of **non‑overlapping intervals** that gives the
+maximum possible sum of gold.
+
+The problem is a classic *weighted interval scheduling* problem.
+
+--------------------------------------------------------------------
+
+#### 1.  Sorting
+
+If the offers are sorted by their **end** (`end_i`), then for a fixed offer
+`i` we only have to look at earlier offers – all candidates with a
+different end are already before it in the list.
+
+--------------------------------------------------------------------
+
+#### 2.  Pre‑computing the best previous compatible interval
+
+For every offer `i` we need the last offer that ends **before** `start_i`
+(its interval does not touch `i`).
+
+```
+j = index of the last offer with end < start_i
+```
+
+Because the offers are sorted by `end`, `j` can be found with a binary
+search:
+
+```
+j = bisect_left(ends, start_i) - 1          # ends is the list of end values
+```
+
+If `j == -1` there is no compatible previous offer.
+
+--------------------------------------------------------------------
+
+#### 3.  Dynamic programming
+
+Let
+
+```
+dp[k] = maximum gold obtainable using only the first k offers in the sorted list
+        (k = 0 … m,  m = number of offers)
+```
+
+`dp[0] = 0` – no offers, no gold.
+
+For each offer `i` (`0`‑based index) we create a new state `dp[i+1]`:
+
+```
+take  = gold_i + dp[j+1]      # j is the index of the last compatible offer
+skip  = dp[i]                 # do not sell to this buyer
+dp[i+1] = max(take, skip)
+```
+
+The answer is `dp[m]`.
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the maximum possible gold.
+
+---
+
+##### Lemma 1  
+For any offer `i` the set of offers that can be sold together with
+offer `i` is a subset of the first `j` offers in the sorted list,
+where `j` is the last offer with `end < start_i`.
+
+**Proof.**
+
+All offers with a higher end are after `i` in the sorted list
+and therefore end **after** `end_i`.  
+If an offer `k` ends after `start_i`, then the intervals `k` and `i`
+overlap or touch, so both cannot be selected.  
+Thus only offers with `end < start_i`, which are exactly the first `j`
+offers, can be sold together with `i`. ∎
+
+
+
+##### Lemma 2  
+For each `i (0 ≤ i < m)` the value `dp[i+1]` computed by the DP
+equals the maximum gold obtainable using only offers `0 … i`.
+
+**Proof by induction over `i`.**
+
+*Base* `i = 0`.  
+`dp[1] = max(dp[0], gold_0) = max(0, gold_0)`.  
+The only ways to choose offers from `{0}` are: take none or take the
+only offer, so the lemma holds.
+
+*Induction step*  
+Assume the lemma true for `i-1`.  
+Consider offer `i`.
+
+*Case 1 – `i` is not chosen*  
+The best gold equals the best gold using offers `0 … i-1`,
+which is `dp[i]` by the induction hypothesis.
+
+*Case 2 – `i` is chosen*  
+By Lemma&nbsp;1 only offers `0 … j` can also be chosen
+(`j` is the last compatible offer).  
+The best gold in that case is `gold_i` + best gold of `0 … j`
+which is `gold_i + dp[j+1]` (induction hypothesis).
+
+`dp[i+1]` is the maximum of the two cases, therefore it is the optimum
+for offers `0 … i`. ∎
+
+
+
+##### Lemma 3  
+`dp[m]` equals the maximum gold obtainable from **all** offers.
+
+**Proof.**  
+By Lemma&nbsp;2, for the last index `m-1` the DP stores the optimum over
+offers `0 … m-1`.  
+All offers are in this set, thus `dp[m]` is the optimum over all offers. ∎
+
+
+
+##### Theorem  
+The algorithm returns the maximum amount of gold that the salesman can
+earn.
+
+**Proof.**  
+The algorithm outputs `dp[m]`.  
+By Lemma&nbsp;3 that value is the optimum over all offers, i.e. the
+maximum achievable gold. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+*Sorting* – `O(m log m)`  
+*Binary search* for each offer – `O(log m)` per offer, total `O(m log m)`  
+*DP* – one pass, `O(m)`  
+
+Total time complexity: **`O(m log m)`** ( `m = len(offers)` )  
+Memory usage: arrays of size `m+1`, **`O(m)`**.
+
+With constraints `m ≤ 10^5` this easily satisfies the limits.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+import bisect
+
+class Solution:
+    def maximizeTheProfit(self, n: int, offers: List[List[int]]) -> int:
+        """
+        Weighted interval scheduling on offers.
+        """
+        # Sort offers by end position
+        offers.sort(key=lambda x: x[1])          # O(m log m)
+        m = len(offers)
+        ends = [offers[i][1] for i in range(m)] # all end values
+
+        # DP array: dp[0] = 0
+        dp = [0] * (m + 1)                      # dp[i] is optimum for first i offers
+
+        for i in range(m):
+            start, end, gold = offers[i]
+            # index of last offer that ends < start
+            j = bisect.bisect_left(ends, start) - 1
+
+            # gold if we take this offer
+            if j >= 0:
+                take = gold + dp[j + 1]
+            else:
+                take = gold
+
+            skip = dp[i]                       # don't take this offer
+            dp[i + 1] = max(take, skip)
+
+        return dp[m]
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

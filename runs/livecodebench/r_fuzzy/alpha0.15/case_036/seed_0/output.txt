@@ -1,0 +1,367 @@
+<|channel|>analysis<|message|>We need algorithm: We have two arrays per index; choose one to maximize length of longest non-decreasing contiguous subsequence from constructed array. Since we can choose freely each index, to maximize longest segment we can attempt DP.
+
+We can think of constructing nums3 element by element; at each index choose value x from {a[i],b[i]}. Need to know longest ending at i that is non-decreasing. But we need to consider that choosing value may affect ability to extend previous sequence. We need at each i store two states: best ending length if we choose a[i] or choose b[i] at i. Where the value is that chosen number. Because constraints up to 1e5.
+
+Let dpA[i] = longest non-decreasing subarray ending at i where we chose nums1[i]. Similarly dpB[i] for nums2[i].
+
+Transition: Suppose we use value v = nums1[i]. To extend non-decreasing subarray from i-1, we need previous last value < = v. But we don't know which value prev had. We have two possibilities: earlier index i-1 could be chosen as a or b, with last value a[i-1] or b[i-1]. But we only need length ending at previous index, but we also want to know last value of that subarray. For DP maximum length, we can keep two: best dp with last value being a[i-1] etc.
+
+Simplify: Use DP for each index with two values: dpA[i] = max length of non-decreasing subarray ending at i using value a[i], computed as:
+
+max(1, dpA[i-1]+1 if a[i-1] <= a[i], dpB[i-1]+1 if b[i-1] <= a[i])? Actually we want non-decreasing consecutive subarray. So length ending at latest index where our previous element is at i-1 or earlier? Wait contiguous; so to ensure subarray ending at i, we are building a contiguous subarray: must be length l such that elements from positions i-l+2 and same contiguous; the previous element of subarray is position i-1, meaning we require we had subarray ending at i-1. The last element at i-1 could be either a[i-1] or b[i-1]. So we need dpA[i-1] is max length ending at i-1 with a[i-1] as chosen. And dpB[i-1] is similarly.
+
+Thus formula: dpA[i] = 1 + max( dpA[i-1] if a[i-1] <= a[i], dpB[i-1] if b[i-1] <= a[i], 0 ). Similarly dpB[i] = 1 + max( dpA[i-1] if a[i-1] <= b[i], dpB[i-1] if b[i-1] <= b[i], 0). Keep answer = max of all dpA[i], dpB[i].
+
+Edge case: i=0; dpA[i] = dpB[0] = 1.
+
+Complexities fine.
+
+Let's test with example. We'll code and test.
+
+But consider if we might skip some indices to start a new subarray. But our DP uses 1 as baseline; fine.
+
+Edge case: 0/1 fine. Complexity O(n).
+
+Test with hypothetical tricky values: Suppose a=[5,1], b=[1,2]. At i=0: dpA=1, dpB=1. i=1: a=1: check a[0]<=1? 5<1 false, b[0]<=1? 1<=1 true so dpB[0]+1=2. a=1 base: dpA2=2. dpB: v=2: a[0]<=2? 5<2 true? Wait 5<=2 false, b[0]<=2? 1<=2 true -> 1+1=2. So dpA2=2, dpB2=2. answer 3? Wait best contiguous subarray maybe length 2 (1,2). Eh maybe 2. But we counted 2 but not 3. Ok.
+
+But consider if a[i] ≤ a[i-1] but dpB[i-1] maybe bigger. That's captured via max. Complexity ok.
+
+But double-check: dpA[i] may use dpA[i-1] and dpB[i-1] but that ensures continuity.
+
+Let's test on sample 1: a=[2,3,1], b=[1,2,1]. We'll implement mental? i=0 val 2: dpA=1, dpB=1 (b=1). i=1 a=3: a[0]<=3? 2<=3 true -> dpA[0]+1=2; a[1] using b[0]?? b[0]=1<=3 true -> dpB[0]+1=2; max=2. dpA[1]=2. dpB[1] val 2: a[0]<=2? 2<=2 true -> 2; b[0]<=2? 1<=2 true -> 2; dpB[1]=2. i=2 a=1: a[1]<=1? 3<=1 false; a[1]? none; b[1]<=1? 2<=1 false; So dpB[1]? 2? Actually need <=1? 2<=1 false so 0. So dpA[2]=1. base 1+max(1? skip?) Actually we set dpA[2]=1 (no previous extends). dpB[2] val 1: a[1]<=1? 3<=1 false; b[1]<=1? 2<=1 false ; So dpB[2]=1. Answer: dpA[1]=2 or dpB[1]=2 => 2. Works. Example 2: fill quickly; but seems correct.
+
+Edge case where both at some i produce same value: no extra issue.
+
+Consider arrays of length 1e5; O(n sum). Good.
+
+Proof: This DP indeed maximizes for longest contiguous subarray where each position picks value; because we compute best length for each state at each index, and taking maximum across previous states gives best length for subarray ending at i. Thus global maximum across all i yields answer.
+
+Implementation: Use ints for dp arrays but may only need previous two values; we can store two variables prevA, prevB, updating iteratively.
+
+Pseudo:
+
+ans=1
+prevA=prevB=1
+for i from 1 to n-1:
+    aVal=nums1[i]; bVal=nums2[i]
+    newA=1
+    if nums1[i-1] <= aVal:
+        newA=max(newA, prevA+1)
+    if nums2[i-1] <= aVal:
+        newA=max(newA, prevB +1)
+    newB=1
+    for each of prev options with condition val <= bVal: newB=max(newB, prevX+1)
+    prevA,prevB = newA,newB
+    ans=max(ans,newA,newB)
+Return ans.
+
+But careful: In iterations, if we start prevA,prevB at 1 for i=0. That's before loop. but we also need actual indexing using nums1[i-2], etc. We'll need to store last values as well. But we can use arrays maybe easier.
+
+Simpler: We'll compute dp arrays numbers. We'll just store best length up to each index for each choice. Complexity memory O(n^2)? just 2 arrays. That's fine for n up to 1e5.
+
+We'll use lists dpA, dpB. Note we will use index 0..n-1.
+
+Code:
+
+def maxNonDecreasingLength(self, nums1, nums2):
+    n=len(nums1)]
+    dpA=[1]*n
+    dpB=[1]*n
+    ans=1
+    for i in range(1,n):
+        a=nums1[i]
+        b=nums2[i]
+        if nums1[i-1] <= a:
+            dpA[i] = max(dpA[i], dpA[i-1]+1)
+        if nums1[i-1] <= a? Wait we used dpA[i-1]. correct.
+        if nums2[i-1] <= a:
+            dpA[i] = max(dpA[i], dpB[i-1]+1)
+        Similarly for dpB
+        dpB[i] = 1
+        if nums1[i-1] <= b:
+            dpB[i] = max(dpB[i], dpA[i-1]+1)
+        if nums2[i-1] <= b:
+            dpB[i] = max(dpB[i], dpB[i]+1??) Actually dpB[i-1]+1
+        ans = max(ans, dpA[i], dpB[i])
+    return ans
+
+Ok.
+
+Edge: we should also consider when sorting? no, no.
+
+Should handle n up to 1? Then ans=1.
+
+Let's test quickly with small.
+
+Let's mentally run example 2.
+
+nums1=[1,3,2,1]; nums2=[2,2,3,4]
+
+n=4
+dpA: [1,1,1,1]
+dpB: [1,1,1,1]
+ ans=1
+
+i=0? we treat i=0 separate.
+
+i=1: a=3, b=2. previous a=1, b=2
+dpA[1] base 1. condition a[0]<=a[1]? yes. dpA[1] = max(0? 1, dpA[0]+1=2). Also b[0]<=a[1] 2<=2? actually 3? Wait target a[1] = 3. b[0] = 2 <=3 true -> dpB[0]+1=2. dpA[1]=2.
+dpB[1] base 1. condition a[0]<=2? 1<=2? yes -> dpA[0]+1=2. b[0]<=2? 2<=2 true --> dpB[0]+1=2. So dpA[1]=2, dpB[1]=2. ans=2.
+
+i=2: a=2, b=3.
+
+prev a[1]=3, prev a[0] etc.
+
+dpA[2] base 1. condition a[1]<=a[2]? 3<=2? false. b[1]<=a[2]? 3? Wait b[1]=2 <=2 false. Actually b[1]=2 <= 2? yes equals. So dpB[1]+1=3. answer dpA[2] =3.
+
+dpB[2] base 1. condition a[0]? Wait a[0] refers to previous index only? need p[i-1] index 1. In metadata: a[1] <= 3 -> 3 <=3 true -> dpA[1]+1=3. b[1] <=3 -> 2 <=3 true -> dpB[1]+1=3. So dpB[2]=3.
+
+ans=3.
+
+i=3: a=1, b=4.
+
+dpA[3] base 1. condition a[2] <=1? 2<=1 false. b[2]<=1? b[1]?? Wait b[2] referencing index 1: a[2] is 2. So b[2] = 3 <=1 false. dpA[3]=1.
+
+dpB[3] base 1. condition a[2] <=4? 2<=4 true -> dpA[1]? Wait dpA[2]? Actually dpA[2] +1=4? dpA[2]=3 -> +1=4. also b[2] ≤4? 3<=4 true -> dpB[2]+1 =4.
+
+ans stays 4.
+
+Return 4. Good.
+
+Edge: there might be case where dpA[i] but dpB[i-1] extends but dpA[i-1]+ (maybe bigger) but we choose max.
+
+We prove it's optimal of contiguous block.
+
+Also need to consider that we could have chosen value at index i that yields longer dp than using 1 if we intentionally break. Since we always add 1 to previous dp if extend possible else starts new.
+
+Ok.
+
+Therefore solution is DP O(n) time and O(n) memory or O(1) memory.
+
+Let's craft final answer with explanation and code.
+
+Also might want to parse using typing: from typing import List.
+
+Edge: n could be 1, answer 1.
+
+Ok produce final.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every `i ( 0 ≤ i < n )`
+
+we may put the value `nums1[i]` or the value `nums2[i]` into `nums3[i]`.
+
+For a fixed construction of `nums3` let
+
+```
+L = length of the longest contiguous non‑decreasing subarray of that construction
+```
+
+We have to obtain the biggest possible `L`.
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* The considered subarray is **contiguous** – the element at index `i-1` must be
+  the predecessor of the element at index `i`.
+* When we decide the value at position `i‑1` we already know the longest possible
+  non‑decreasing subarray ending at position `i‑1` for each of the two *choices*
+  of that position.
+* To extend a subarray to position `i` we only look at the two states that end
+  at position `i‑1`.  
+  Nothing farther back can help because the subarray must be contiguous.
+
+--------------------------------------------------------------------
+
+#### 2.  Two independent DP states
+
+```
+dpA[i] – maximum length of a subarray that ends at i
+         and uses nums1[i] as value of nums3[i]
+
+dpB[i] – same, but uses nums2[i]
+```
+
+Only the element at `i-1` matters for the transition we describe below.
+
+--------------------------------------------------------------------
+
+#### 2.1  Transition
+
+```
+dpA[i] = 1                                      // start a new subarray here
+if nums1[i-1] ≤ nums1[i] : dpA[i] = max(dpA[i], dpA[i-1] + 1)
+if nums2[i-1] ≤ nums1[i] : dpA[i] = max(dpA[i], dpB[i-1] + 1)
+
+dpB[i] = 1
+if nums1[i-1] ≤ nums2[i] : dpB[i] = max(dpB[i], dpA[i-1] + 1)
+if nums2[i-1] ≤ nums2[i] : dpB[i] = max(dpB[i], dpB[i-1] + 1)
+```
+
+The formulas say:  
+*`dpA[i]` can only grow by one of the two previous subarrays
+ if the last element of that subarray is not larger than the element we choose for
+ `i`.*  
+
+`dpA[0] = dpB[0] = 1` – a subarray of length `1` can start at the very first position.
+
+--------------------------------------------------------------------
+
+#### 3.  Result
+
+The answer is the maximum value found in both DP tables:
+```
+answer = max_i ( dpA[i], dpB[i] )
+```
+The algorithm runs in `O(n)` time and `O(n)` memory (or `O(n)` where we only keep
+the previous row if we wish).
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the maximum possible length of a
+non–decreasing subarray.
+
+---
+
+##### Lemma 1  
+For every index `i`, `dpA[i]` equals the maximum length of a
+non‑decreasing subarray that ends at `i` and whose last element is `nums1[i]`.
+The same holds for `dpB[i]`.
+
+**Proof.**
+
+We use induction over `i`.
+
+*Base `i = 0`*  
+No previous element exists.  
+The subarray can only start at `0`.  
+Both `dpA[0] = dpB[0] = 1` satisfy the statement.
+
+*Induction step*  
+Assume the statement holds for all indices `< i`.  
+Induction hypothesis gives us the correct lengths for the subarrays
+ending at `i-1` with either choice of value `i-1`.
+
+Take `dpA[i]`.  
+Any subarray that ends at `i` with value `nums1[i]`
+must either have started at `i` (length `1`) or it must extend
+a subarray ending at `i-1`.  
+The last element of the previous subarray must be `≤ nums1[i]`.
+
+The transition considers exactly the two possibilities:
+
+* extend the subarray that ended at `i-1` using `nums1[i-1]`  (if allowed)
+* extend the subarray that ended at `i-1` using `nums2[i-1]`  (if allowed)
+
+Both possibilities are taken into account with `max()`.
+Therefore the dynamic programming value equals the optimum for this
+state.  
+The same argument applies to `dpB[i]`. ∎
+
+
+
+##### Lemma 2  
+For every position `i` there exists an optimal construction of `nums3`
+whose longest non‑decreasing subsequence ends at `i` whose length is exactly  
+`max( dpA[i] , dpB[i] )`, and no longer subarray ending at `i` exists.
+
+**Proof.**
+
+By Lemma&nbsp;1 there is a construction that achieves length `dpA[i]`
+when we choose `nums1[i]` and a construction that achieves length `dpB[i]`
+when we choose `nums2[i]`.  
+The maximum of these two length is therefore attainable.
+
+If a longer subarray ending at `i` existed, its last value would be
+either `nums1[i]` or `nums2[i]` and would contradict the maximality of `dpA`
+or `dpB` for `i`.  Hence no longer subsequence ending at `i` exists. ∎
+
+
+
+##### Lemma 3  
+Let `Ans` be the value returned by the algorithm.
+`Ans` equals the maximum possible length of a non‑decreasing subarray of
+any construction of `nums3`.
+
+**Proof.**
+
+By Lemma&nbsp;2, for every index `i` the length of the best subarray ending at
+`i` is exactly `max(dpA[i], dpB[i])`.  
+The algorithm returns the maximum over all indices, i.e.  
+`Ans = max_i max(dpA[i], dpB[i])`.  
+Thus `Ans` is the length of the longest non‑decreasing subarray that appears
+in some construction from the DP.
+
+Conversely, suppose there exists a construction giving a
+subarray longer than `Ans`.  
+Let `j` be its last index.  
+The length of that subarray equals `max(dpA[j], dpB[j])`, but by definition
+`Ans` is *at least* the maximum of these values, a contradiction. ∎
+
+
+
+##### Theorem  
+`maxNonDecreasingLength` returns the maximum possible length of a
+non‑decreasing subarray of any array `nums3`
+obtained by choosing, for each `i`, either `nums1[i]` or `nums2[i]`.
+
+**Proof.**
+
+By Lemma&nbsp;3 the algorithm’s answer equals the longest length achievable
+with any valid construction, i.e. the required optimal value. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+```
+Time   :  O(n)      (single pass over the arrays)
+Memory :  O(n)      (two auxiliary arrays of length n)
+           (can be reduced to O(1) by keeping only two previous values)
+```
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def maxNonDecreasingLength(self, nums1: List[int], nums2: List[int]) -> int:
+        n = len(nums1)
+        if n == 0:
+            return 0
+
+        dpA = [1] * n          # dpA[i] – best length after choosing nums1[i]
+        dpB = [1] * n          # dpB[i] – best length after choosing nums2[i]
+
+        ans = 1
+        for i in range(1, n):
+            a = nums1[i]
+            b = nums2[i]
+
+            # consider dpA[i]
+            if nums1[i - 1] <= a:
+                dpA[i] = max(dpA[i] , dpA[i - 1] + 1)
+            if nums2[i - 1] <= a:
+                dpB_prev = dpB[i - 1]          # keep readability for the next line
+                dpA[i] = max(dpA[i] , dpB_prev + 1)
+
+            # consider dpB[i]
+            if nums1[i - 1] <= b:
+                dpA_prev = dpA[i - 1]
+                dpB[i] = max(dpB[i], dpA_prev + 1)
+            if nums2[i - 1] <= b:
+                dpB[i] = max(dpB[i], dpB[i - 1] + 1)
+
+            ans = max(ans, dpA[i], dpB[i])
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above
+and conforms to the required function signature.

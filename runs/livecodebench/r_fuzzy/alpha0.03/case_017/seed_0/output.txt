@@ -1,0 +1,277 @@
+<|channel|>analysis<|message|>We need to understand the problem: We're given 2D integer array "nums" with varying number of columns per row. Actually matrix is rectangular? Input examples show same length as first row: row1 4, row2 4, etc. Constraints mention 1 <= nums[i].length <= 500, but not necessarily equal. But we can assume each row may have different length? But algorithm: For each operation, from each row remove the largest number; we then choose the maximum among those removed and add to score. Then continue until matrix becomes empty. Each operation reduces each row by one element (the max). After some operations, each row may become empty; once all rows empty, stop.
+
+Observations: We need to compute sum of row-wise maximums of each column extraction? Let's analyze.
+
+We have matrix with row R and columns varying. The removal step: For each row, we remove its maximum value. This essentially picks maximum values per row. Then we take the maximum among those to add to score. Suppose we consider each column extracted over operations removed. For each operation t (1-indexed), we remove one element from each row, producing a removed set of size #rows. Among them choose the max and add to score. This new operation repeats until all rows emptied.
+
+Suppose we sort each row descending. Because we always remove the largest in each row, we will essentially process each row's elements in descending order, picking each element once. For each row r, we have sorted descending array A_r[0] (largest) >= A_r[1] >= ... >= A_r[n_r-1]. Operation t picks A_r[t-1] (if t-1 < n_r) from row r, else nothing? But algorithm says we remove an element from each row every operation. If a row becomes empty earlier, then there is no element removed from that row in later operations? But step says "From each row in the matrix, select the largest number". If row is empty no selection. So after some operations all columns may have different lengths. However we continue until the matrix becomes empty: i.e., when all rows are empty. So at each operation we consider all rows that are still non-empty, remove their current largest numbers, gather them, and then we take the maximum among them and add to score. But if row empties, subsequent operations don't consider that row.
+
+Thus we can pre-sort each row descending. Then, for operation t, we iterate over all rows where index t-1 < length. For each such row, we get element A_r[t-1]; we compute maximum across those, add to score.
+
+We must consider case where a row will run out earlier: at operation t > len(row), skip it. So we can compute for each row, for each index i, we consider that element; we want to sum over positions i all of the maximum among that column across rows that have that index.
+
+So effectively we have multiple sorted lists (descending). In each column (index i), we consider all elements A_r[i] where i < len(row). We need to compute the maximum of those elements for each column index i. but note that operation's maximum among removed values may differ if more rows have values at that position. But the maximum of all A_r[i] across rows will be the maximum of the ith elements across all rows that have at least i+1 elements. That is correct: because for each row, at operation i+1, the removed element is A_r[i]. The overall maximum across all removed is max_{r: len(r)>i} A_r[i].
+
+Thus the score is sum over i of max over rows of A_r[i] (for rows where len>i). Equivalent to: We need to compute the maximum across rows for each index i of their sorted descending lists.
+
+Because each row sorted descending ensures that for each row, elements are decreasing.
+
+So algorithm: For each row, sort descending. Keep a dictionary or map of index -> maximum seen so far. Iterate each row; for i, val in enumerate(row_sorted): if i not in map or val > map[i]: map[i]=val. After all rows processed, sum of map values equals result.
+
+Complexities: Each row up to 500, rows up to 300 => 150k elements. Sorting each row individually; overall time O(sum n_i log n_i). Will fit.
+
+Edge Cases: The rows may not have same length. Implementation: Use default dict of int with initial value 0. But numbers up to 1e3. So zero ok as default.
+
+Return final result.
+
+Let's test with example.
+
+nums = [[7,2,1],[6,4,2],[6,5,3],[3,2,1]].
+
+Sorted each desc:
+
+[7,2,1]; [6,4,2]; [6,5,3]; [3,2,1] all same.
+
+i=0: max(7,6,6,3)=7
+i=1: max(2,4,5,2)=5
+i=2: max(1,2,3,1)=3
+sum=15.
+
+Edge: Single row [1], sorted [1], map[0] =1 => sum=1.
+
+Let's also test with second row lengths
+
+Example: [[1,2],[3]]:
+
+Row1 sorted [2,1]
+Row2 sorted [3]
+
+i=0: max(2,3)=3
+i=1: only Row1 has val 1 => max 1
+score 4.
+
+simulate operations: step1 remove 2, 3 => max 3; step2 remove 1 only; max 1 => 4. Works.
+
+So solution is correct.
+
+Let's craft final solution code:
+
+def matrixSum(self, nums):
+    from collections import defaultdict
+    max_at_index = defaultdict(int)  # default 0
+    for row in nums:
+        row_sorted = sorted(row, reverse=True)
+        for i, val in enumerate(row_sorted):
+            if val > max_at_index[i]:  # this will override default 0 as val >= 0
+                max_at_index[i] = val
+    return sum(max_at_index.values())
+
+Complexities O(n log max_n) memory O(max_length). Where max_length = max len(row). Good.
+
+Edge: val 0 or negative? constraints 0 <= val <= 1e3. Using dict: default 0 may cause not updating when val==0. But max_at_index[i] initially 0; val could be 0, but that's fine. We only update if val > existing. For val==0, if existing is 0, not updated, but sum 0 anyway. Works.
+
+But worry: If initial default 0 and there might be negative numbers? Not possible.
+
+Return sum over dict values; but because keys sorted ascending, but doesn't matter.
+
+Also we might want to handle possibility that map[i] may remain 0 if all rows length <=i? But if i gets a key only when some row has present value. So all keys are present with value. No zero leftover.
+
+Should also consider bigger N. Sorting each row ascending? descending; We may use max-heap but sorting is fine.
+
+Let's also compute result as long; since values <= 1000 and number of columns <=500, number of operations <= 500? Wait number of columns might be 500 at most: Because each row length <=500. But different rows have different lengths; maximum index considered is max length -1. So sum <= 1000*500 = 5e5; int fine.
+
+Testing: Use "from typing import List" maybe.
+
+Edge Cases: zeros rows not allowed; row size >=1. Constraint 1 <= nums[i].length ensures at least 1.
+
+Will pass.
+
+Let's craft final code with proper imports.
+
+I'll provide explanation too.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every operation
+
+1. from each *non‑empty* row we take its current largest element,
+2. among the taken elements we add the largest one to the score,
+3. the taken elements are removed from the matrix.
+
+The process stops when all rows are empty.
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* In a row the element we take in the first operation is its maximum,
+  in the second operation the second maximum, etc.  
+  → For every row we always pop the elements in **decreasing order**.
+
+* Suppose we sort each row in non‑increasing order
+
+```
+row = [a1, a2, a3, …]   (a1 ≥ a2 ≥ a3 ≥ …)
+```
+
+During operation `k` we will take `ak` from this row (if the row still
+has that element).
+
+* Let `i = k-1` be the index (0‑based) of element taken in operation `k`.  
+  Every row that still has at least this many elements contributes its
+  `i`.
+  The element added to the score at this operation is
+
+```
+max{  row_r[i]  |  r has length > i }           (1)
+```
+
+  The score of the whole game is simply the sum of the maxima of
+  `i`‑th elements across all rows.
+
+--------------------------------------------------------------------
+
+#### 2.  Computing the answer
+
+Algorithm
+
+```
+max_at_index = empty map : index -> current maximum
+
+for each row in nums:
+    sorted_row = row sorted in decreasing order
+    for i, val in enumerate(sorted_row):
+        max_at_index[i] = max(max_at_index.get(i,0), val)
+
+answer = sum( max_at_index[i] for each i )
+```
+
+* `max_at_index[i]` keeps the maximum of the `i`‑th elements of all
+  processed rows that have such an element.
+* Sorting each row individually costs `O(n_r log n_r)` where `n_r`
+  is its length.
+  With at most 300 rows and 500 columns the total amount of work is
+  tiny (`≤ 1.5 × 10⁵` numbers).
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the score described in the
+statement.
+
+---
+
+##### Lemma 1  
+After sorting a row in non‑increasing order, its element at position
+`i` (0‑based) is the element that would be removed from that row in
+the `(i+1)`‑st operation, provided the row has more than `i` elements.
+
+**Proof.**
+
+All removals from a row are always its current largest remaining
+element.
+Sorting places the elements from the largest to the smallest.
+Thus the first element of the sorted row is the one removed in first
+operation, the second for the second operation, and so on, until the row
+exhausts its elements. ∎
+
+
+
+##### Lemma 2  
+For every index `i` (`0 ≤ i < max_len`),  
+`max_at_index[i]` (after processing all rows) equals  
+`max{  row_r[i]  |  row_r has length > i }`.
+
+**Proof.**
+
+During the loop over a row we visit each index `i` of its sorted
+representation exactly once and set
+`max_in_at_index[i] = max(current_value, row_r[i])`.  
+Consequently, after all rows are processed, `max_at_index[i]` is the
+maximum of all values `row_r[i]`
+for which the row has at least `i+1` elements – exactly the set
+described in the lemma. ∎
+
+
+
+##### Lemma 3  
+Let `S_i` denote the element added to the score in operation `i+1`.  
+Then `S_i = max_at_index[i]`.
+
+**Proof.**
+
+By the game rules, operation `i+1` removes from each non‑empty row
+its current largest element.  
+By Lemma&nbsp;1, for a row that still has more than `i` elements this
+removal is exactly the element at position `i` of its sorted order.
+Therefore the set of removed elements in operation `i+1` is  
+`{ row_r[i] | len(row_r) > i }`.  
+The largest of them, i.e. `S_i`, is precisely the maximum of this set,
+hence equal to the value computed in Lemma&nbsp;2. ∎
+
+
+
+##### Theorem  
+The algorithm returns the final score of the game.
+
+**Proof.**
+
+The score of the game is the sum of all values added in each operation:
+`score = Σ S_i` over all `i` that existed during the game.
+By Lemma&nbsp;3 we have `S_i = max_at_index[i]`.  
+The algorithm returns `Σ max_at_index[i]`, which is exactly `score`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+Let `N = Σ len(nums[i])` be the total number of elements  
+(`N ≤ 300 × 500 = 150 000`).
+
+*Sorting* each row: `O(N log M)`, where `M ≤ 500`.  
+With the given limits this is far below one millisecond.
+
+*Building `max_at_index`*: each element is processed once → `O(N)`.
+
+*Summation*: `O(max_len)` where `max_len ≤ 500`.
+
+Hence:
+
+```
+Time   :  O(N log M)   ( ≤ 150k * 9 ≈ 1.4 × 10^6 operations )
+Memory :  O(max_len)   ( ≤ 500 integers )
+```
+
+Both are easily within limits.
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+from collections import defaultdict
+from typing import List
+
+
+class Solution:
+    def matrixSum(self, nums: List[List[int]]) -> int:
+        """
+        Computes the score described in the problem.
+
+        Each row is sorted in descending order.  For every position i we
+          keep the maximum element among all rows that have that i-th
+          element.  The answer is the sum of these maxima.
+        """
+        max_at_index = defaultdict(int)          # index -> current maximum
+        for row in nums:
+            sorted_row = sorted(row, reverse=True)
+            for i, val in enumerate(sorted_row):
+                if val > max_at_index[i]:
+                    max_at_index[i] = val
+
+        return sum(max_at_index.values())
+```
+
+The code follows exactly the algorithm proven correct above
+and conforms to the required function signature.

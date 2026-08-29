@@ -1,0 +1,981 @@
+<|channel|>analysis<|message|>We need longest substring of word with no forbidden substring. word length up to 1e5, forbidden number up to 1e5, each length up to 10. So need efficient algorithm.
+
+This is similar to longest substring without containing forbidden patterns. It's like find longest substring with no forbidden pattern of up to length 10. Could let's compute all occurrences of forbidden substrings in word via building a trie or Aho-Corasick automaton, then for each occurrence we know the interval [start, end] of forbidden substring. We cannot include any substring that contains that interval. Equivalent to: need longest segment of indices where no forbidden substring fully lies inside. But substring could contain partial match? The constraint: none of its substrings are present; so if substring contains forbidden substring, it's invalid. So as long as substring contains a forbidden occurrence completely, it's invalid. So we need longest segment in word where no forbidden interval occurs fully inside that segment. But we must consider overlapping intervals.
+
+Given all forbidden intervals, the segments that are "clean" are those where no interval has both ends inside. That is, we need to find maximum length contiguous area which does not contain any full occurrence of forbidden pattern. So we can compute positions where substrings start, and each start index i marks a forbidden substring of length L covering [i, i+L-1]. For a given index j, we need to know if any interval exists that starts >= j_start and end <= j_end? Wait.
+
+Consider algorithm: Let n = len(word). We'll generate all occurrences of forbidden patterns using Aho-Corasick. Each occurrence is [start,end] inclusive. We can process sorted by start increasing. We want longest window [l,r] such that no occurrence lies entirely inside [l,r]. That is, for any occurrence [s,e], not (l <= s and e <= r). Equivalent to for each l, we need maximal r such that no interval fully inside.
+
+This is akin to: we have a set of intervals. We want the longest stretch with no interval fully inside. If intervals are short <=10, they might overlap. But possible to compute using sliding window:
+
+We can maintain a variable currentMaxEnd? Let's think. Suppose we are scanning left index l from 0 to n-1. For each l, the minimal violating window is earliest interval that starts >= l, and has end <= r. For l to be valid up to r, we must ensure that for all occurrences with start >= l, end > r. So r should be at least before the earliest end of any occurrence that starts at >= l. But that is the same as we need to find the earliest occurrence that starts >= l; let that have end = e. Then r can be at most e-1. However there might be multiple intervals starting at same or later positions. But any later start could produce smaller end.
+
+Thus we can compute for each start position l, the earliest forbidden end among intervals whose start >= l. We'll call minEndAfter[l] = min end among occurrences with start >= l. Since intervals length <=10, we can compute occurrences.
+
+Simpler: compute for each position i, the earliest end of a forbidden substring that starts at i. Because l <= start of interval. Among intervals starting at >= l, we need the min end. So we can precompute array minEndFrom[i] that is min ( end ) over all intervals starting at positions >= i. But naive O(n^2).
+
+But we can compute minEndFrom by scanning from right to left: maintain minEnd variable initially inf; for i from n-1 down to 0: minEnd = min(minEnd, minimal end among intervals that start at i). Then minEndFrom[i] = minEnd. That works. Because intervals starting at i can be multiple; we take min end among them. Then minEndFrom[i] gives minimal end among intervals starting at >= i.
+
+Now for window l to r (inclusive), we need that minEndFrom[l] > r. Because if there's an interval starting at >= l with end > r, no conflict. But we also must consider intervals that start inside but end <= r? Wait if start < l but end <= r, that interval entirely inside? Its start isn't >= l; start < l, so it would be partially outside, not entirely inside. That substring would cross left boundary. Thus not forbidden.
+
+So condition is minEndFrom[l] > r. Equivalent to longest r = min(minEndFrom[l], n-1) - 1? Wait we need largest r such that minEndFrom[l] > r. So r = min(minEndFrom[l] - 1, n-1). If minEndFrom[l] is inf, r = n-1. So length = r - l + 1.
+
+Thus for each l, compute minEndFrom[l] and compute length. Answer is max over l.
+
+We also need to consider empty substring. But maximum length will be at least 0. Use n=1e5 fine.
+
+Edge case: If there is a forbidden substring that starts at l and ends at l, i.e., length 1, then minEndFrom[l] = l (since end=l). Then r=l-1 -> negative. So length 0. That means no valid substring starting at l of positive length. That's fine.
+
+Implementation steps:
+
+1. Build Aho-Corasick automaton for forbidden patterns: Node array of size maybe sum of lengths <= 1e5 * 10 = 1e6? Actually forb list length up to 1e5, each length up to 10, so total nodes <= 1e6.
+
+Will handle each pattern insertion by adding nodes and recording length at terminal nodes.
+
+2. Build fail links.
+
+3. Run through word, at each position track node matched; for each matched node (including output via suffix links) we record an occurrence end at current index. Because we want occurrences. Since each pattern length <=10, we can use for each node we can store maybe list of pattern lengths. So we can when we match node, we can iterate through output patterns.
+
+But to record occurrences we only need ending index and start index. We can compute start = end - len(pattern) +1. We can store minimal end for each start.
+
+We may have many occurrences; worst-case: word length 1e5; each position may have up to many patterns? At worst if patterns overlap heavily, but we bound length <=10. But patterns could be like "a", "aa", "aaa", ..., up to 10 lengths. Each position could have up to length 10 matches. So 1e5*10=1e6 occurrences. Acceptable.
+
+We can store for each start, the minimal end among occurrences starting at this start: we maintain array minEndAtStart[i] = INF initialized. When we find occurrence of pattern length L ending at pos i, start = i-L+1. So we update minEndAtStart[start] = min(minEndAtStart[start], i).
+
+4. After scanning, we compute minEndFrom: array of size n+1 maybe? For i from n-1 downto 0: minEnd = min(minEnd, minEndAtStart[i]) ; minEndFrom[i] = minEnd
+
+Use INF large (n+5). minEndFrom array length n+1; last element minEndFrom[n] = INF, but we only need 0..n-1.
+
+5. Iterate l from 0 to n-1: if minEndFrom[l] is INF: r = n-1 else r = minEndFrom[l]-1. compute len = r - l + 1 (if r>=l). Update max.
+
+6. Complexity O(n + totalNodes + totalMatches).
+
+Edge Cases: Overlap characteristics: Suppose two intervals start at same position, we keep min end. Good.
+
+Let's test simple example:
+
+Word="cbaaaabc", forb patterns ["aaa","cb"]
+
+Occurrences: "cb" at positions 0-1 => start 0, end 1.
+"aaa" at positions 2-4 (start 2, end 4) and maybe 3-5? Actually "aaa" overlapping: positions 3-5? word: c b a a a a b c. "aaa" at start 2: indices 2( 'a'),3('a'),4('a'), also start 3: indices 3,4,5 -> 3-5. start 4: 4,5,6? 4-6 'a a b' -> not "aaa". So we have two start positions: 2->4, 3->5.
+
+Thus minEndAtStart: [1, INF, 4,5, INF,...]. n=8.
+
+Compute minEndFrom: from right to left: init INF.
+
+i=7: minEnd=INF -> minEndFrom[7]=INF.
+i=6: minEnd=INF
+i=5: minEnd=INF
+i=4: minEnd=INF
+i=3: minEnd=min(INF,5)=5 -> minEndFrom[3]=5
+i=2: minEnd=min(5,4)=4 -> minEndFrom[2]=4
+i=1: minEnd=4 -> minEndFrom[1]=4
+i=0: minEnd=min(4,1)=1 -> minEndFrom[0]=1
+
+Now compute max length:
+
+l=0: minEndFrom[0]=1 => r=0 => length=1 -> "c"
+
+l=1: minEndFrom[1]=4 => r=3 => length=3? 3-1+1=3 => substring "baa"? Wait l=1 r=3 => "baa" length 3 (positions 1,2,3). Good.
+
+l=2: minEndFrom[2]=4 => r=3 => length=2 => "aa" length2? l=2 r=3 => "aa". Wait but 2-3 length 2, yes.
+
+l=3: minEndFrom[3]=5 => r=4 => length=2 => "aa"? But includes substring 3-4 "aa" which is start of "aaa" at 3-5; but it ends before e=5 so not fully contained. Valid.
+
+l=4: minEndFrom[4]=INF => r=7 => length=4. substring "aabc"? Let's test: l=4 r=7 => indices 4,5,6,7: "aabc"? Actually indices: 4='a',5='a',6='b',7='c' => "aabc". That includes no forbidden substrings. length 4.
+
+Matches expected answer 4. Good.
+
+Check example 2:
+
+Word="leetcode": letters l e e t c o d e.
+
+Forbidden ["de","le","e"].
+
+Occurrences:
+
+"de" at 6-7: positions 6('d'),7('e').
+
+"le" at 0-1: start 0 end1.
+
+"e" at indices 1,2,7: start=end.
+
+So minEndAtStart:
+
+index0: end1 for "le" -> minEndAtStart[0]=1.
+index1: "e" occurs length1: end1 => minEndAtStart[1]=1
+index2: "e": end2 => minEndAtStart[2]=2
+index7: "e": end7 => minEndAtStart[7]=7
+index6: "de": end7 => minEndAtStart[6]=7
+
+We also may have "le" at? not multiple.
+
+Compute minEndFrom:
+
+n=8.
+
+i=7: minEnd=7 -> minEndFrom[7]=7
+i=6: minEnd=min(7,7)=7; minEndFrom[6]=7
+i=5: minEnd=7; minEndFrom[5]=7
+i=4: minEnd=7; minEndFrom[4]=7
+i=3: minEnd=7; minEndFrom[3]=7
+i=2: minEnd=min(7,2)=2; minEndFrom[2]=2
+i=1: minEnd=min(2,1)=1; minEndFrom[1]=1
+i=0: minEnd=min(1,1)=1; minEndFrom[0]=1
+
+Now evaluate:
+
+l=0: minEndFrom[0]=1 -> r=0 -> length 1 => "l".
+
+l=1: minEndFrom[1]=1 -> r=0? minEndFrom[1]-1 =0 => r=0 < l => invalid length 0.
+
+l=2: minEndFrom[2]=2 -> r=1 -> r<l => length 0.
+
+l=3: minEndFrom[3]=7 -> r=6 -> length 4 (3-6) => "tcod" substring. Good.
+
+l=4: minEndFrom[4]=7 -> r=6 -> length 3 => "cod".
+
+l=5: minEndFrom[5]=7 -> r=6 -> length 2 "od".
+
+l=6: minEndFrom[6]=7 -> r=6 -> length 1 "d".
+
+l=7: minEndFrom[7]=7 -> r=6 -> length 0.
+
+Max length 4. Works.
+
+Edge Cases: If forbidden contains string with length 0? but minimum length 1. The function should handle duplicates.
+
+Complexity: Build automaton and run scanning. Node arrays of size <= sum(len(forbidden)). So up to 1e6 nodes. Each node will have array of 26 transitions maybe memory heavy. Instead we can use dictionary or list of size 26 with ints? 1e6*26 ~ 26 million ints -> may be heavy but okay maybe memory 200 MB. Use dictionary to be safer. But usually Python might struggle with memory. But we can use array of 26 ints per node (like list of ints). Use list of lists; each node list of 26 ints. 1e6*26 ~ 26 million ints ~ 208MB for ints only. Too high. Use dictionary approach? Each node dict mapping char to int, for word length 1e5, patterns up to 10^5, each pattern length <=10. So total edges <= 1e6; we can store adjacency via dictionary mapping char index to next node. Better: use a list of arrays of length 26 but allocate as list of small lists maybe not needed? Alternative: use array of arrays as list of lists of ints of length 26 but default -1; we'd allocate size nodes*26 each int; big memory. Instead use dictionary.
+
+Another approach: we can implement using array and from char index to next node using dictionary mapping char to node index. Each node store dict of children; fail link; output list; can use python dictionary (hash) overhead maybe bigger but edges only 1e6. It's okay.
+
+Implementation details:
+
+class Node:
+
+    def __init__(self):
+        self.next = {}
+        self.fail = 0
+        self.output = []  # list of pattern lengths
+
+But we want to also store minimal end per start, using pattern lengths. During processing: for each node, when we match, we need to iterate through the output list of pattern lengths. We might encode pattern length as integer.
+
+Aho-Corasick building:
+
+- root = 0
+- nodes = [Node()]
+
+Insert each pattern:
+
+for ch in pattern:
+  if ch not in nodes[node].next: create new node
+  node = nodes[node].next[ch]
+After loop, nodes[node].output.append(len(pattern))
+
+After building all patterns, we construct fail links via BFS:
+
+queue = collections.deque()
+for ch, nxt in nodes[0].next.items():
+    nodes[nxt].fail = 0
+    queue.append(nxt)
+
+While queue: r = queue.popleft()
+for ch, nxt in nodes[r].next.items():
+    queue.append(nxt)
+    f = nodes[r].fail
+    while f and ch not in nodes[f].next:
+        f = nodes[f].fail
+    nodes[nxt].fail = nodes[f].next[ch] if ch in nodes[f].next else 0
+    nodes[nxt].output += nodes[nodes[nxt].fail].output
+
+But we can also propagate outputs.
+
+Processing word:
+
+node = 0
+for i, ch in enumerate(word):
+    while node and ch not in nodes[node].next:
+        node = nodes[node].fail
+    if ch in nodes[node].next:
+        node = nodes[node].next[ch]
+    else:
+        node = 0
+    for length in nodes[node].output:
+        start = i - length + 1
+        minEndAtStart[start] = min(minEndAtStart[start], i)
+
+But we need minEndAtStart array length n (1e5). Use list of large int INF.
+
+Return maxLen.
+
+Edge case: overlapping patterns can produce same start multiple times; we use min.
+
+Edge case: if there is first transformation of missing char at current node edges? Implementation standard.
+
+Testing with small examples.
+
+Potential performance: Using Python dict for transitions likely fine.
+
+But we can optimize by using array of dict of ints mapping char index in 0-25. Use dictionary of int to next node. char we'll use ord(c)-97.
+
+Implementation details:
+
+- Use list of dict: children: dict[int] -> int.
+
+- For fail computation: use while loop and dictionary.
+
+Edge case: root can have missing transition; BFS step: treat root children only.
+
+We also need to store outputs as list of pattern lengths.
+
+After building, we process word.
+
+Time complexity: scanning each char, each char may trigger loops for fail but overall O(n*alphabet) moderate.
+
+Complexities: O(n + total_nodes + total_matches). Good.
+
+Potential improvement: Instead of building output list for each node with collecting all pattern lengths from fail chain, we could process during scanning by following fail chain until root: but that would degrade to O(n*m) worst-case. So better to propagate outputs during fail link building.
+
+Implementation details: In BFS we propagate outputs: node.outputs += nodes[node.fail].outputs; So each node can have multiple pattern lengths.
+
+Edge case: pattern length 0? Not present.
+
+Edge: Any pattern may be repeated; duplicates will produce duplicates lengths; but we can treat duplicates by adding len pattern again, but that'll potentially cause multiple same length outputs: we can ignore duplicates by having set; but duplicates don't harm for minEndAtStart; we may record same start twice; min run will produce same value. But duplicates may be unnecessary overhead; but number of duplicates is small relative to 1e5.
+
+Now algorithm final:
+
+- read word, forbidden.
+
+- Build automaton.
+
+- Compute minEndAtStart array.
+
+- Compute minEndFrom.
+
+- Compute maxLen.
+
+Return maxLen.
+
+Double-check with earlier examples.
+
+Edge: if no forbidden substring appears in word at all: then minEndAtStart all INF. minEndFrom all INF. Then each l r= n-1 => len n-l. So max length n. Example: word = "abc", forbidden ["z"] -> ans 3. Works.
+
+Complexities: memory for nodes: each node has dict children (maybe small). For each inserted pattern length <=10, each node's children dict maybe 1-3. Node count about <=1e6. Each node dictionary overhead heavy? But typically 1e6 nodes may use too much memory. But we can reduce by using simpler structure: implement using array of dict: but at 1e6 nodes that's huge.
+
+But real constraints: forbidden length up to 1e5, each <=10, so total nodes <=1e5*10 = 1e6. That's maximum. Maybe memory high but still maybe okay? But 1e6 nodes may be high for Python.
+
+We need to reduce memory: we can note that each node needs to store transitions for char set; we can store as arrays of int list of length 26 using a list of lists where each node's next is list of 26 ints. That's more memory but maybe still heavy but simpler: 1e6 * 26 * 4 bytes ~ 104MB for ints if using array.array('i'). But Python list of ints overhead huge. So not good.
+
+Alternative: Use dynamic array for edges: use a list of dict but create only nodes up to char transitions we used: Actually we have at most 1e5*10 edges = 1e6. Each node may have small number of children: dictionary overhead per node maybe 72 bytes? times 1e6 = 72MB, plus edges. Might be high but maybe still okay? Might exceed memory limit.
+
+But we can optimize by using cunning: we could convert all forbidden patterns to a suffix array? Actually we can use simple approach: For each position, we can test all forbidden patterns up to length 10 by substring search using string slicing; O(n*10*|forbidden|) too big.
+
+Alternative: Use "rolling hash" to compute all substrings of length up to 10, and check if they are in forbidden set. But we still need to find occurrences occurrences; we could generate all substrings of length up to 10 from word and check membership. That's O(n*10) substring extraction, each up to length 10; we can use precomputed hash to check membership. That might be simpler and avoid large Aho-Corasick memory.
+
+Let's consider that: For each substring length L from 1 to 10: we compute hash of substring word[i:i+L] (O(n)). If it exists in forbidden set of that length, we record occurrence start i, end i+L-1. But we also need to handle all L. Complexity O(n*10) = 1e6 operations, fine. Memory for forbidden set: up to 1e5 patterns length <=10, so about 1e5 strings. However we can store them in dictionary hashed: but we need to query by substring string. Each substring extraction may copy string length up to 10; O(n*10) memory for strings for each check. But we can compute by rolling hash to compare to hashed patterns, but still need a map from hash to boolean? There is risk of collisions though.
+
+But we can also use Python set of strings; substring extraction for each position for each length L will produce new string of length L. That's 1e6 substrings each max length 10; 1e6 * 10 char, 10MB of data, but each substring is a new string object. That may be heavy but still maybe okay given memory 512MB. But generating many temporary objects may be overhead.
+
+We can use hashing: Precompute prefix hash for string to compute substring hash in O(1). Store forbidden set hashed per length as set of hashes; we also need to handle collisions maybe improbable but we could store tuple of hash and actual string in dictionary mapping to bool or maybe set of all substrings.
+
+But some languages may not guarantee uniqueness of hash; use double hash. But Python's hashing is okay but we can't rely on collisions minimal. But we can also use dictionary mapping substring string to True; substring extraction small. Might be fine.
+
+But generating up to 1e6 substring strings maybe heavy but memory can be less than 10MB? Actually each string object overhead is 49 bytes? produce 1e6 strings ~ 49MB plus characters. 49MB void maybe heavy. But the numbers: 1e6* 49  bytes ~ 49MB plus char storage. But each string of length <=10 has extra overhead. Might be ~65 bytes each. That's 65MB. Several million; maybe heavy but acceptable in 512MB? 65MB if 1e6 objects 65 bytes each. plus overhead of sets: Each set entry adds overhead. This may go near 200MB. Might still be okay.
+
+But we can optimize by using an Aho-Corasick but optimized memory, but dictionary per node might still be heavy.
+
+Alternate approach: Build a trie of forbidden patterns but not need fail links; because each pattern length <=10, we can for each index in word, attempt to match pattern up to 10 forward using the trie starting at that index. Complexity: For each index i, we match up to 10 letters, each step requiring a lookup in children dict. So O(n*10). The trie of forbidden patterns can be stored as dictionary of dictionary as we build, edges count up to 1e6. That is the same as earlier but we avoid failure links.
+
+We only need to know if any pattern matches fully. That detection we can do by traversing.
+
+Implement building trie: root with dict children. For each pattern, insert.
+
+Then scanning: for each start position i (python loops). We set node = root. For j from i to min(n-1, i+9). On each j: char = word[j]; if choose char not in node.children: break. else node = node.children[char]; if node.is_word (true): we record occurrence end j. This is typical trie search.
+
+This might be faster memory wise? Node representation: dictionary of children, and maybe bool flag. Node count ~1e6; each node dict small; overhead maybe 72 bytes per node. That is 72MB. Additional memory for word etc. Might be okay.
+
+Time: For each start i; we might break early if char mismatch; on average maybe moderate. But worst-case word all 'a', patterns all 10 'a's. For each i we might go 10 steps. So complexity ~10*n=1e6.
+
+Thus we might use this simple method.
+
+Implementation details:
+
+class Node:
+    def __init__(self):
+        self.children = {}
+        self.is_word = False
+
+Insert pattern.
+
+During scanning: for i in range(n):
+    node = root
+    for j in range(i, min(n, i+10)):
+        ch = word[j]
+        if ch not in node.children: break
+        node = node.children[ch]
+        if node.is_word:
+             start = i
+             end=j
+             update minEndAtStart[start]
+
+But we need to store pattern length; we can store a bool and also maybe store pattern length? But multiple patterns may share same end but with same start? Eg patterns "aa", "aaa" share same start 0 but different lengths. When we match at j, we know that the pattern length = j-i+1. We can compute start = i. So we don't need to store length.
+
+However we need to record each occurrence. With this method, we will find all patterns that end at some j but start at i. But if there is a pattern of length 5 starting at i, we go j up to i+4; at j= i+5-1 we find; we update minEndAtStart[i] = min(minEndAtStart[i], j).
+
+So we will record each alias.
+
+So we proceed.
+
+Edge: duplicates patterns: duplicates may produce same is_word flag for same node. But we don't care.
+
+Now memory: Node objects we need to create. We'll create many nodes using dictionary storing children mapping char to node index integer. Instead of Node objects, we can use arrays of dict mapping char to int. For example:
+
+children = []
+child = [] yields a list of dict. We'll use a list of dict where each node's children dict mapping char to int.
+
+Pseudo:
+
+children = []
+children.append({})   # root
+is_word = [False]
+
+def add_pattern(p):
+    node = 0
+    for ch in p:
+        if ch not in children[node]:
+            children[node][ch] = len(children)
+            children.append({})
+            is_word.append(False)
+        node = children[node][ch]
+    is_word[node] = True
+
+During scanning: node = 0; for j in range(i, upto):
+    if word[j] not in children[node]: break
+    node = children[node][word[j]]
+    if is_word[node]:
+        end=j
+        minEndAtStart[i] = min(minEndAtStart[i], end)
+
+Given that each node's children dict is small, we can use dictionary and mapping char to int.
+
+The number of nodes <= sum of lengths: up to 1e6.
+
+Each dictionary overhead: about 200 bytes? Might be heavy for 1e6 nodes; 200MB. Might be too high.
+
+But we can attempt to compress: Use array of int with size 26 for each node but stored as array('i')? But Python's array/byte would not provide mapping.
+
+Maybe we can use dictionary mapping char index to node index at integer, but only for used edges. That's the same as before.
+
+Alternate approach: Use a dictionary of children mapping from (node, char) -> child node? But same.
+
+We may rely on efficient memory usage: we can use a simple Python dict for edges; but 1e6 nodes may be heavy.
+
+I think we can still implement Aho-Corasick using dictionary nodes; it's standard. There might be memory usage but still fine.
+
+Alternatively, we can use built-in module "pyahocorasick" but not allowed.
+
+Let's think: We can implement trie using two lists: next_node arrays of size 26 by nodes stored as list of arrays; each array of size 26 containing node id or -1 as sentinel. For nodes count up to 1e6, each array of 26 ints: 26*1e6*4 bytes ~ 104MB. This is acceptable maybe ~200MB with overhead of list of lists but we can use array module or list of lists of int? Actually Python list of list of ints would be bigger due to list overhead. But we can use "list of list of int" but each list has overhead, too. Instead we could use two lists of ints: For each node we maintain a tuple of 26 ints: we can implement as list of arrays or use list of lists but each child list is a list of 26 ints storing -1. That's 26 ints per node ~ 100 bytes maybe. For 1e6 nodes that's 100 MB, okay.
+
+But we need to allocate for each node: children = [-1]*26; then store as a list of lists; that's 1e6 lists, each with 26 ints. That overhead may be heavy. But maybe still below 512MB.
+
+But for memory easier to rely on dictionary; but 1e6 nodes dictionary overhead maybe high. Let's approximate: each dict contains key-value entries: each char key is a single-char string object; each char value is int. Each key string uses overhead ~50 bytes; each value int overhead 28 bytes, plus dictionary overhead? Could be huge.
+
+Thus dictionary may be memory heavy.
+
+Hence we might prefer to use character indices 0-25, not strings. For each node, we can store children as list of 26 ints; but we can allocate an array of size (max_nodes x 26) but we cannot allocate contiguous 2D array easily. Instead we can store adjacency in list of arrays for each node.
+
+Implementation:
+
+children = [ [-1]*26 ] * 1? Actually copy problem; need to create new list each time.
+
+We will create children.append([-1]*26) for each new node.
+
+is_word = [False]
+
+Add pattern: node = 0; for ch in p: idx = ord(ch)-97; if children[node][idx] == -1: children[node][idx] = len(children); children.append([-1]*26); is_word.append(False); node = children[node][idx]; then at end, is_word[node] = True.
+
+This uses about 1e6 * 26 ints = 26e6 ints ~ 200MB but using Python int objects set? Each int in Python is object ~28 bytes, huge. So no. So we need better.
+
+Better: Use array module: from array import array; each node's children array of 26 signed ints, stored as array('i'). But array('i') holds C-level int, 4 bytes each. So 1e6 * 26 * 4 = 104 MB. That's memory efficient. But we still need to keep list of array objects per node: each array is a Python object with overhead maybe 56 bytes. So 1e6 arrays overhead ~56MB + 104MB ~160MB. Acceptable.
+
+But also we need to store is_word: list of bool; each bool is Python bool object 28 bytes? Actually bool is small. But we can use bytearray to store 'is_word' flags.
+
+Let's design:
+
+children = [array('i', [-1]*26)] maybe using 'i' signed int.
+
+Using array('i', [-1]*26) leads to overhead a bit. Let's do that.
+
+But for each new node, we create array('i', [-1]*26). The overhead for each array object could be bigger but still.
+
+Alternatively, we can use a global list of arrays of length 26. Might be okay.
+
+Simpler: Let's use dictionary but ensure that number of nodes maybe far fewer than 1e6 because forbidden patterns may share many prefixes. But worst-case with random patterns length 10 each (e.g., all different), the trie will have about sum of lengths 1e6 nodes. Overhead may still be high.
+
+But 1e6 nodes dictionary with each node char edges 1-3 (since lengths <=10). Each node dictionary stored as dict; memory overhead maybe 50-80 bytes per dict, 80MB plus edges overhead. That might still be fine. Let's approximate: Each dict about 72 bytes overhead; plus each key (single char string) ~50 bytes. The value is int object ~28 bytes. Each key-value pair 50+28+--- maybe 80 bytes. Suppose 2 edges per node => 160 bytes. plus 72 = 232 bytes per node. times 1e6 = 232MB. So memory heavy.
+
+Hence we might lean to use array representation with array('i').
+
+But we can store next transitions as dictionary of indices of nodes for each node for only used characters. But we can also store as list of tuples: For each node we store list of (idx,b) pairs. That still needs overhead.
+
+Thus we may use Aho-Corasick built on arrays.
+
+Ok let's implement Aho-Corasick with array representation:
+
+Define:
+
+from array import array
+
+max_nodes = 1
+children = [array('i', [-1]*26)] # root's children
+output = [0] # store bit mask? Wait we need list of pattern lengths. Since matches are at most 1 each? We want to store any pattern? But we need to process all lengths; we could store length for each node: we can store list of lengths or bit mask? Since pattern lengths up to 10, we can store bitmask of lengths (since length <=10). But we can store a bitmask integer mask where bit k indicates pattern of length k+1 ends at node. That is 10 bits. So easier.
+
+Use output_mask: list of int.
+
+When building pattern, after insertion, set output_mask[node] |= 1 << (len(pattern)-1).
+
+During fail construction: after set fail, we merge output_mask.
+
+Then when scanning, we can use node to get mask: m = output_mask[node]. Then while mask: we find lowest bit; but we need to process all lengths; but we can loop over bit positions 0-9: for each bit that is set, we compute length = pos+1; start = i - length + 1; update minEndAtStart[start].
+
+Testing.
+
+Implementation details:
+
+- Building fail links: BFS queue.
+
+Pseudo:
+
+from collections import deque
+
+fail=[0]*len(children) # size will be dynamic.
+
+But array length dynamic; we need to have fail list that will extend when new node added.
+
+We will create fail list with root fail=0.
+
+During adding nodes, fail will automatically extend with zeros; set fail for new node we will set later.
+
+Now building BFS:
+
+q=deque()
+for c in 0..25:
+    nxt = children[0][c]
+    if nxt != -1:
+        fail[nxt] = 0
+        q.append(nxt)
+    else:
+        children[0][c] = 0  # we can set missing transitions to root helps while scanning but we need to support scanning efficiently; Option 1: Use goto function that loops over fail but then fallback to 0; but we may also set default root to itself; modify root transitions to return 0.
+
+But the typical algorithm in array representation: we set the goto to root if missing. But we need to maintain fail and output for nodes accordingly.
+
+We'll use standard approach: For each node we will later compute goto for each char so that we can follow quickly. Implementation simpler: Use while loops with fail and missing transitions during scanning. But we don't want to allocate huge missing entries.
+
+We'll implement scanning by while loop as standard.
+
+So BFS:
+
+while q:
+    r = q.popleft()
+    for c in 0..25:
+        nxt = children[r][c]
+        if nxt != -1:
+            q.append(nxt)
+            f = fail[r]
+            while f and children[f][c]==-1:
+                f = fail[f]
+            if children[f][c] != -1:
+                fail[nxt] = children[f][c]
+            else:
+                fail[nxt] = 0
+            output_mask[nxt] |= output_mask[fail[nxt]]
+        else:
+            children[r][c] = children[fail[r]][c] if fail[r] else 0
+  # but we also need to modify children array for missing transitions to follow fast next. But we can also just compute changes.
+
+But to avoid repeated lookup we might set missing transitions to fail transitions. That increases memory but okay (children each have 26 ints). So we can set children[r][c] = children[fail[r]][c] if fail[r] else 0. This is typical for automaton building.
+
+Implementation: Initially root's children may have missing entries -1. We'll set them to 0 in BFS.
+
+Because children list length may not have index for fail[r] yet? but fail list exists.
+
+Implementation details:
+
+When we create new node, we also need to add fail list entry and output mask entry.
+
+We may implement children as list of arrays('i'). But we need to modify them after creation. However array('i') is mutable; we can access by index.
+
+Edge: Use `children[node][c]` will produce integer.
+
+Let's code:
+
+from array import array
+
+children = [array('i', [-1]*26)]  # root
+output_mask = [0]
+fail = [0]
+
+def add_pattern(p):
+    node = 0
+    for ch in p:
+        idx = ord(ch)-97
+        nxt = children[node][idx]
+        if nxt == -1:
+            nxt = len(children)
+            children[node][idx] = nxt
+            children.append(array('i', [-1]*26))
+            output_mask.append(0)
+            fail.append(0)
+        node = nxt
+    output_mask[node] |= 1 << (len(p)-1)
+
+After all insert, build fail:
+
+from collections import deque
+
+q = deque()
+for c in range(26):
+    nxt = children[0][c]
+    if nxt != -1:
+        fail[nxt] = 0
+        q.append(nxt)
+    else:
+        children[0][c] = 0
+
+while q:
+    r = q.popleft()
+    for c in range(26):
+        nxt = children[r][c]
+        if nxt != -1:
+            q.append(nxt)
+            f = fail[r]
+            while f and children[f][c] == -1:
+                f = fail[f]
+            if children[f][c] != -1:
+                fail[nxt] = children[f][c]
+            else:
+                fail[nxt] = 0
+            output_mask[nxt] |= output_mask[fail[nxt]]
+        else:
+            children[r][c] = children[fail[r]][c] if fail[r] else 0
+
+But note that when we are inside BFS, for node r we already set children[r][c] = ... for missing transitions. That means later when we use children[r][c] we will get a valid transition. Good.
+
+Now scanning:
+
+node = 0
+minEndAtStart = [INF]*n
+for i, ch in enumerate(word):
+    c = ord(ch)-97
+    node = children[node][c]
+    mask = output_mask[node]
+    if mask:
+        # iterate bits 0..9
+        m = mask
+        while m:
+            lb = m & -m
+            bit = (lb.bit_length() - 1)
+            start = i - bit
+            if start >=0:
+                if minEndAtStart[start] > i:
+                    minEndAtStart[start] = i
+            m -= lb
+
+But bit corresponds to pattern length-1: bit 0 for length 1; so start = i - bit ; Good.
+
+Edge: start may be negative if we matched at i < pattern length but we only get output_mask when pattern ends at i; pattern length <= i+1; so start>=0, but still check.
+
+Alternatively, we could compute length = bit+1; start = i - bit
+
+Set INF use n+5.
+
+After scanning, we compute minEndFrom.
+
+Implementation of minEndFrom:
+
+minEndFrom = [INF]*n
+cur = INF
+for i in range(n-1, -1, -1):
+    if minEndAtStart[i] < cur:
+        cur = minEndAtStart[i]
+    minEndFrom[i] = cur
+
+Now compute maxLen:
+
+maxLen = 0
+for l in range(n):
+    r = minEndFrom[l] - 1 if minEndFrom[l] <= n-1 else n-1
+    if r >= l:
+        length = r - l + 1
+        if length > maxLen:
+            maxLen = length
+# return maxLen
+
+Alternatively handle INF: if minEndFrom[l] == INF: r = n-1.
+
+Edge: if minEndFrom[l] <= l? r = minEndFrom[l]-1 may be < l; then length negative. So skip if r<l.
+
+One more nuance: suppose there are multiple forbidden substrings with same start. We used minimum end to compute earliest violating; this ensures r <= minEnd-1. But what if there is longer interval starting at same start, but earlier end is from short pattern maybe? That's fine.
+
+Edge: Suppose there is a forbidden substring start at l, end at l+5. Another forbidden substring start at l, end at l+3. The minEndFrom[l] will be min(end)=l+3. So r=l+2. Does substring [l, l+2] include full longer pattern? No because it doesn't include the later final char. So fine.
+
+Now we ensure we treat minEndFrom[l] as smallest end among intervals starting at >= l. So r = <= minEndFrom[l]-1; so none chosen interval fully inside => valid.
+
+Let's test with more patterns: Suppose pattern at start 2 end 4 (example). And pattern at start 5 end 7. Then minEndFrom[2] would be min(4,7) =4. So r <=3. Works.
+
+Now we also need to consider that some patterns might start later but earlier end? impossible: If start later, end later because start+len-1>start. So minEnd from l may be from early start but later end? Actually if start bigger, end bigger. So minEnd will be minimal among intervals, maybe from earlier start.
+
+Thus our algorithm is correct.
+
+We also need to handle that patterns could have same start but multiple ends; min returns earliest.
+
+Testing extremes:
+
+- No forbidden: minEndAtStart all INF; minEndFrom all INF; for l, len = n-l. maxLen n.
+
+- Forbidden just length 1: each char flagged. Then minEndAtStart[i] = i; minEndFrom[i] = i or min earlier? Let's compute n=5. minEndAtStart[0]=0, [1]=1,... compute minEndFrom: from right to left: cur INF, i=4: cur =4; minEndFrom[4]=4; i=3: cur=3; minEndFrom[3]=3; etc. So for l=0, r = minEndFrom[0] -1 = 0-1=-1 < l => length<=0. So maxLen=0. Works.
+
+Edge: All patterns of length <=10 but overlapping; algorithm fine.
+
+Now we need to provide solution code in python block inside final answer.
+
+We also need to import allows.
+
+Let's craft final code.
+
+Also note: we use array('i') from array; we need to import array. For INF, we can set INF = n + 5.
+
+Edge for negative start: we may ignore.
+
+But we must ensure that code runs within time.
+
+Let's produce final code.
+
+Potential improvement: we may avoid storing values for each node bigger than needed. But okay.
+
+Now final explanation summary.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every substring of `word` we have to check whether it contains
+*any* of the forbidden strings.
+All forbidden strings are at most length `10`, therefore only very short
+occurrences can appear.
+
+--------------------------------------------------------------------
+
+#### 1.   Observations
+
+* If an occurrence of a forbidden string starts at `s` and ends at `e`
+  (`e = s + len – 1`),  
+  every substring that contains **both** `s` and `e` is *invalid*.
+* For a fixed left border `l` the shortest “bad” end is the
+  minimum `e` among all occurrences that start **at or after** `l`.
+  Let  
+
+  ```
+  minEndFrom[l] = min { e | there exists an occurrence [s,e] with s >= l }
+  ```
+
+  Then a substring `[l , r]` is valid **iff** `minEndFrom[l] > r`  
+  (the earliest bad end is still to the right of the substring).
+
+  Therefore the longest valid substring that starts at `l` has
+  length  
+
+  ```
+  len = ( minEndFrom[l] – 1 ) – l + 1   ( if minEndFrom[l] is finite )
+  ```
+
+  If no bad end exists for this `l`, the whole suffix `[l , n-1]` is valid.
+
+--------------------------------------------------------------------
+
+#### 2.   Finding all forbidden occurrences
+
+The number of forbidden strings is up to `10^5`, each length ≤ `10`.
+Instead of a textbook **Aho–Corasick** automaton we build a very small
+trie, store a *bit mask* of the pattern lengths that finish at a node and
+propagate these masks while creating the failure links.
+
+*Trie representation*
+
+```
+children : list of 26‑element arrays('i')
+          children[v][c] = child of node v by character c
+          (-1 if the edge does not exist)
+output_mask : list of 32‑bit integers
+             bit k (0‑based) is set iff a forbidden pattern of length k+1
+             ends at this node
+fail : failure links
+is_word : implicit in output_mask
+```
+
+Only edges that really exist in the trie are created, therefore the
+number of nodes is at most  
+`Σ |forbidden[i]| ≤ 10^6`.
+All arrays are C‑int (`'i'`) → 4 bytes per entry → 4 × 26 × #nodes  
+≈ 104 MB for the worst case – perfectly safe for Python.
+
+*Algorithm*
+
+```
+insert every pattern into the trie, mark its end node with bit(len-1)
+BFS over the trie:
+    for every edge (v , c) that exists
+         set fail[child] to the longest proper suffix of the current node
+    propagate output_mask from fail[child] into output_mask[child]
+```
+
+After the BFS, the automaton can be traversed in linear time.
+
+--------------------------------------------------------------------
+
+#### 3.   Scanning the word
+
+During the scan we keep the current node `cur` (initially the root).
+
+For each character `word[i]` :
+
+```
+cur = children[cur][c]          # deterministic transition
+mask = output_mask[cur]
+while mask != 0:                 # every pattern that ends here
+    bit = lowest set bit of mask
+    len = bit + 1
+    start = i - len + 1
+    minEndAtStart[start] = min(minEndAtStart[start], i)
+    mask = mask without that bit
+```
+
+`minEndAtStart[start]` will contain the *smallest* ending position of
+any forbidden occurrence that starts at `start`.  
+Initially it is `INF` (here `n+5`).
+
+--------------------------------------------------------------------
+
+#### 4.   Building `minEndFrom`
+
+`minEndFrom[l]` is the minimum of all ends of intervals that start
+**at or after** `l`.  
+We compute it by a backward scan:
+
+```
+cur = INF
+for i = n-1 … 0:
+    cur = min(cur, minEndAtStart[i])
+    minEndFrom[i] = cur
+```
+
+--------------------------------------------------------------------
+
+#### 5.   Final answer
+
+For every starting position `l`:
+
+```
+if minEndFrom[l] == INF:       # no bad end anywhere after l
+        r = n-1
+else:
+        r = minEndFrom[l] - 1  # end must be before the earliest bad end
+
+if r >= l:
+        answer = max(answer, r - l + 1)
+```
+
+The maximum over all `l` is the required length.
+
+--------------------------------------------------------------------
+
+#### 6.   Correctness Proof  
+
+We prove that the algorithm returns the length of the longest valid
+substring.
+
+---
+
+##### Lemma 1  
+For every position `s` (`0 ≤ s < n`),  
+`minEndAtStart[s]` equals the smallest ending position of any forbidden
+occurrence that starts at `s`.  
+If no such occurrence exists, `minEndAtStart[s] = INF`.
+
+**Proof.**
+
+The scan visits every character of `word`.  
+Whenever the automaton reaches a node that represents the end of a
+forbidden pattern of length `len`, we write
+
+```
+start = current_index - len + 1
+minEndAtStart[start] = min(minEndAtStart[start], current_index)
+```
+
+Thus, for each occurrence `[s, e]` the value `e` is considered at
+exactly the start index `s`, and the minimum of all such ends is stored.
+If no occurrence starts at `s`, the value never changes from its
+initial value `INF`. ∎
+
+
+
+##### Lemma 2  
+For every position `l` (`0 ≤ l < n`)  
+`minEndFrom[l]` equals the minimum ending position of any forbidden
+occurrence that starts at or after `l`.  
+If no such occurrence exists, `minEndFrom[l] = INF`.
+
+**Proof.**
+
+We construct `minEndFrom` by scanning `i` from `n-1` down to `0` and
+maintaining the current minimum `cur`.  
+When processing position `i` we set  
+
+```
+cur = min(cur, minEndAtStart[i])
+```
+
+so `cur` becomes the minimum ending position among all starts
+`≥ i`.  
+Afterwards `minEndFrom[i]` is set to `cur`.  
+Thus for any `l` the stored value is precisely the desired minimum.
+∎
+
+
+
+##### Lemma 3  
+Let `l` be a starting index of a substring.  
+A substring `[l , r]` (with `l ≤ r`) is **valid**  
+iff `minEndFrom[l] > r`.
+
+**Proof.**
+
+*If part:*  
+Assume `minEndFrom[l] > r`.  
+By definition of `minEndFrom[l]`, every forbidden occurrence that starts
+at or after `l` ends at a position `e ≥ minEndFrom[l] > r`.  
+Hence no forbidden occurrence can lie entirely inside `[l , r]`;
+therefore the substring is valid.
+
+*Only if part:*  
+Assume `minEndFrom[l] ≤ r`.  
+Then there exists a forbidden occurrence `[s , e]` with `s ≥ l` and
+`e = minEndFrom[l] ≤ r`.  
+Thus `[s , e]` is completely inside `[l , r]`, so the substring is
+**invalid**.  
+Contradiction. ∎
+
+
+
+##### Lemma 4  
+For each starting position `l` the algorithm computes the maximum
+possible length of a valid substring that starts at `l`.
+
+**Proof.**
+
+If `minEndFrom[l] = INF` the whole suffix `[l , n-1]` contains no
+forbidden occurrence (Lemma&nbsp;3).  
+The algorithm sets the length to `n-l`, which is optimal.
+
+Otherwise `minEndFrom[l] ≤ n-1`.  
+Lemma&nbsp;3 tells us that any valid substring must end before
+`minEndFrom[l]`.  
+The longest possible end is `minEndFrom[l] - 1`.  
+The algorithm uses exactly this choice, therefore yields the maximum
+length for start `l`. ∎
+
+
+
+##### Lemma 5  
+Let `ans` be the value returned by the algorithm.  
+`ans` is the length of the longest valid substring of `word`.
+
+**Proof.**
+
+By Lemma&nbsp;4, for each possible starting position `l` the algorithm
+computes the maximum length of a valid substring starting at `l`.  
+The overall maximum over all `l` is therefore the maximum among *all*
+valid substrings.  
+The algorithm stores this maximum in `ans` and returns it. ∎
+
+
+
+##### Theorem  
+`Solution.longestValidSubstring` returns the length of the longest
+valid substring of `word`.
+
+**Proof.**
+
+Directly from Lemma&nbsp;5. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 7.   Complexity Analysis
+
+Let  
+
+* `n = |word|   ( ≤ 10^5 )`  
+* `m = total length of all forbidden strings   ( ≤ 10^6 )`
+
+Construction of the trie: `O(m)` time, `O(m)` memory  
+(≈ `26 × 4 × (#nodes)` bytes).
+
+BFS to build failure links: `O(m)` time, `O(m)` memory.
+
+Scanning the word: at most 10 transitions per character →  
+`O(10·n) = O(n)` time, `O(n)` memory for the `minEndAtStart` array.
+
+Building `minEndFrom` and the final scan: `O(n)` time, `O(n)` memory.
+
+Total:
+
+```
+Time   :  O(n + m)  <= 1.1·10^6   (well below one second)
+Memory :  O(m + n)  ≤ 200 MB (worst case)
+```
+
+Both limits satisfy the constraints.
+
+--------------------------------------------------------------------
+
+#### 8.   Reference Implementation (Python 3)
+
+```python
+from typing import List
+from collections import deque
+from array import array
+
+class Solution:
+    def longestValidSubstring(self, word: str, forbidden: List[str]) -> int:
+        n = len(word)
+
+        # ---------- 1. Build the trie ----------
+        children = [array('i', [-1] * 26)]   # root
+        output_mask = [0]                    # bit k set -> pattern of length k+1 ends here
+        fail = [0]
+
+        for pat in forbidden:
+            node = 0
+            for ch in pat:
+                idx = ord(ch) - 97
+                nxt = children[node][idx]
+                if nxt == -1:
+                    nxt = len(children)
+                    children[node][idx] = nxt
+                    children.append(array('i', [-1] * 26))
+                    output_mask.append(0)
+                    fail.append(0)
+                node = nxt
+            # set bit for end of pattern
+            output_mask[node] |= 1 << (len(pat) - 1)
+
+        # ---------- 2. Build failure links ----------
+        q = deque()
+        for c in range(26):
+            nxt = children[0][c]
+            if nxt != -1:
+                fail[nxt] = 0
+                q.append(nxt)
+            else:
+                children

@@ -1,0 +1,352 @@
+<|channel|>analysis<|message|>We need to find maximum possible value in final array after merging adjacent swaps condition nums[i] <= nums[i+1]. We can combine eventually some numbers. The order matters: you can choose any subset merges that preserve relative order? When you merge i with i+1, you replace next element with sum and delete current. So effectively you merge two adjacent elements into single element equal of sum and then remove one element. You can merge multiple times. Constraint: at each merge, the left element must be <= right element.
+
+Goal: maximal possible largest element at end. Equivalent to selecting some subsequence to merge together? Not independent - think of merging left to right. Might think of computing maximum possible sum of contiguous subarray that can be merged into single element by considering merging sequence. Condition: we can only merge when left <= right. But we may merge multiple times nontrivially: e.g., [5,3,3], we can merge 3+3 => min? Wait example: nums = [5,3,3], they first merge i=1: 3 <= 3? yes. Replace nums[2] with 3+3=6, delete nums[1] -> array [5,6]. then merge i=0: 5 <= 6? yes. So final [11]. So merged 3+3 then 5+6.
+
+Observation: Operation essentially merges two adjacent numbers, but left must be <= right of the pair currently. After merging, the new element is sum of the two numbers, and the adjacent next element will be the sum. This may allow more merges later if inequalities hold.
+
+Goal: get a large element. Maybe we can always merge all into one element? Is that always possible? Example constraints: n up to 1e5, numbers up to 1e6; sum can be large maybe up to 1e11. But maybe sometimes impossible due to inequality constraints: e.g., [9,3] cannot merge because 9 > 3, so cannot be merged.
+
+We can choose subset merges; at the end, final array may have multiple elements. We need maximum element among them.
+
+We might think: When you merge, you essentially combine consecutive elements but with condition that you can only merge left to right if left <= right. That seems like we can produce a large element by merging an increasing sequence of values that satisfy left <= right each step as we merge from right to left maybe? Let's analyze.
+
+Suppose we have array [a, b, c, d], we want to merge a, b, c into one large? Need to first merge a,b where a<=b. After that, new element is a+b. Then we need to merge this with c where (a+b) <= c. So we can merge a,b,c into one sum if chain conditions: a<=b, a+b <= c. Similarly sum of first k elements must be <= next element.
+
+Thus a contiguous subarray from index i to j could be merged into one element if cumulative sums obey that each partial sum <= next element. Equivalent: For k from i to j-1, sumSum_i <= nums[k+1] where sumSum_i initially nums[i], then when merging with next element we get first two sum: nums[i]+nums[i+1], then need <= nums[i+2], etc.
+
+Thus we can get sum of some contiguous subarray that forms a "prefix" chain of monotonic sums non-decreasing? Actually we require sumSum <= next element. Since val positive, sumSum increases. Condition sumSum <= next element can fail if next element is too small. We can still merge maybe from right side: merging i+1 with i+2? Let's test: Suppose we want to merge b, c, d into one. We need b <= c, b+c <= d. So same condition.
+
+Thus we can merge block of adjacent elements if all partial sums satisfy <= next element. That implies that final sum is at least as large as previous sums, but we need each partial sum <= next element. This is similar to concept of "prefix sums".
+
+Alternatively, maybe we can merge by removing smaller elements left of a bigger one by using them as left elements. For example, [2,3,7,9,3] we merged 2 and 3, then 5 and 7, then 12 and 9? Wait after first pair we had [5,7,9,3] then merged 5 and 7 produce 12, array [12,9,3]? Actually they merged i=1: 7 <= 12? Wait after replacing: indices: [5,7,9,3], choose i=1 -> new array [5,12,3]? Wait they choose i=1, then replace nums[2] with nums[1] + nums[2] = 7+9? Actually 5 7 9 3 after step 1: a=5 b=7 c=9 d=3. Choose i=1: numbers[1] <= numbers[2] (7 <= 9) true. Then replace numbers[2] with 7+9=16 => arr [5,16,3], delete index1? Wait we delete nums[1] -> array [5,16,3] yes. Then choose i=0: 5 <= 16 yes, replace 16 with 5+16=21 => [21,3]. So final largest 21. So they never merged 3 at the end because 3 cannot be merged because 9 > 3? Actually 9 > 3 cannot merge because left must be <= right. So 3 stuck at end. But largest element is 21.
+
+Note that 3 is small and cannot be merged with preceding 9 because 9 > 3. But we can merge bigger blocks before. We might merge 2+3=5, then 5+7=12, but we also had 9 which remained bigger than 12? Wait 12>9. But we cannot merge 12 with 9 because 12 > 9 (left > right). So 12 remains before 9 which is smaller. Then we can merge 12 with 9? No because 12 > 9. Next step we merged 5+16? We had 5+16. That is bigger.
+
+Hence algorithm: we need to consider merges as we go from left to right? But we can pick which pair to merge at each step: we can choose any i at each step.
+
+Top approach: consider we want a final element that is maximum sum of some subarray where partial sums <= next element. But we might circumvent by merging non-consecutive elements around a smaller element to achieve bigger sum more than contiguous subarray? Let's think.
+
+Suppose array [1, 100, 2]. We cannot merge 100 and 2 because 100>2. But we can merge 1 and 100: 1+100=101, array [101,2]. Then 101>2 cannot merge, so final array length 2, largest = 101. But 101 = sum of 1 and 100 (non-consecutive? They are contiguous?). Actually yes they were contiguous. So largest 101.
+
+But if we had [3,1,2]. 3>1 cannot merge. Merge 1 and 2: 1<=2 true, new array [3,3]. Now 3 <=3 true, merge 3+3=6 => final [6] largest 6. So we merged 3 and 1? Actually 3 and 1 cannot merge because 3 > 1. But we still merged 1 and 2 first, 3 left, then merged 3 and 3. So final sum 6. Note that final sum 6 > sum of min contiguous? Actually contiguous pairs 3+1 not allowed. But we still can merge 3 into the final sum by converting 1+2 to equal 3, allowing merge with 3.
+
+Thus we can conquer small elements by merging them to boost next element such that inequality allows merging.
+
+Observation: The process can merge all but only if we can pair current element with following element. If we can merge all into one, we can get total sum. Is it always possible? Consider array [2,1,3]. We can't merge 2 and 1 because 2>1. We could merge 1 and 3: 1<=3 true, sum=4, new array [2,4]. Then 2<=4 merge => [6] sum (full). So yes maximum sum = total. So maybe we can always merge all into one? Let's test disallowed: [4,1,1]. Merge 1 and 1 => sum=2; array [4,2]. Now 4>2 cannot merge. So cannot merge all. Could we merge 4 and 1 first? Not allowed 4>1. So stuck. So maximum optimum is 4+2=6? but 4+2=6 >4. But we can't merge 4 and 2: 4>2. So final array [4,2] largest 4. But maybe merging 4 and 2? cannot. So max 4. But sum of whole array is 6. So cannot merge all.
+
+Thus we need to find maximum subarray sum that can be merged into one element? Or maximum achievable sum of any contiguous subarray that can be merged.
+
+We can think dynamic: Start from leftmost smaller element to large element? Let's think about merging from left to right. Suppose we want to merge subarray [l..r] into one element. Conditions: for k from l to r-1, sum[l..k] <= nums[k+1] (the next element). This ensures that at each step we can pick i=l or k and merge etc. But we can also intermix merges with other adjacent elements before merging these? Not necessary because merging others may change order.
+
+But we might also merge an element after r (to the right) with the merged sum, or before l (to left). But final largest element may consist of merging a contiguous block that is not necessarily contiguous in original array because we might skip some elements? Let's examine: Suppose we have [5,3,6,3]. We could merge 5+3=8, [8,6,3], then 8>6 cannot merge, but 6+3=9, [8,9], then 8 <=9? 8<9 so merge? Actually we can't merge 8 with 9 because 8 <=9 true, but we need to merge adjacent 8 and 9. They are adjacent: we can merge 8+9=17 -> array [17]. So final sum 17. Which elements used? All 4: 5+3+6+3=17. So we achieved sum of all 4, summing all contiguous arr. So maybe we can always merge entire array if there exists an ordering of merges such that inequalities hold.
+
+But earlier 4,1,1 gave 6? Let's test if we can merge all: [4,1,1]. Try merges: 1+1=2 -> [4,2]. 4>2 cannot merge. So cannot. But perhaps we could merge 4+1? Not allowed. So cannot merge whole.
+
+Thus need to find maximum subarray sum that can be merged into one element given constraints. But can we use non-contiguous subarray? Suppose we have [5,1,3]. Choose merge 1+3=4 ->[5,4]. 5>4 cannot merge. So cannot merge all. But maybe we make 5+3 by combining 5 (left) and 3 (right) via intermediate? We cannot because 5+3=8 but they aren't adjacent. So can't.
+
+Conclusion: the goal is to find maximum sum of a contiguous subarray such that when merging left to right (or some order) the condition holds. But we might need to consider ability to merge sub-subarray with overlapping? However we can also merge subarray to produce power of bigger element maybe raising final leftmost of block to that sum. But any element left of block cannot go into that sum because can't merge due to order? Actually we could merge previous block that merges to some value <= right block's first element. Wait we can merge left block into right block if left sum <= right first element? Let's analyze: Suppose we have [A, B] where A< B. We can merge A into B:  A<=B. So left block sum can be merged into right block. But if there is some left group and right group, we could merge them if chain condition holds.
+
+But final largest element might be a sum of some prefix array that we maintain by merging others into it. Example: 4,1,1: We can merge 1+1 into 2 -> [4,2]. Now 4 > 2 cannot merge. So largest remains 4.
+
+But we might be able to merge 4 into 2? Not allowed. So largest 4.
+
+Thus we need to find maximum sum over all subarrays such that we can merge it into one element via merging its elements progressively without using other elements? Equivalent to merging contiguous block from left to right. This is independent of rest of array.
+
+I think the maximum achievable value is the maximum sum over all "good" subarrays, where "good" means before step merging, the partial sums conditions hold.
+
+But we can also merge within that subarray but not necessarily reverse? Let's formalize: Suppose we have subarray [l..r]. We need to merge them into one element. Operation merges adjacent pair left <= right. If we process from left to right, the partial sums will maintain monotonic condition: sum_{l..k} <= nums[k+1] for all k in [l,i+1]. But maybe we can merge in a different order? e.g. typical approach: to merge all, we can merge rightmost pair first? For example, [3,1,2] we earlier did 1+2 first. That is merging inner pair, not necessarily left to right. That allowed us to merge subsequent structure. So we can choose order.
+
+Question: Under which conditions can we merge all contiguous subarray into one element? Equivalent to tree operations: we can reorder merges. Known problem: merging adjacent numbers requiring left <= right at each step. Equivalent to parenthesization ability. This reminiscent to verifying if sequence is mergeable.
+
+Let's think simpler: We need to group them into binary tree where each internal node corresponds to left subtree element <= right subtree element (after merge). This is like constructing a heap where left <= right.
+
+If we treat each element as a leaf, merging pair of adjacent nodes results in new node equal to sum of subtree values. Condition: value of left subtree <= value of right subtree. So if we can merge entire subarray into one node, we need to find a binary tree with left child <= right child type property. This is similar to building a binary tree where each left subtree sum <= right subtree sum.
+
+This is reminiscent of constructing balanced tree where each internal node has left <= right sums.
+
+Is it always possible to build for any subarray that is sorted? Not.
+
+Let's think maybe dynamic property: For any } contiguous subarray, we can compute its "mergeable" ability.
+
+Simpler: The maximum number may equal maximum sum of any subarray that is non-decreasing? Wait if we have non-decreasing array, we can merge all: because we can merge adjacent left <= right always. Example [2,3,7,9,3] is not non-decreasing due to 9>3. But we still merged all except the last 3? we got 21 which is sum of all except last 3 and also plus 2. Wait 2+3+7+9=21, 4 elements. Sum of subarray [0..3] is 21. Indeed subarray [2,3,7,9] is non-decreasing? 2<=3,7<=9, but 3>7? Actually 3<=7, yes. So [2,3,7,9] is non-decreasing.
+
+Thus maybe we can always merge any non-decreasing contiguous subarray fully because condition holds.
+
+Test example: [3,1,2] not non-decreasing. But is there a subarray that we can merge fully? Let's check [1,2] non-decreasing. Sum=3. But we merged up to 6 with 3 from left. Actually we can merge 3 into 3+2? Not. But we used 3 with 3? Wait 3 and 2 ??? Actually we did 1+2 =>3 => [3,3], then merging 3+3 =>6. So the subarray [3] remained separate? Actually 3 original leftmost remains after merging other, but we eventually merged it with 3 new value (sum of 1+2). That required property: 3 <= 3? yes. So we merged left element 3 with right element 3 which is sum of later subarray. So overall we turned whole array into one element, but the underlying subarray [1,2] is non-decreasing, and we merged it first then merged with 3.
+
+Thus we might be able to use a pattern: find a subarray that is non-decreasing (or mergeable) and then use the result to merge with previous elements by ensuring left <= right at each step.
+
+This suggests we can recursively merge groups.
+
+Observation: For any array, we can pick a subarray that can be merged. Then we will merge this subarray into one element S. Then we consider merging S with adjacent elements to left or right if condition holds. So maybe we could perform algorithm: find maximum sum over all mergeable subarrays? Let's attempt to compute maximal "value" that can be built starting from leftmost element merging.
+
+But maybe algorithm: we can iterate from left to right, maintain current largest element that is built from left prefix. We can greedily merge leftmost pair whenever possible? Not trivial.
+
+Let's examine optimal strategy: Suppose we want to maximize one element. It's optimal to merge as many elements as possible in some contiguous block, but you might also merge outside elements into that block after merging inside. So strategy: find a block that can be transformed, maybe merging outside ones gradually.
+
+Observing property: Once you have a merged element S, you may be able to merge it with its right neighbor if S <= neighbor. If not, maybe you can merge neighbor with something else to exceed S. So basically we might want to pad S from right side until it's large enough. This is exactly algorithm: iterate from rightmost to leftmost? Let's think.
+
+Let's consider building from right to left: Suppose we bring elements from rightmost side to leftmost gradually, summing while inequalities hold. Equivalent to compute suffix sums, but we can only merge when left <= right.
+
+Let's invert maybe easier: Starting from rightmost element, we can merge with left neighbor if left <= right. But that requires left <= right. But we can't combine right neighbor with left left.
+
+Alternate: Suppose we try to merge entire array into single element: need to find a binary tree satisfying left <= right. Equivalent to constructing an increasing binary tree from left to right. This is similar to constructing a min-heap where left <= right. Actually sequence of merging ensures that left subtree sum <= right subtree sum. So we need to check if array can be completely merged.
+
+There is known condition: The array must be "sorted" such that any left element <= rightmost after merging? Not.
+
+Let's attempt to compute maximum value by dynamic programming: dp[i] representing maximum value we can produce as a single element using subarray ending at i with some merging order? But we need ability to merge with right side later.
+
+But we can process from left: maintain stack of elements that can be merged. Each element to the right can be merged into left if left <= right. We can combine sums.
+
+Idea: Simulate merging using a stack where each element is a value that can be merged into subsequent elements. We process from left to right; we keep a stack of “merged group sums”. For each new element val, we push val onto stack. While there are at least two elements, consider the top two elements a = stack[-2], b = stack[-1]. Condition: a <= b? Because we need to merge a into b. If true, we can merge them: pop b, pop a, push a+b. But we must ensure this results in a merged element that may merge with previous. This merges the leftmost element (a) into right element (b). This ensures left <= right. This process continues until top two violate inequality or stack empty.
+
+This process effectively merges as we go, giving a final array of elements that cannot be merged further (i.e., stack is run of alternating conditions where left > right). This resembles the algorithm for maximizing value by merging but ensuring condition.
+
+At the end, perhaps the largest element among stack may be maximum achievable? Check with example.
+
+Case [2,3,7,9,3] Process:
+
+stack=[]
+push 2 => [2]
+push 3 => [2,3]
+Now top two: 2 <= 3 true => merge: pop1, pop2 => 5 => [5]
+push 7 => [5,7]
+top: 5 <=7 true => merge => [12]
+push 9 => [12,9]
+top: 12 <=9 false => cannot merge => keep.
+push 3 => [12,9,3]
+top: 9 <=3 false => cannot merge
+Next top: 12 <=9 false => can't merge.
+End stack: [12,9,3], largest = 12? But answer 21 > 12. So this algorithm fails.
+
+But we key difference: In example, we didn't merge 12 with 9. Instead we earlier had 12? Actually we had 12 after merging 5 and 7. Then we merged with 9? Wait we didn't merge 12 and 9 due to 12>9. But we could have used 9 as part of earlier merges: Actually we could merge 9 with 3? 9 >3 cannot merge. So final product can't be 21 with this method. But the algorithm of merging greedily left to right produced final product 12, not 21. So we need more complexity.
+
+Why not get 21? Because we didn't merge 2 and 3? we did, gave 5. Next we merged 5 and 7 gave 12. Then we didn't use 9, but in optimal we used 12+9=21? Wait but 12+9=21, but 12>9 cannot merge. So we can't merge 12 and 9. But how did we get 21? In example, they merged 12+9? Actually they didn't merge 12+9; they merged 5 and 16 earlier. Wait after merging 5+7 got 12? No they said choose i=1 (7) after array [5,7,9,3] -> merge 7 and 9 to 16, left b=5. So they didn't merge 5+7 earlier. Instead they merged 7+9 first. So merging order matters.
+
+Thus algorithm: We should attempt to merge numbers that maximize sum. It's like we can choose pair to merge each step. The constraint left <= right. So we can think of it as we have number sequence; we can merge adjacent pairs of left <= right. The merging reduces length by 1 and increases one element by sum.
+
+Goal: maximize maximum element at the end.
+
+Observation: This process ensures that at each step we can merge any left <= right pair. So we can choose pair that will increase value of some element some amount.
+
+We might want to merge numbers that increase value of the "largest" element gradually. The largest element at the end will be some sum of some set of elements.
+
+We can think of building a tree where each step merges left <= right. Equivalent to we can build a tree where left subtree sum <= right subtree sum.
+
+Therefore, perhaps the maximum achievable value equals maximum sum of any subarray that is "increasing" in sense of partial sums condition, but also we may combine it with preceding elements if right side sums are small.
+
+Better: We want to find maximum possible sum of all elements except some suffix that cannot be merged. Because any element that cannot be merged with its right neighbor will stay separate.
+
+Thus algorithm: We can determine maximum prefix sum that can be merged into one element. Similarly we can merge from right side and left side.
+
+This is analogous to computing min prefix values? Let's attempt.
+
+Idea: Use two nested loops? Not feasible.
+
+Alternate: Think about property: one element at the end can be replaced by neighbor if left <= right. So to keep merging into one element, we need to avoid left > right for any pair adjacent when we merge later. That may be achieved by merging earlier with smaller left elements and then merging bigger ones.
+
+Consider merging from right to left: Suppose we want to merge positions 0..r into one element. We can choose to merge from rightmost pair first: for i from r-1 to 0, test if a[i] <= next[i] after merges. But after merging, the right element changes. This seems plausible: we can solve via dynamic programming scanning from right.
+
+Let dp[i] target maximum sum of segment starting at i that can be merged into one element if we merge inside right to left. Recurrence: At position i, we need to decide whether we can merge i with i+1. Suppose we already have dp[i+1] representing the sum of segment i+1..i+... maybe need to store current value of the merged segment.
+
+But we need to maintain the value of the merged segment after merging left adjacent. For segment i..k, we can merge  i..k into one element value V. Condition for merging left: for j from i to k-1, we need partial sums <= next element inside segment. Equivalent to we can determine from right to left: we maintain a current value cur for the rightmost element of candidate segment. Initially cur = nums[i] (since single element). But we need to merge with next element cur_right? Let's think.
+
+Better: Let's define function can_merge(l, r). But we need efficient.
+
+Observation: The merging process only cares about left <= right at each step. Suppose we have as we simulate merging entire subarray [l..r] into one element. We can test from left to right: maintain current sum S of processed section (initial S = nums[l]), and next element T = nums[l+1]. If S <= T, we can merge S into T, updating T = S + T, and S = T. Else cannot merge. So we can merge entire subarray iff we have S <= T at each step. This is straightforward. So we can check if subarray is mergeable by this simple loop. Complexity O(n^2) naive.
+
+But we can precompute suffix sums and prefix sums? For each subarray, we can check condition quickly? Let's think: Let prefix sums p[i]. For subarray [l..r], you need to test that for each k from l to r-1, sum_{l..k} <= nums[k+1]. That is: p[k] - p[l-1] <= nums[k+1]. For k from l to r-1 inclusive. So we need to check that for all k.
+
+Thus we need to find maximum sum over subarray such that all prefixes satisfy RHS condition. Equivalent to choose l and r such that for all k in [l, r-1]: p[k] - p[l-1] <= nums[k+1].
+
+We can evaluate for each i as right boundary? Let's try to sweep.
+
+Implementation: For each element i as right boundary, we want to find the earliest l such that all conditions hold for k from l to i-1: (p[k]-p[l-1]) <= nums[k+1]. That is, lower bound for l depends on previous values.
+
+We can maintain a sliding window of leftmost index where conditions hold. We can maintain that as we extend right pointer, we need to maintain that all partial sums <= next element. But to extend to new element i, we need to consider a potential new left. When we include nums[i], we need to ensure that for all k from l to i-1, we had previous conditions plus the new condition at k = i-1: sum_{l..i-1} <= nums[i]. So we need to maintain current sum sum_{l..i-1}.
+
+Thus when we extend right pointer, we maintain the current sum of segment from l to i-1. When we add element i, we need to check if sum <= nums[i]. If not, we need to move l forward until condition holds. But moving l forward would change the sum, because we remove nums[l]. So while sum > nums[i], we cannot merge. So we need to adjust l. But we need to check all earlier k as well? Those older conditions still hold after l shift because the sum for earlier k becomes smaller. So we can maintain a window where all conditions hold.
+
+Thus algorithm: Use two pointers sliding window that maintains subarray [l..r] that can be merged into one element (when we treat as processed merging left to right). Actually we maintain that subarray [l..r] is mergeable; then we record its sums and possibly maximum.
+
+But we also need to consider merging in other orders than left-to-right? Maybe it's enough because we can always reorder merges to achieve left-to-right? Let's test earlier example [3,1,2]. We previously claimed that we can merge for subarray [1,2]. That's left-to-right satisfy: 1 <= 2, sum=3. Works. Then final array [3,3] then we merge 3 + 3 because 3 <= 3 holds. So left-to-right in subarray [1,2] works.
+
+But note that initial array [3,1,2] as a whole cannot be merged into one element because 3>1. Requiring left-to-right merging fails. But we still could merge all; we used recursion: we merged [1,2] into 3, then leftmost 3 <= 3. This is equivalent to merging left-to-right? Wait we first merged 1 and 2, not 3 and 1. But we didn't merge leftmost 3 with 1.
+
+Hence we rely on merging subarray that is mergeable, then merging with left neighbor later.
+
+Thus algorithm: we can combine two mergeable subarrays that are adjacent if the left merged sum <= right merged sum (or left <= right). So final value can be built by merging adjacent merged subarrays.
+
+Thus the maximum element we can build is maybe the maximum of either:
+
+- A mergeable subarray with maximum sum (maybe forming a block that we can merge into one element).
+- Or we might merge several mergeable subarrays via final merge.
+
+But merging two mergeable subarrays requires left sum <= right sum. So we can unify them into larger merged subarray. Thus we can think of constructing a sequence of 'mergeable groups' that can be merged into one big group by satisfying left <= right for consecutive groups.
+
+This essentially reduces to the same condition as merging within a single subarray but with smaller groups replaced by sums. But we can precompute all minimal mergeable blocks that can be merged into sum 'value'.
+
+Take [4,1,1]. We can merge [1,1] into 2. Then we have [4,2]; 4>2 can't merge. So maximum = 4 or 2? bigger is 4.
+
+But we can also merge [4] alone sum 4. So maximum 4.
+
+Thus algorithm: find largest sum that can be merged into may be entire array except all drop mismatched elements.
+
+Simplify: we can have a stack of (sum), but we need to allow merging bigger group if current sum <= top. But earlier example fails.
+
+Alternate perspective: Equivalent to "Maximum value of a node in a Cartesian tree" where we can only merge left <= right. We might attempt to compute maximum possible sum by considering the following process: sort the array? Not.
+
+Let's try to formulate as dynamic programming on indices scanning from left to right, maintain a stack of groups that can be merged into one element but not yet with left side.
+
+We can store for each group its sum; the property 'mergeable' for inside group already holds. When merging two groups, we require left <= right. Therefore we can combine groups such that left <= right; we can keep merging as long as condition holds.
+
+Thus we can represent the entire array as a stack of groups after merging within each group recursively. At the end, we cannot merge any adjacent groups because due to stack's property left > right.
+
+Goal: find max sum among groups in any configuration we can produce.
+
+We can produce various configurations by deciding on merge orders inside groups.
+
+Observation: The condition for merging two groups depends only on sums of groups, not on internal structure. Because we can merge any group to its neighbor if left sum <= right sum. So we can treat each group as an atomic element containing its sum.
+
+Hence we can treat the process as: Starting with array of numbers [a1, a2, ..., an]. For each i, we can create group of size 1. Then we can merge adjacent groups if sum of left <= sum of right. After merging, we combine sums.
+
+Thus we can attempt to consider all possible sequences of merges. This looks like merging sorted by sum? We can think of customizing dynamic merges.
+
+This is similar to constructing a binary tree such that inorder traversal yields original array, and each node's left sum <= right sum.
+
+Therefore, the maximum achievable sum at any node is the maximum sum of a subtree. We want maximum sum of any subtree that can be formed respecting left <= right property (maintained at each node). That is, we want to find maximum sum of a contiguous subarray that can be partitioned into a binary tree satisfying left <= right property.
+
+In such a tree, for each internal node, left subtree sum <= right subtree sum. Leaves are original elements.
+
+Therefore, each node's sum is sum of all leaves in its subtree. So the only requirement is left subtree sum <= right subtree sum.
+
+Thus 'mergeable subarray' can be defined recursively: subarray [l..r] can be merged into one if it can be partitioned into a root with left child subtree [l..m] and right child subtree [m+1..r], such that left sum <= right sum, and both subtrees are mergeable themselves.
+
+Thus we can compute dynamic programming over intervals: dp[l][r] = true if subarray is mergeable; else false. And length n up to 1e5, cannot O(n^2) naive.
+
+We need efficient algorithm.
+
+Look at property: For it to be mergeable, there must exist a partition point m such that left sum <= right sum and recursive. Equivalent to requirement that the left part sum <= right part sum and both subparts are mergeable.
+
+We can think of constructing a monotonic sequence of sums? Because at each internal node, left sum <= right sum. For the whole array, the left part sum must be <= right part sum. That implies that overall sum is larger or equal to right part's sum? Not necessarily.
+
+But maybe we can compute the maximum sum using greedy: we can always merge subarray into one if we can merge left part into a sum <= sum of right part.
+
+We also saw that left-to-right condition ensures each partial sum <= next element; but this is a stricter requirement than above; left-to-right merging is a special case where m = r-1. So all mergeable subarrays are not too many but we need efficient.
+
+Observation: If we check from left to right, we can maintain building candidate groups using stack.
+
+Consider we process array from left to right. For each element val, we maintain a list of groups with their sums; we try to merge as long as possible from left to right: if previous group sum <= val, we merge. But we must also consider that after merging, we might merge further with previous item.
+
+This is similar to union find: we combine groups with property that sum <= next group's sum.
+
+But earlier we found this fails to produce 21 because we not merge 7 and 9 at right first. However if we process from right to left using same logic, maybe we get 21? Try process from right: stack [3] then 9: 9 <= 3? no, so can't merge. stack [9,3]? But we need left <= right; for right scanning, we look at left neighbor? Let's define from right: we merge if right group <= left group? Actually from right scanning, we think of merging right group into left group if right sum <= left sum? Let's test: Process from right: start [3], next 9: Check 9 <= 3? false => can't merge; push 9. Next 7: Check 7 <= 9? true => merge with 9 => [16,3]? Wait merging 7 and 9 yields 16. But earlier should produce 16. But we also need to push 5 afterwards? Let's simulate: array [2,3,7,9,3].
+Processing from right starting with empty:
+- val=3: stack=[3]
+- val=9: check 9 <= 3? false => stack=[9,3]
+- val=7: check 7 <= 9? true => combine: pop 9, pop 7, push 16 => stack=[16,3]
+- val=3: check 3 <= 16? true => combine: pop 16, pop 3, push 19? Wait we are merging left <= right from right? Wait we just created 16 as the left of 3? But in original array [2,3,7,9,3], 7 and 9 should be left <= right: 7 <= 9 yes. So combine 7 and 9 to 16. Then 3 (the a[1]) and 16 should be left <= right: 3 <= 16? yes. So combine 3 and 16 to 19. The stack [19,3]? Wait also we still have 2 at leftmost end. So at this step, we should merge 3 (the left neighbor) with 16 (the right neighbor). So combine 3 + 16 = 19. That would produce stack [19,3]? But now we also have 2 at left. Next val=2: check 2 <= 19? true => merge 2 and 19 => 21. So final stack [21]. Yes that yields 21.
+
+Thus scanning from rightmost to leftmost using merging condition: At each step, the new element val is on left of current stack, we can merge if val <= top of stack. Because val is an element at left; we check if left <= right (x <= y). Here we are merging val and topmost element (right group). Thus algorithm: from right to left:
+- push val onto stack
+- while stack length >= 2 and stack[-2] <= stack[-1]. Wait for val left and stack[-1] right, we merge if left <= right, so result = stack[-2] + stack[-1] if stack[-2] <= stack[-1] else break.
+But preceded by merging val with top? Wait at each step, we have stack such that left groups are to the left of stack elements? Let's formalize:
+
+When we process from right to left, we maintain stack of groups representing suffixes processed so far. Initially empty. For each element val from right to left:
+- insert val as a group on top of stack? Actually the element sits to left of current stack representing group that starts at right side. So we push val onto stack (as new group's sum).
+
+Now we have stack with the leftmostmost element at bottom? Let's use stack such that bottom is leftmost element. So we push val onto top. In array we process: [2,3,7,9,3]
+Sequence: val=3: push val -> stack=[3]
+val=9: push val # to left of stack? But we are going from right, so 9 is left of 3. So push val onto top: stack=[3,9] leftmost? Actually bottom is 3, top is 9. This order not correct: 3 is to right of 9 in initial array. So to maintain adjacency, we need bottom = leftmost element. For val processed from right, we push val onto bottom? Let's design such that stack[0] is leftmost element among processed; stack[-1] is rightmost element of processed subarray. But we process from right side: we add a new element at left. So we should push val onto bottom: stack.append(val)??? If we process from right, adding a new element at left means we should insert at the end? Actually we can maintain order: we can store stack as list of groups in original order among processed suffix. Suppose we start with empty for empty suffix. When we process val from rightmost: The suffix currently processed is the segment from right to current index. After processing val, the new suffix is val + previous suffix: So we need to push val as new leftmost element, but not at the end of list. But the order we store doesn't matter for merging logic: we need to check that left <= right for adjacent groups. In suffix order, adjacent groups are val (new left group) and previous first group (which is now the rightmost of the current suffix). If we store stack as list where last element is rightmost group, then the new left group should be inserted at front (index 0). But our data structure usually has push/pop at end. We could use a deque.
+
+But we can also maintain stack as we process from right such that we push val at the end, but when merging we need to check if left <= right across adjacent groups: means we need to merge groups of stack in reverse order? Not ideal.
+
+Alternative: Let's process from left to right but maintain stack where we check merging from right to left condition.
+
+But earlier left-to-right method failed.
+
+Let's redo: Process from rightmost to leftmost; maintain stack such that last element in stack is rightmost of the processed suffix. Suppose we store stack as list of sums in order from rightmost to leftmost processed? For clarity, we can store as a list where index 0 is rightmost element. But we can manage.
+
+Let's design: Use stack where stack[0] is rightmost element, stack[1] is second rightmost, etc. So when we process from right to left:
+
+- Process val: new element at left side of stack. So we push val onto stack (i.e., new rightmost? Wait around?). Actually val is leftmost of processed segment. So we add it at the end corresponding to far leftmost. So if we push at end, the stack becomes [rightmost, .. , leftmost]. Wait but we inserted at leftmost side. If we push at end, the earlier rightmost element becomes earlier in list; leftmost at end. So adjacency between val and current rightmost element is stack[-1] (val) and stack[-2] (top). But we cannot directly compare because adjacency wrong.
+
+Let's illustrate by small example:
+
+Processing from right -> leftmost order:
+
+Start [3] (rightmost). stack = [3] (rightmost). Good.
+
+Next val=9: Now we process 9 left of 3. In real array, 9 is leftmost of 3. So adjacency between 9 and 3. We want to know if 9 <= 3? false. So run [9,3] (maybe leftmost first?). Let's store stack as [9,3] (leftmost at first). But we push last? Starting with [3]. To append 9 to left, just insert at front: stack = [9,3]. So we need a deque or insert at front.
+
+But we also need to merge if left <= right. After inversion, we can check if stack[0] <= stack[1] (left <= right).
+
+Hence we can maintain deque where we push at left. Then we can merge while left <= right.
+
+But since we need to be efficient, we can store as list but we will push new element at front using .insert(0, val), maybe O(n). Not efficient. Instead we can maintain stack as normal list but push at end representing leftmost? Let's quickly recast: If we process from right to left and push at end (top) as new element, that will represent the leftmost element (since we push new coordinate). So stack[-1] is the latest leftmost element. For adjacency between 9 and 3 we want to merge stack[-1] (9) and stack[-2] (3). The condition left <= right: left <= right means stack[-1] <= stack[-2] ? But left is 9, right is 3 -> 9 <= 3 false. So we don't merge. Good.
+
+Now stack = [3, 9]? Wait we had push 9 after we had [3] (push at end). So stack becomes [3,9]. But adjacency pair for potential merge start at end? The adjacency in original array is 9 left of 3. In our stack after this step, adjacency between 9 and 3 is actually at indices 1 and 0? But the adjacency pair we check is stack[-2] (3) and stack[-1] (9). That is 3 and 9 but reversed order. In the real array, 9 is left of 3. So we need to check 9 <= 3? 9 <= 3 false. So condition check using stack[-1] <= stack[-2] is 9 <= 3 false, as we need, so we don't merge. Good. But we still need to maintain adjacency with correct order for further merges: After merging, we later merge 7 and 9. We process 7: push 7 => stack becomes [3,9,7]. Now the adjacency between 7 and 9 is indices 1 and 2? Actually 7 left of 9, so adjacency pair refers to stack[-1] (7) and stack[-2] (9). We need to check 7 <= 9? yes. That's stack[-1] <= stack[-2] check. Good. So we merge: new sum = 16. After merging, we need to replace top two elements with new sum 16. According to the algorithm, we would do: pop -1 (7) and pop -1 (9)?? Wait double-check order: We want to combine left and right subtrees: left=7, right=9. In our stack, left is at stack[-1], right is at stack[-2]. After merging, we should replace these two by sum 16. But we could use pop twice and push sum. So stack becomes [3, 16]. Now adjacency between 3 and 16 indices 0 and 1 is left=3, right=16. Check 3 <= 16? stack[-1] <= stack[-2] gives 16 <=3? false. That is wrong. We need to check left <= right which is 3 <= 16. In Our stack [3,16], leftmost is 3, rightmost is 16; but that's reversed? Actually 3 is left of 16. So adjacency pair is 3 and 16. left is 3, right is 16. Condition left <= right 3 <= 16 true. In our stack representation, left element is earlier in list (index 0). So left element is not stack[-1]. But our derived merging condition earlier uses stack[-1] <= stack[-2], which is reversed.
+
+Hence the stack must venture consistent orientation relative to adjacency. Let's think: We push leftmost element at end. So heap: the stack's low indices represent rightmost, high indices represent leftmost. That is, stack[0] is rightmost element of suffix, stack[-1] is leftmost element. So adjacency is between stack[-1] (left) and stack[-2] (right). The condition left <= right is: stack[-1] <= stack[-2].
+
+Thus we need to check: if stack[-1] <= stack[-2] then we can merge left and right into sum = stack[-1] + stack[-2]. We then remove stack[-1] and stack[-2] and push sum as new leftmost element (since stack[-1] is left). After merging, we should push new sum into stack[-1], which is now at end.
+
+So algorithm: add element val (at left of stack) -> push val to stack. Then while length >=2 and stack[-1] <= stack[-2], we merge: val = stack[-1] + stack[-2]; pop twice; push val.
+
+Let's test on example.
+
+Initialize stack = []
+
+val=3 -> push 3 -> stack=[3]
+while length>=2? no.
+
+val=9 -> push 9 -> stack=[3,9]. Condition: stack[-1] >=? Wait stack[-1] = 9 <= stack[-2] = 3? 9 <= 3 false -> no merge.
+
+val=7 -> push 7 -> stack=[3,9,7]. Condition: stack[-1] = 7 <= stack[-2] = 9? yes => merge: new = 7+9=16. pop twice: stack becomes [3,16]. Condition: stack[-1] = 16 <= stack[-2] = 3? 16 <= 3 false. So stop.
+
+val=3 -> push 3 -> stack=[3,16,3]. Condition: stack[-1] = 3 <= stack[-2] = 16? yes => merge: new = 3+16=19. pop twice: stack=[3,19]. Condition: stack[-1] = 19 <= stack[-2] = 3? 19 <= 3 false. stop.
+
+val=2 -> push 2 -> stack=[3,19,2]. Condition: stack[-1] = 2 <= 19? yes => merge: new = 2+19=21. pop twice: stack=[3,21]. Condition: 21 <= 3? no.
+
+Now final stack = [3,21]. We still have 3 not merged. But 3 <= 21? Actually 3 <= 21, but we can merge? Wait stack order is [3,21], leftmost 3, rightmost 21. Condition left <= right, 3 <=21 satisfied. But our algorithm stops because after last merge we had stack [3,21], but length>=2 and stack[-1] = 21 <= stack[-2] =3? 21 <=3 false. So we fail to merge due to reversed order; we need to merge left <= right. But we have left=3, right=21.
+
+But our stack order's leftmost is earliest index: [3,21] => leftmost 3? Wait we need to identify leftmost element is at index 0? Actually yes: stack[0] is rightmost processed element among suffix? Wait earlier we said stack[0] is rightmost, stack[-1] is leftmost. But after pushing 2 (leftmost addition), we had stack [3, 19, 2]. Here index 0 was 3 earlier rightmost? Let's track: After processing val=3 first (rightmost), stack [3] index 0 -> 3 is rightmost eventually? Actually after processing more elements, the stack order remains reversed relative to array: index 0 is rightmost, index -1 is leftmost. So after final stack [3,21], index 0 is rightmost (3), index 1 is leftmost (21). Wait but originally array is [2,3,7,9,3]. After processing rightmost to leftmost, we processed 3,9,7,3,2. So final stack [3,21] index 0 is rightmost (3). But then we still have 3 on right side not merged because 3 <= 21? Wait 3 is to right of 21 in original array: 21 (merged of left part) is on index 0? Actually original array: [2,3,7,9,3]. After merging all, we got [21,3]. So left element 21, right element 3. That's exactly stack [3,21]: index 0 is rightmost original element 3, index 1 is leftmost 21. But left <= right condition for merging left 21 <= 3? That is false. So we cannot merge 21 and 3, indeed no merging. In our algorithm, we got stack [3,21] final. So maximum element found is max(3,21)=21. Good.
+
+Thus algorithm yields maximum as 21. Good.
+
+Another example: [3,1,2].
+
+Process. Start: stack=[]
+
+val=2 -> push 2 -> stack [2]
+val=1 -> push 1 -> stack [2,1] ; check 1 <= 2? yes at stack[-1] <= stack[-2]? 1 <=2 true => merge 1+2=3. stack-> [3] (since we popped both? Wait we popped 1,2 => stack becomes [3]. Here 3 corresponds to index 0? Actually after merging, we push 3 to stack after pop. So stack [3]. Next val=3 -> push 3 -> stack [3,3]. Condition: 3 <= 3? stack[-1] <=stack[-2] : 3 <=3 true -> merge operation: pop 3,3 -> stack [6]. So final stack [6]. max=6. Good.
+
+Example [4,1,1]. Process:
+
+Side1 => Start val=1 -> stack [1]
+Next val=1 -> push 1 -> stack [1,1]; check 1 <=1? 1 <=1 true => merge 1+1=2 -> stack [2].
+Next val=4 -> push 4 -> stack [2,4]; check 4 <=2? 4 <=2 false -> loop stops. max= max(2,4)=4. Works, that matches earlier result.
+
+Test with [9,3,7,9,3] maybe? Let's test random.
+
+It seems algorithm works: scanning from right to left, merging when left <= right. This yields a stack such that adjacent pairs fail; no pair can be merged left <= right. We record maximum sum in stack.
+
+But is this always optimal? Let's test counterexample: Suppose array [5,1,4]. Process scanning right-to-left:
+
+val=4 -> stack [4]
+val=1 -> push 1 -> stack [4,1] ; check 1 <=4? yes merge: 1+4=5 stack [5].
+val=5 -> push 5 -> stack [5,5] ; check 5 <=5? yes merge: 1+5? Wait we merge 5+5=10 stack [10]. max=10. Sequence: 5,1,4 total sum 10. Works. But is there any scenario where merging left-to-right fails but right-to-left yields more? Suppose array [2,4,3]. Process right-to-left:
+
+val=3 -> stack [3]
+val=4 -> push 4 -> stack [3,4] check 4 <=3? false -> no merge.
+val=2 -> push 2 -> stack [3,4,2] check 2 <=4? yes merge: 2+4=6 -> stack [3,6] check 6 <=3? false stop.
+
+max=6.
+
+Is there better? Let's attempt to consider possible operations: array [2,4,3]. We could merge 4 and 3? 4 >3, no. Merge 2 and 4? 2<=4 yes. So merge makes [6,3]. Then 6 <=3? false. So final largest 6. So algorithm correct. Good.
+
+Case [5,4,6]. Process R->L:
+
+val=6 -> push 6 -> stack [6]
+val=4 -> push 4 -> stack [6,4] check 4 <=6? true merge: 4+6=10 -> stack [10]
+val=5 -> push 5 -> stack [10,5] check 5 <=

@@ -1,0 +1,237 @@
+<|channel|>analysis<|message|>We need to maximize gold by selecting non-overlapping ranges (intervals) covering houses. Each offer is a closed interval [start, end] with weight gold. Houses can't be reused. Equivalent to weighted interval scheduling on line length n. We can choose any subset of intervals such that no two overlaps. Need max sum of gold. Classic DP.
+
+Constraints: n up to 1e5, offers up to 1e5. weights up to 1e3. We can sort offers by end. Compute DP[i] = max gold up to interval i. Additionally consider houses may be unused, but DP defines based on intervals. Weighted interval scheduling: sort by end ascending, compute p[i] = last interval before i that doesn't overlap (i.e., whose end < start_i). Then DP[i] = max(DP[i-1], offers[i].gold + DP[p[i]]). Indexing DP[0] = 0. Complexity O(m log m) where m=offers length.
+
+Edge: start and end inclusive. Non-overlap: intervals [a,b] and [c,d] don't overlap if b < c or d < a. Since already sorted by end, we need previous with end < start_i.
+
+Compute p[i] via binary search on ends array.
+
+Alternatively, we can use coordinate DP across houses: since n up to 1e5, we could define DP over positions using offers by end. But weighted interval scheduling simpler.
+
+Need to handle large number of intervals: 1e5; DP with list of ints.
+
+Implementation details: use tuples: (start, end, gold). Sort by end. Build ends list. For each interval i, binary search for rightmost end < start_i. Use bisect_left on ends with start_i, then subtract 1. If result >=0, p = index found else p = -1.
+
+DP array length m+1 maybe. For i from 1 to m: dp[i] = max(dp[i-1], gold_i + dp[p+1]) where dp[0] = 0. Wait mapping: if p = index of last non-overlap; that interval index is 0-based. Since dp corresponds to first i intervals? Let's set dp[0] = 0. For i from 1..m: interval idx = i-1. Then p = predecessor index (0-based). dp[i] = max(dp[i-1], gold_i + dp[p+1])? Actually dp[j] corresponds to first j intervals (indices 0..j-1). So if predecessor index is p, then dp[p+1] corresponds to first p+1 intervals including that predecessor. But we need dp up to p+1? Wait example: Suppose intervals sorted: 0..m-1. dp[i] = best for first i intervals (0..i-1). For current interval i-1, we can either skip it: dp[i-1] (which is best for first i-1 intervals). Or take it: gold_i + dp[p+1] where p is index of last non-overlap. Because dp[p+1] is best for first p+1 intervals (including that non-overlap). But if p == -1 (no such), then dp[0] = 0. Implementation: p = idx where end < start_i. p = bisect_left(ends, start_i) - 1. Then dp[i] = max(dp[i-1], gold_i + dp[p+1]).
+
+Alternatively, we can use dp array of same length as offers, but easier as above.
+
+Edge Cases: large memory? m up to 1e5, dp array of ints 1e5 is fine.
+
+Return dp[m] as max gold.
+
+Testing with examples:
+
+Example 1: offers: [0,0,1], [0,2,2], [1,3,2]. Sorted by end: [0,0,1] end 0; [0,2,2] end 2; [1,3,2] end 3. ends=[0,2,3].
+i=1: idx0 start 0, gold1. p=bisect_left([0,2,3],0)-1=0-1=-1. dp[1]=max(dp[0],1+dp[0])=1. dp[1]=1
+i=2: idx1 start0, gold2. p=bisect_left([0,2,3],0)-1=-1. dp[2]=max(dp[1],2+dp[0])=max(1,2)=2
+i=3: idx2 start1, gold2. p=bisect_left([0,2,3],1)-1=0-1? Wait bisect_left returns 1? ends[0]=0<1, ends[1]=2>1 so position 1. So p=1-1=0. dp[3]=max(dp[2],2+dp[1])=max(2,2+1=3)=3. result 3. Good.
+
+Example 2: [0,0,1], [0,2,10], [1,3,2]. Sorted by end: [0,0,1] end0; [0,2,10] end2; [1,3,2] end3. i=1: dp[1]=1. i=2: p = -1 dp[2]=max(1,10)=10. i=3: p=0 dp[3]=max(10,2+dp[1])=max(10,3)=10. Good.
+
+Edge: if intervals overlap partially etc.
+
+We need to import bisect and typing.
+
+Complexities: O(m log m).
+
+Note: We ignore n? For houses not covered, not matter. But we might want to ensure intervals within n. Not needed.
+
+Let's craft final solution.
+
+Potential additional optimization: Use builtin sort.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every offer we know
+
+* the first house it wants – `start`
+* the last house it wants – `end`   (both inclusive)
+* the amount of gold – `gold`
+
+A buyer can buy **all** houses in his range, but no two chosen buyers may
+share a house.  
+The problem is exactly the *weighted interval scheduling* problem:
+
+```
+interval  i : [start_i , end_i]   weight = gold_i
+choose a subset of non‑overlapping intervals with maximum total weight
+```
+
+The classic dynamic programming solution works in `O(m log m)`  
+(`m = number of offers`, here `m ≤ 10^5`).
+
+--------------------------------------------------------------------
+
+#### 1.  Sorting
+
+Sort all offers by increasing `end`.  
+After sorting, for every interval `i` all earlier intervals are sorted by
+their end too.
+
+--------------------------------------------------------------------
+
+#### 2.  Predecessor array `p`
+
+For interval `i` we need the last interval that ends **before** `i` starts.
+Because the ends are sorted we can find it with binary search.
+
+```
+p[i] = largest index j < i  with  end_j < start_i
+        (-1 if no such j exists)
+```
+
+`bisect_left(ends, start_i)` gives the first index having `end >= start_i`,
+so `p[i] = bisect_left(ends, start_i) - 1`.
+
+--------------------------------------------------------------------
+
+#### 3.  DP
+
+Let
+
+```
+dp[i] = maximum gold obtainable using only the first i intervals
+        (interval indices 0 … i-1,  i ranges from 0 … m)
+```
+
+Transitions:
+
+```
+# skip interval i-1
+dp[i] = dp[i-1]
+
+# take interval i-1
+dp[i] = max(dp[i], gold_{i-1} + dp[p[i-1] + 1])
+```
+
+`dp[p[i-1] + 1]` is the best result for all intervals that end before
+`start_{i-1}` (because `p[i-1]` is 0‑based).
+
+`dp[0] = 0` (no intervals → no gold).
+
+The answer is `dp[m]`.
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the maximum possible gold.
+
+---
+
+##### Lemma 1  
+For every `i (0 ≤ i ≤ m)` `dp[i]` equals the optimal gold obtainable from
+intervals `0 … i-1`.
+
+**Proof.**
+
+Induction over `i`.
+
+*Base `i = 0`*  
+No interval is considered, the only achievable gold is `0`.  
+`dp[0] = 0` – optimal.
+
+*Induction step*  
+Assume the lemma holds for all values `< i`.
+Consider the set of intervals `0 … i-1`.
+
+An optimal solution either
+
+1. **does not use interval `i-1`**  
+   Then the optimal gold equals the optimal gold for the first `i-1` intervals,
+   which by induction hypothesis is `dp[i-1]`.
+
+2. **uses interval `i-1`**  
+   Then it cannot use any interval that overlaps with `i-1`.  
+   All such intervals are exactly the ones with `end ≥ start_{i-1}`.
+   The last interval that does **not** overlap has index `p[i-1]`.  
+   By induction hypothesis the best gold from intervals `0 … p[i-1]` is
+   `dp[p[i-1]+1]`.  
+   Adding the current gold gives `gold_{i-1} + dp[p[i-1]+1]`.
+
+The algorithm takes the maximum of these two possibilities,
+hence `dp[i]` equals the optimum for intervals `0 … i-1`. ∎
+
+
+
+##### Lemma 2  
+For every interval `i` the value `p[i]` computed by the algorithm is the
+largest index `< i` such that `end_{p[i]} < start_i`.
+
+**Proof.**
+
+Because intervals are sorted by `end`, the list `ends` is non‑decreasing.
+`bisect_left(ends, start_i)` returns the first index where the end is
+`≥ start_i`.  
+Subtracting one gives the last index with end `< start_i`.  
+If no such index exists the result is `-1`. ∎
+
+
+
+##### Theorem  
+`dp[m]` returned by the algorithm equals the maximum sum of gold that can
+be earned without selling any house twice.
+
+**Proof.**
+
+By Lemma&nbsp;1, for `i = m` the value `dp[m]` equals the optimum for all
+intervals `0 … m-1`, i.e. for the whole set of offers.  
+Thus the algorithm outputs the maximum achievable gold. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+*Sorting* – `O(m log m)`  
+*Computing `p`* – `m` binary searches, each `O(log m)` → `O(m log m)`  
+*DP* – `O(m)`  
+
+Total time: `O(m log m)`  
+Memory usage: `O(m)` for the offers, the `ends` array and the `dp` array,
+well within limits (`m ≤ 10^5`).
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from bisect import bisect_left
+from typing import List
+
+class Solution:
+    def maximizeTheProfit(self, n: int, offers: List[List[int]]) -> int:
+        """
+        Weighted interval scheduling with offers sorted by end.
+        """
+        # sort by end
+        offers.sort(key=lambda x: x[1])          # x[1] = end
+        m = len(offers)
+
+        # list of ends for binary search
+        ends = [e for _, e, _ in offers]
+
+        # DP array, dp[0] = 0
+        dp = [0] * (m + 1)
+
+        for i in range(1, m + 1):
+            start, end, gold = offers[i - 1]
+
+            # index of last interval that ends before this one starts
+            p = bisect_left(ends, start) - 1   # may be -1
+
+            # Option 1: skip this interval
+            skip = dp[i - 1]
+
+            # Option 2: take this interval
+            take = gold + dp[p + 1]            # p+1 because dp index is 1‑based
+
+            dp[i] = max(skip, take)
+
+        return dp[m]
+```
+
+The function follows exactly the algorithm proven correct above and
+conforms to the required signature.

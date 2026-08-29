@@ -1,0 +1,222 @@
+<|channel|>analysis<|message|>We need algorithm: We have roof intervals with weight. Only non-overlapping intervals selected. For each interval chosen, we receive weight. Equivalent to Weighted Interval Scheduling on continuous line segment but weighted interval. However constraint: distinct rooms cannot overlap. That's interval scheduling with weights.
+
+We have n up to 1e5, offers up to 1e5, weight up to 1e3 modest. So we can sort offers by end. Then DP by sorted by end.
+
+Classic DP: sort offers by end. For each offer i, we have start i, end i. Compute p[i] = max index j < i with offers[j].end < start_i. Use binary search on sorted ends.
+
+DP[i] = max(DP[i-1], dp[p[i]] + w[i])
+DP[0] = 0 (no offers). For i from 1..m.
+
+We need final answer DP[m].
+
+Complexities: O(m log m).
+
+Edge: n up to 1e5 but we don't need n.
+
+Implement solution accordingly.
+
+Take care of 0-index vs 1-index.
+
+Example. We'll code accordingly. Use bisect_left.
+
+Return int. Use list of tuples.
+
+Let's produce final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every buyer we know
+
+* an interval `[start , end]` of houses he wants to buy
+* the amount of gold he pays
+
+Different buyers cannot buy the same house, therefore two chosen intervals must be
+**disjoint** – the problem is a classic *weighted interval scheduling* problem.  
+The houses are on a line, so each match is a closed interval and the maximum
+profit is the maximum total weight of a set of disjoint intervals.
+
+The number of houses `n` is at most `10⁵`,
+the number of offers is at most `10⁵`,  
+each price is at most `10³`, so the answer easily fits into 32‑bit.
+
+--------------------------------------------------------------------
+
+#### 1.  Ordering offers
+
+Sort all offers by their end index (`end`).  
+After sorting by end the following holds:
+
+```
+for every two consecutive offers i < j :
+   end[j] ≤ end[k] for all k ≥ j
+```
+
+If we know the highest index that ends before the start of `i`,
+the best profit we can obtain before taking `i` is already the optimal
+solution for this prefix.
+
+--------------------------------------------------------------------
+
+#### 2.  Pre‑computing “previous non‑intersecting interval”
+
+For a sorted i‑th offer `i` (0‑based) we need the index `p[i]` of the
+rightmost offer that ends **before** its start:
+
+```
+p[i] = max { j | j < i , end[j] < start[i] }   ,  -1 if none
+```
+
+Because the `end` array is sorted, `p[i]` is found by binary search
+(`bisect_left` on the `ends` array).  
+The search costs `O(log m)` time, where `m` is the number of offers.
+
+--------------------------------------------------------------------
+
+#### 3.  Dynamic programming
+
+Let `dp[0] = 0` (no offers are considered)
+
+For `i = 1 … m` (1‑based index for the processed works)
+
+```
+idx = i-1          # the last offer in the sorted list
+option = dp[i-1]                      # skip the current offer
+take   = dp[p[i]] + dp[idx]          # we keep the current offer
+
+dp[i] = max(option, take)
+```
+
+`dp[i]` is the best profit that can be made by considering only the first
+`i` sorted offers.  
+The recurrence is `O(m log m)` (because of the binary searches).
+The final answer is `dp[m]`.
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the maximum possible gold.
+
+---
+
+##### Lemma 1  
+For each offer `i`, `p[i]` is the maximum index of an offer that ends
+before `i` starts; it exists if and only if such an offer exists.
+
+**Proof.**
+
+*The array of ends* is sorted.  
+Binary search `bisect_left` returns the smallest index `j` with
+`end[j] ≥ start[i]`.  
+All indices `< j` satisfy `end[j] < start[i]`.  
+`j-1` is the largest index that satisfies the condition.  
+If `j=0` no such index exists, then `p[i] = -1`. ∎
+
+
+
+##### Lemma 2  
+For every `i (0 ≤ i ≤ m)`, `dp[i]` equals the maximum profit that can be
+obtained by selecting a subset of the first `i` sorted offers.
+
+**Proof.**
+
+*Base `i = 0`.*  
+No offers are considered, profit `0` is optimal.
+
+*Induction step.*  
+Assume the statement true for all `i' < i`.  
+Consider the `i`‑th offer (0‑based index `i-1`).
+
+Two possibilities:
+
+1. **Skip the current offer** – this yields the best profit `dp[i-1]`
+   by the induction hypothesis.
+2. **Take the current offer** – the previous chosen offer must end
+   before `start[i-1]`.  
+   By Lemma&nbsp;1 the reachable previous offers are exactly indices `≤ p[i-1]`.  
+   The optimal profit obtainable together with the current offer is
+   ￼`dp[p[i-1]] + gold[i-1]`.
+
+The algorithm considers the maximum of the two possibilities and sets
+`dp[i]` to that value.  
+Thus `dp[i]` is optimal for the first `i` offers. ∎
+
+
+
+##### Lemma 3  
+After processing all offers the maximum profit equals `dp[m]`.
+
+**Proof.**
+
+By Lemma&nbsp;2, `dp[m]` is optimal for the first `m` (i.e. all) offers.  
+Since the value is the maximum over all feasible subsets of `(i-1)`‑indexed
+intervals (the original buyers), it is optimal for the whole set. ∎
+
+
+
+##### Theorem  
+`solve` returns the maximum amount of gold that can be earned by selling
+houses to buyers.
+
+**Proof.**
+
+The algorithm outputs `dp[m]`.  
+By Lemma&nbsp;3 this value equals the optimum profit. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+*Sorting* `m ≤ 10⁵` offers by end: `O(m log m)` time.  
+For each offer we perform one binary search: `O(m log m)` time.  
+Total time: `O(m log m)`.
+
+*Space*:  
+Arrays of length `m` for `dp`, `ends`, and `p`: `O(m)` integers.  
+Total space: `O(m)`.
+
+Both limits satisfy the constraints (`n , m ≤ 10⁵`).
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+import bisect
+
+class Solution:
+    def maximizeTheProfit(self, n: int, offers: List[List[int]]) -> int:
+        """
+        Weighted interval scheduling – optimal profit for non‑overlapping
+        compatible offers.
+        """
+        if not offers:
+            return 0
+        
+        # Sort offers by end by end (keeps start & gold together)
+        offers.sort(key=lambda x: x[1])                # x[1] = end
+        m = len(offers)
+        ends = [offers[i][1] for i in range(m)]        # sorted end indices
+        p = [0] * m                                      # previous compatible index
+
+        # Pre‑compute p[i] for each offer using binary search
+        for i in range(m):
+            start_i = offers[i][0]
+            # bisect_left returns first index where end >= start_i
+            idx = bisect.bisect_left(ends, start_i)
+            p[i] = idx - 1          # -1 if no such edge
+
+        # DP array, dp[0] = 0   (no offers)
+        dp = [0] * (m + 1)
+        for i in range(1, m + 1):
+            idx = i - 1
+            skip = dp[i - 1]
+            take = dp[p[i - 1]] + offers[i - 1][2]
+            dp[i] = max(skip, take)
+
+        return dp[m]
+```
+
+The function follows exactly the algorithm proven correct above and
+conforms to the required interface.

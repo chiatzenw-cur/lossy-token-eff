@@ -1,0 +1,212 @@
+<|channel|>analysis<|message|>We need to maximize gold, select subset of non-overlapping intervals. Classic weighted interval scheduling with number of intervals up to 1e5. DP O(n log n). Intervals sorted by end. Need DP[i] = max profit considering first i intervals sorted by end, i from 1..m. Compute prev index via binary search. DP[i] = max(DP[i-1], profit[i] + DP[p[i]]). DP[0]=0. Complexity O(m log m). n up to 1e5, but number of intervals same.
+
+Edge: intervals may have same end. Use stable.
+
+Implementation: sort offers by end. Keep arrays start, end, profit. For binary search: use bisect_right on ends array to find last index where end <= start_i. p[i] = index of that end. Since DP array 0-based, use 1-based indices.
+
+Another way: use DP as list of int length m+1.
+
+Return DP[m].
+
+We need to handle large n but only intervals matter.
+
+Return int.
+
+Let's code.
+
+Testing with examples.
+
+Edge cases: overlapping intervals.
+
+Constraints: gold_i up to 1000, but m up to 1e5, maximum profit up to 1e8, fits int.
+
+Complexities fine.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every buyer we know
+
+* `start_i` – first house the buyer wants
+* `end_i`   – last house the buyer wants
+* `gold_i`  – amount of gold the buyer pays
+
+The houses are on a line, so a buyer is represented by a closed interval  
+`[start_i , end_i]`.  
+Two buyers may **not** receive the same house, therefore we can only choose
+a set of *pairwise disjoint* intervals.
+
+The problem is exactly the classic *weighted interval scheduling* problem:
+
+*intervals are sorted by finishing time, find a subset of
+non‑overlapping intervals with maximum total weight.*
+
+The number of intervals is up to `10^5`, so an `O(m log m)` algorithm is
+necessary.
+
+
+
+--------------------------------------------------------------------
+
+#### Algorithm
+```
+1. Sort all offers by increasing end time.
+2. For every offer i (1‑based after sorting) store:
+        start[i], end[i], profit[i]
+   (profit[i] = gold_i)
+3. Build an array `ends` containing the end times of the sorted offers.
+4. For every offer i compute p[i] – the index of the last offer that
+   ends not later than `start[i]`.
+   It can be found by binary search on `ends`:
+        p[i] = bisect_right(ends, start[i])          # 0‑based
+   (if nothing fits, p[i] = 0)
+5. Dynamic programming:
+        dp[0] = 0
+        for i = 1 .. m:
+            dp[i] = max( dp[i-1], profit[i] + dp[p[i]] )
+   `dp[i]` uses only the first `i` offers (in sorted order).
+6. Result is `dp[m]`.
+```
+
+`dp[i]` is the maximum gold we can obtain considering only the first `i`
+offers.  
+`dp[i-1]` ignores the current offer, while `profit[i] + dp[p[i]]` accepts it
+and adds the best solution that ends before the current interval starts.
+
+The algorithm runs in  
+`O(m log m)` time (sorting & binary searches) and `O(m)` memory.
+
+
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the maximum possible gold.
+
+---
+
+##### Lemma 1  
+For every `i (1 ≤ i ≤ m)` the value `p[i]` computed by the algorithm
+is the largest index `k < i` such that `end[k] ≤ start[i]`.  
+If no such `k` exists, `p[i] = 0`.
+
+**Proof.**
+
+`ends` is sorted ascending because the offers are sorted by `end`.
+`bisect_right(ends, start[i])` returns the insertion position of
+`start[i]` to keep the array sorted.  
+All indices `< bisect_right` have `end ≤ start[i]`;  
+all indices `≥ bisect_right` have `end > start[i]`.  
+Thus `p[i] = bisect_right(ends, start[i])` is exactly the largest index
+with `end ≤ start[i]`. ∎
+
+
+
+##### Lemma 2  
+For every `i (0 ≤ i ≤ m)` the value `dp[i]` computed by the
+dynamic programming recurrence equals the maximum total gold obtainable
+using only offers `1 … i`.
+
+**Proof by induction over `i`.**
+
+*Base `i = 0`*  
+`dp[0] = 0`. No offers are available, so the maximum gold is 0.
+
+*Induction step*  
+Assume the lemma holds for all indices `< i`.  
+Consider the optimal solution for the first `i` offers.
+
+*Case 1 – offer `i` is not taken.*  
+The optimal total equals the optimal solution for offers `1 … i-1`,
+which by induction hypothesis is `dp[i-1]`.
+
+*Case 2 – offer `i` is taken.*  
+All offers that overlap with `i` must be excluded.  
+By Lemma&nbsp;1 the last non‑overlapping offer is exactly `p[i]`.  
+Hence the best solution in this case is `profit[i] + dp[p[i]]`, where
+`dp[p[i]]` is the optimum for the first `p[i]` offers (induction hypothesis).
+
+The algorithm chooses the larger of the two values:
+`dp[i] = max(dp[i-1], profit[i] + dp[p[i]])`.  
+Thus `dp[i]` equals the optimum for the first `i` offers.
+
+By induction the lemma holds for all `i`. ∎
+
+
+
+##### Theorem  
+`dp[m]` returned by the algorithm equals the maximum gold that can be
+earned by selecting any subset of non‑overlapping offers.
+
+**Proof.**
+
+By Lemma&nbsp;2, `dp[m]` is the optimum for the first `m` offers,
+which are *all* offers.  
+Therefore it is the maximum possible gold. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+Let `m` be the number of offers (`m ≤ 10^5`).
+
+* Sorting: `O(m log m)`
+* Binary search for each offer: `O(m log m)`
+* DP loop: `O(m)`
+
+Total time: `O(m log m)`  
+Memory usage: `O(m)` for the arrays `start`, `end`, `profit`, `p`, `dp`.
+
+Both satisfy the constraints.
+
+
+
+--------------------------------------------------------------------
+
+#### Reference Implementation  (Python 3)
+
+```python
+from bisect import bisect_right
+from typing import List
+
+class Solution:
+    def maximizeTheProfit(self, n: int, offers: List[List[int]]) -> int:
+        # 1. sort by end time
+        offers.sort(key=lambda x: x[1])          # x[1] = end
+        m = len(offers)
+        if m == 0:
+            return 0
+
+        start = [0] * (m + 1)   # 1‑based
+        end   = [0] * (m + 1)
+        profit = [0] * (m + 1)
+
+        for i, (s, e, g) in enumerate(offers, 1):
+            start[i] = s
+            end[i]   = e
+            profit[i] = g
+
+        # ends array for binary search
+        ends = [0] * (m + 1)
+        for i in range(1, m + 1):
+            ends[i] = end[i]
+
+        # 2. DP
+        dp = [0] * (m + 1)          # dp[0] = 0
+        for i in range(1, m + 1):
+            # find last non‑overlapping offer
+            # bisect_right returns index where end <= start[i]
+            j = bisect_right(ends, start[i], 1, i) - 1
+            # dp[i] = max(dp[i-1], profit[i] + dp[j])
+            dp[i] = dp[i - 1]
+            cand = profit[i] + dp[j]
+            if cand > dp[i]:
+                dp[i] = cand
+
+        return dp[m]
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

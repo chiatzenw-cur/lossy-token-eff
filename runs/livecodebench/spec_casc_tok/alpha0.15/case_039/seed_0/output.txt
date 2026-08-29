@@ -1,0 +1,566 @@
+<|channel|>analysis<|message|>We need to parse the problem: Given string s length n <=200, partition into k substrings (contiguous). For each substring, we may change characters to make it a semi-palindrome. Count minimal number of changes total. We need to find minimal changes and return integer.
+
+We need to define semi-palindrome: For length len>1, there exists positive integer d such that 1 <= d < len and len % d == 0, and for all indices i,j with same modulo d, the characters at those positions form a palindrome. Equivalent: For modulus d, we consider groups of positions with same remainder mod d. Each group must be a palindrome - meaning the sequence of characters at positions congruent to r mod d must read same forwards/backwards. But since positions are spaced by d, effectively we need that for each group, the sequence of characters at positions r, r+d, r+2d, ... must be palindrome. That is, for all positions l,r in group, the characters at positions l and symmetric with respect to group must be equal. Equivalent to: For each 0 <= r < d, for all pairs (r + t*d) and (r + (m-1-t)*d) where m is the number of elements in that group, those characters must be equal. So we need to change minimal letters in string so that for some d dividing length, each group is palindrome.
+
+We can perform changes at any positions. The cost is number of changes needed to transform string into valid semi-palindrome.
+
+We need to compute minimal changes for each substring. Since n <=200, we can precompute cost[l][r] minimal changes to make s[l:r] (inclusive-exclusive) a semi-palindrome. Then DP over partitions: dp[i][p] minimal changes for first i chars partitioned into p substrings.
+
+Compute cost: For substring t of length len. For each divisor d of len (1 <= d < len). For each residue r<d, we need to make all characters in group palindrome. The minimal changes to make group palindrome is: group size m; to make palindrome, we need to change characters to make them symmetric. This is typical: For each pair of positions mirrored, we can choose character that appears most frequently between the two. But due to only a single char per position pair? Actually each pair of positions defined by indices groups: We only consider group's characters in order. To make them palindrome, we need to change half of them to match others. Equivalent to compute minimal changes to make a string palindrome: For string g of length m, minimal changes = number of mismatched pairs in g: for t=0..m/2-1, if g[t] != g[m-1-t], need change one of them; but we can change either; minimal changes = count of mismatches. Because changing one char per mismatch will fix pair. Example: "ab", need 1 change. "abcba": mismatches 0. So cost for group is mismatches count.
+
+Thus for each d, we can compute sum over residues mismatches. But we need minimal over d. So cost[l][r] = min over d dividing len of cost_d.
+
+Precompute divisors for lengths up to n. n <=200 so small.
+
+We need efficient cost computation: For each substring length len, we compute cost for each possible d. But there are O(n^2) substrings, each computed over O(divisors) d. For each d, we need to compute mismatches across groups. We might compute using prefix sums.
+
+Simpler: For each substring s[l:r], we can evaluate all d by scanning group pairs. Complexity O(n^3) maybe okay: n <=200, n^3=8 million, times cost per group maybe up to d, ~len/d groups. Each step maybe small. Let's approximate: For each substring (O(n^2)=40000), for each d dividing len (~<=8 divisors). For each d, we need to iterate over all residue positions r<d. For each residue, we need to iterate over pairs in group; group size m <= len/d. Get mismatches count by scanning pairs. Complexity: sum over d of d * (len/d) = sum over d len = len * number_of_divisors. So around len * 8. So per substring ~ len*8. So total ~ sum(len)*n^2? Wait sum of len over all substrings is O(n^3). Actually number of substrings of length len is n-len+1. So total cost: sum_{len=1}^{n} (n-len+1) * len * 8. That is 8 * sum_{len} (n-len+1)*len. This sum is approx 8 * n^3/6? Let's compute: sum_{len=1}^{n} (n-len+1)*len = sum_{len=1}^{n} (n+1)*len - len^2 = (n+1)*n(n+1)/2 - n(n+1)(2n+1)/6 = (n(n+1)/2)*[(n+1)- (2n+1)/3] = (n(n+1)/2)*[(3n+3 - 2n -1)/3] = (n(n+1)/2)*[(n+2)/3] = n(n+1)(n+2)/6. That's n^3/6 + lower order. So about n^3/6. For n=200, this is 1.33 million, times 8 ~ 10.7 million operations. That's fine.
+
+But we also need DP: dp[i][p] with i up to n, p up to k <= n/2 <= 100. dp dimension: 201*101 ~ 20301. For each dp transition we might iterate over j from p-1 to i-1 (the previous partition point). Complexity O(n^2*k) ~ 200*200*100=4 million. Also fine.
+
+Thus we can implement straightforward.
+
+Implementation details:
+
+- s length n.
+- Compute divisors for each length len from 1 to n: list of d such that 1 <= d < len and len % d == 0. (We can store as list of d). For len=1, no d -> but we will never need cost for length 1? Partitioning into k substrings with k <= n/2, so each substring length at least 2? Actually k <= n/2, so min length is at least 2? But we could split length 1 if k>n/2? But not allowed. So substring length >=2. But we can precompute cost for len>=2.
+
+- Precompute cost[l][r] for 0-based indices inclusive-exclusive. We'll store as 2D list n x (n+1). We'll fill cost[l][r] - minimal changes.
+
+Alternatively we can compute cost on the fly from substring indices. But we can precompute and store.
+
+Compute cost:
+
+- For each l in 0..n-1:
+  for r in l+1..n:
+    len = r-l
+    cost_for_substring = INF
+    For each d in divisors[len]:
+        total_mismatches = 0
+        For residue r0 in 0..d-1:
+            # Build group characters: indices l + r0 + t*d while < r
+            # but we can compute mismatches by scanning group indices i and j
+            # For t from 0 to m-1 where m = number of elements in group
+            # pair positions: l + r0 + t*d and l + r0 + (m-1-t)*d
+            # For t < m/2, if char at pos1 != char at pos2, inc
+            # Implementation: get indices in group.
+        total_mismatches = sum above
+        cost_for_substring = min(cost_for_substring, total_mismatches)
+    cost[l][r] = cost_for_substring
+
+Edge case: len=0? Not present.
+
+cost for len 1: not needed.
+
+But we still need cost for len 2? For len=2, divisors: d=1 only (since 1 <= d < 2 and len % d == 0). d=1: groups: residue 0 (positions 0,1). Group size 2: mismatches count = 1 if chars differ else 0. So cost is minimal changes to make string of length2 palindrome. That's correct.
+
+Compute divisors: For len from 2 to n, iter d from 1 to len-1, if len % d == 0: append. Complexity O(n^2). Fine.
+
+Now DP:
+
+dp[i][p] minimal changes for first i chars partitioned into p substrings. dp[0][0] = 0. For i>0, p>0, dp[i][p] = min_{j from p-1 to i-1} dp[j][p-1] + cost[j][i]. Because we need at least one character per previous substring? Actually each substring must have at least 2? But not necessary; but we can handle general. But we need to ensure each substring length >=2? Partition can produce length 1? Problem's constraints: k <= n/2, so each substring length at least 2. But we cannot enforce this in DP; but if we allow length 1, it's allowed but might yield lower cost? But we shouldn't consider invalid partition. But given k <= n/2, if we partition with length 1, then there wouldn't be enough characters to have k substrings each at least 2. But DP might produce such partition but still produce valid i, p? For example, n=6, k=3. If we partition into lengths 1,1,4, we get p=3, i=6. But that's allowed by DP, but doesn't satisfy each substring length >=2. But problem statement didn't explicitly forbid but might produce lower cost. However, due to constraints, a partition with some length 1 would mean at least one substring length 1, but there are only 3 substrings, length 1 ones would reduce available chars for others, but still possible. But is that allowed? The problem says "partition s into k substrings" but doesn't specify each substring length must be at least 2. But due to k <= n/2, it's possible to have length 1 substrings but still satisfy k <= n/2, e.g., n=6, k=3, we could have lengths 1,1,4. But that uses 6 chars. It's allowed? The substring of length 1 is not a semi-palindrome because no d such that 1 <= d < len. But the definition: "a string with a length of len is considered a semi-palindrome if there exists a positive integer d such that 1 <= d < len and len % d == 0, and if we take indices that have the same modulo by d, they form a palindrome." For len=1, there is no d satisfying 1 <= d < 1, so it cannot be a semi-palindrome. So any length 1 substring would require changes to make it semi-palindrome? But it's impossible. So minimal changes would be INF; but we may still treat cost[ l ][ r ] as INF for len=1. Then DP will avoid using length 1 substrings because cost infinite. So it's fine.
+
+Thus we can compute cost for len 1 as INF. But we don't need to compute, just treat cost[l][l+1] i.e., length 1 as INF.
+
+Implementation: set INF large > n*200.
+
+Now DP:
+
+Initialize dp array of size (n+1) x (k+1). Fill with INF. dp[0][0] = 0.
+
+For i from 1 to n:
+  for p from 1 to min(k, i//2? Actually we might consider p up to min(k, i) but cost of length 1 would be INF. But we can keep loops.
+   dp[i][p] = min_{j from p-1 to i-1} dp[j][p-1] + cost[j][i]
+   If cost[j][i] INF => skip.
+
+But we must ensure j <= i-1. j should be at least p-1 because each previous substring at least length 1? But we may not need extra constraints.
+
+Complexities: O(n^2*k). For each transition we iterate j across i-1. That's O(n^3*k)? Wait for each i, p we iterate j. So total loops approx sum_{i=1}^{n} sum_{p=1}^{k} (i) = O(n^2*k). Actually for each i, p, j range goes p-1 to i-1, average length ~ i/2. So complexity ~ sum_{i=1}^{n} sum_{p=1}^{k} i = k * n^2/2. So 100*200^2=4 million. Good.
+
+Use INF large > 1e9.
+
+After DP, final answer: dp[n][k].
+
+Edge cases: The minimal changes may be INF if impossible? But due to constraints, always possible by making all substrings of length >=2. Wait if n<2k? But constraint k <= n/2 ensures n >= 2k. So we can partition with each substring length at least 2. So there always exists partition. So answer finite.
+
+Now we need to implement cost calculation carefully:
+
+for l in range(n):
+   for r in range(l+1, n+1):
+       length = r-l
+       if length == 1:
+           cost[l][r] = INF
+           continue
+       min_cost = INF
+       for d in divisors[length]:
+           mism = 0
+           for residue in range(d):
+               group_indices = []
+               idx = l + residue
+               while idx < r:
+                     group_indices.append(idx)
+                     idx += d
+               m = len(group_indices)
+               # compute mismatches
+               for t in range(m // 2):
+                    if s[group_indices[t]] != s[group_indices[m-1-t]]:
+                        mism += 1
+           min_cost = min(min_cost, mism)
+       cost[l][r] = min_cost
+
+But building group_indices each time might be heavy but still fine. We can optimize: Instead of building list, we can compute directly by iterating pair positions. For each residue r0, we set i = l + r0, j = r-1 - ( (r-1 - (l+r0)) % d? Wait we need symmetrical pairs. Let's just build list.
+
+Time complexity: building group_indices each group may produce gradually many list operations. But n=200, we can still do.
+
+Alternatively we can compute mismatches by scanning from left to right: For each residue r0, we set pos1 = l + r0, pos2 = r - d -1? Actually we need to pair positions symmetrical in group. For group indices: l + r0 + t*d (t from 0 to m-1). Mirror pair: pos1 = l + r0 + t*d, pos2 = l + r0 + (m-1-t)*d. So we can compute directly by enumerating t in 0..m//2 - 1.
+
+We can compute m = ((r-1 - (l+r0)) // d) + 1. Because last index < r. So m = ((r-1 - (l+r0)) // d) + 1.
+
+Then loop t from 0 to m//2 -1:
+  pos1 = l + r0 + t*d
+  pos2 = l + r0 + (m-1-t)*d
+  if s[pos1] != s[pos2]: mism += 1
+
+This avoids building lists.
+
+Let's implement that.
+
+Now we need to compute divisors for each length. We'll precompute list of divisors as lists.
+
+Edge: Check d < len, but divisible. For len=2, d=1. For len=3, d=1. For len=4, d=1,2. For len=6, d=1,2,3. For len=1, divisors empty.
+
+Now compute cost.
+
+Now DP:
+
+dp = [[INF]*(k+1) for _ in range(n+1)]
+dp[0][0] = 0
+
+for i in range(1, n+1):
+    for p in range(1, min(k, i)+1):
+        best = INF
+        # we need j from p-1 to i-1; but we can also restrict j >= p-1 because each previous substring must have at least 1 char. But since cost for length 1 is INF, we might skip.
+        for j in range(p-1, i):
+            val = dp[j][p-1]
+            if val == INF:
+                continue
+            c = cost[j][i]
+            if c == INF:
+                continue
+            best = min(best, val + c)
+        dp[i][p] = best
+
+Answer = dp[n][k].
+
+We must ensure INF is large enough. Max changes: each character may change at most n times? Actually each substring up to n; each mismatch counts up to len/2 per group. total mismatches <= n. So INF can be 10^9.
+
+Now test on examples.
+
+Let's simulate quickly:
+
+Example 1: s="abcac", k=2.
+
+Compute cost:
+
+ substrings:
+
+"ab" length2: d=1 -> group: indices 0,1 mismatches 1 if 'a' != 'b' => 1.
+"bc" length2: mismatches 1
+"ca" length2: mismatches 1
+"ac" length2: mismatches 1
+
+"abc" length3: d=1; group indices 0,1,2; mismatches: pair 0,2: 'a' vs 'c' mismatch =>1
+"bca" length3: pairs 0,2: 'b' vs 'a' mismatch =>1
+"cac" length3: pairs 0,2: 'c' vs 'c' ->0 matches
+"abcac" length5: d=1; groups 0-4 mismatch 0-4: 'a' vs 'c' mismatch (1), 1-3: 'b' vs 'a' mismatch (2) -> 2 mismatches
+
+But we need minimal over d dividing len. For len=5, divisors: d=1 only. So cost 2.
+
+Now DP:
+
+dp[0][0]=0
+
+i=1: can't partitions because p>=1 but j from 0 to 0 but cost[0][1] INF => dp[1][1] INF.
+
+i=2: p=1: j from 0 to 1: j=0 cost[0][2]=1 + dp[0][0]=1 => dp[2][1] =1. j=1 cost[1][2] INF? cost[1][2] len1 INF -> dp[2][1] remains 1.
+
+i=3: p=1: j=0 cost[0][3] len3 =1 (since mismatches=1 for 'abc')? Wait earlier we computed mismatches 1. So dp[3][1] =1
+
+p=2: j from 1 to 2: j=1 cost[1][3] is len2 'bc' ->1; dp[1][1] INF => skip
+j=2 cost[2][3] len1 -> INF
+
+So dp[3][2] INF.
+
+i=4: p=1: j=0 cost[0][4] len4: d=1 mismatch? 0-3: 'a' vs 'c' mismatch1; 1-2: 'b' vs 'a' mismatch2 =>2; d=2? len4 divisors: d=1,2. For d=2: group residues 0: indices 0,2: mismatch 1? 'a' vs 'a' =0; residue1: indices1,3: 'b' vs 'c' mismatch1 =>1; total 1. So cost[0][4] =1. => dp[4][1] =1.
+
+p=2: j from 1 to 3: j=1 cost[1][4] = substring 'bca' len3, mismatches 1. dp[1][1] INF => skip. j=2 cost[2][4] len2 'ca' mismatches 1. dp[2][1] =1 => total 2. j=3 cost[3][4] len1 INF =>skip. So dp[4][2] = 2.
+
+i=5: p=1: cost[0][5] len5 cost 2? earlier we got 2. So dp[5][1] =2.
+
+p=2: j from 1 to 4: j=1 cost[1][5] substring 'bcac' len4: d=1 mismatches? 0-3: 'b' vs 'c' mismatch1; 1-2: 'c' vs 'a' mismatch2 =>2. d=2: residues 0: indices1,3: 'b' vs 'c' mismatch1; residue1: indices2,4: 'c' vs 'c' =>0 =>1. So cost=1. dp[1][1] INF skip. j=2 cost[2][5] 'cac' len3 cost 0. dp[2][1] =1 => total 1. j=3 cost[3][5] 'ac' len2 cost1. dp[3][1] =1 => total 2. j=4 cost[4][5] len1 INF skip. So dp[5][2] = min(1,2) =1. So answer 1. matches example.
+
+Edge case: "abcdef", k=2. Let's test quickly: s=abcdef. substrings maybe "abc" and "def". cost "abc" len3 mismatches 1. "def" mismatches 1. total 2. Our DP will compute optimum 2.
+
+Edge case: "aabbaa", k=3. We expect 0. Substrings "aa","bb","aa" each cost 0. Partition produce total 0.
+
+Should test.
+
+Potential optimization: Precompute cost[l][r] for all l,r. Implementation careful.
+
+Let's write code.
+
+Now complexity with loops: 200*200*200/2 ~ 4 million for DP, cost earlier 10 million. Good.
+
+Now produce final answer.
+
+Edge cases: s length 2, k=1: we need to transform whole string into semi-palindrome. For len=2 substring 'ab', cost 1? If 'aa', cost 0. So answer 1 minimal? Wait Example: s="ab", k=1. Since 'ab' not a semi-palindrome because cannot find d dividing len=2? length 2: d=1 works. Indices residue 0: positions 0,1 must form palindrome. 'ab' not palindrome. So we change one char to make palindrome. So cost 1. That matches.
+
+Now we need to ensure cost for len=2 with d=1 eq mismatches count. Good.
+
+Edge: len divisible by d but d may equal len? We exclude d=len (since 1 <= d < len). So for len=2, d=1 only. For len=3, d=1 only. For len=4, d=1,2. For len=6, d=1,2,3. Good.
+
+Now implement.
+
+Alternatively we could compute cost with DP precomputing mismatches for each substring and divisor using prefix sums. But not necessary.
+
+Now produce final solution.
+
+We need to ensure we treat INF properly.
+
+Implementation details:
+
+- Precompute divisors as list_of_divisors[ len ].
+
+- Precompute cost as 2D list size n x (n+1). Use INF for len=1.
+
+- In DP, we can use loops j from p-1 to i-1. But we can also implement j from i-1 down to p-1. It's fine.
+
+- Use python loops; ensure not too slow.
+
+Let's implement:
+
+```python
+class Solution:
+    def minimumChanges(self, s: str, k: int) -> int:
+        n = len(s)
+        INF = 10**9
+        # precompute divisors
+        divisors = [[] for _ in range(n+1)]
+        for L in range(2, n+1):
+            for d in range(1, L):
+                if L % d == 0:
+                    divisors[L].append(d)
+        # precompute cost
+        cost = [[INF]*(n+1) for _ in range(n)]
+        for l in range(n):
+            for r in range(l+1, n+1):
+                length = r - l
+                if length == 1:
+                    cost[l][r] = INF
+                    continue
+                best = INF
+                for d in divisors[length]:
+                    mism = 0
+                    for residue in range(d):
+                        # group size
+                        # first index = l + residue
+                        first = l + residue
+                        if first >= r:
+                            continue
+                        # number of elements in group
+                        m = ( (r-1 - first) // d ) + 1
+                        for t in range(m//2):
+                            i1 = first + t*d
+                            i2 = first + (m-1-t)*d
+                            if s[i1] != s[i2]:
+                                mism += 1
+                    if mism < best:
+                        best = mism
+                cost[l][r] = best
+        # DP
+        dp = [[INF]*(k+1) for _ in range(n+1)]
+        dp[0][0] = 0
+        for i in range(1, n+1):
+            max_p = min(k, i)  # can't have more substrings than chars
+            for p in range(1, max_p+1):
+                best = INF
+                # j from p-1 to i-1
+                for j in range(p-1, i):
+                    if dp[j][p-1] == INF:
+                        continue
+                    c = cost[j][i]
+                    if c == INF:
+                        continue
+                    val = dp[j][p-1] + c
+                    if val < best:
+                        best = val
+                dp[i][p] = best
+        return dp[n][k]
+```
+
+We should test for examples. Let's run mentally.
+
+Edge: Ensure cost indices: cost[j][i] for j < i. cost defined for length i-j. Good.
+
+Now complexity: 200*200 = 40000 cost entries; each inner loops as described.
+
+Now we produce final answer.
+
+Potential improvement: Use early break if mism already > best? But not necessary.
+
+Now produce final solution code.
+
+Also we need to include method signature and imports.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every substring we can change its letters to make it a **semi‑palindrome**.
+For a fixed substring we may choose *any* divisor `d` of its length  
+(`1 ≤ d < len` and `len % d == 0`); the positions with the same remainder
+modulo `d` must read the same forward and backward.
+
+For a substring `t` and a divisor `d`
+
+```
+r = 0 … d-1
+indices of the r‑th group :  r, r+d, r+2d, …  (< len)
+```
+
+`len` ≤ 200, therefore we can try all divisors for every substring.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.   Cost of turning a substring into a semi‑palindrome
+
+For a fixed divisor `d` the groups are independent.  
+For one group we only have to make the sequence of its characters a
+palindrome.  
+The minimal number of changes for a string `g` is
+
+```
+cnt = 0
+for i = 0 … len(g)/2-1
+        if g[i] != g[len(g)-1-i]      cnt += 1
+```
+
+(`cnt` is the number of mismatched pairs, every mismatched pair needs
+exactly one change).
+
+For a substring `s[l … r-1]` (length `len = r-l`) we compute the
+minimal `cnt` over all divisors of `len`.  
+`len = 1` cannot be a semi‑palindrome because no divisor in  
+`1 ≤ d < len` exists – we store the cost as `INF`.
+
+The whole pre‑computation needs only ≈ 10⁷ elementary operations
+(`n ≤ 200`), well inside the limits.
+
+
+
+--------------------------------------------------------------------
+
+#### 2.   Dynamic programming over the partition
+
+`dp[i][p]` – minimal number of changes needed for the first `i`
+characters (`s[0 … i-1]`) partitioned into exactly `p` substrings.
+
+```
+dp[0][0] = 0
+dp[0][p>0] = INF
+dp[i>0][0] = INF
+```
+
+Transition:
+
+```
+dp[i][p] = min over j ( dp[j][p-1] + cost[j][i] )
+             j ranges from p-1 to i-1
+```
+
+`j` is the end of the previous substring, `cost[j][i]` is the cost of
+the last substring `s[j … i-1]`.  
+If that cost is `INF` (length 1) the transition is ignored.
+The complexity is `O(n²·k)` – at most 4·10⁶ operations.
+
+
+
+--------------------------------------------------------------------
+
+#### 3.   Correctness Proof  
+
+We prove that the algorithm returns the minimum possible number of
+changes.
+
+---
+
+##### Lemma 1  
+For a fixed substring `t` and a divisor `d` the number of changes
+computed by the algorithm equals the minimum number of changes needed
+to make `t` a semi‑palindrome with divisor `d`.
+
+**Proof.**
+
+For one residue `r` the algorithm compares the characters of the
+corresponding group pairs `t[i]` and `t[m-1-i]`.  
+If they differ, one of them must be changed – exactly one change is
+necessary and sufficient.
+Summed over all `round(m/2)` pairs the algorithm counts the exact
+number of required changes.  
+Groups are independent, therefore the sum over all residues is the
+minimal number of changes for divisor `d`. ∎
+
+
+
+##### Lemma 2  
+For every substring `t` the value `cost[t]` computed by the algorithm
+equals the minimum number of changes needed to make `t` a semi‑palindrome
+with *any* admissible divisor.
+
+**Proof.**
+
+By Lemma&nbsp;1, for each divisor `d` the algorithm obtains the minimal
+cost for that fixed divisor.  
+The algorithm takes the minimum over all divisors, therefore the stored
+value is the minimum over all admissible divisors. ∎
+
+
+
+##### Lemma 3  
+`dp[i][p]` equals the minimum number of changes needed to transform the
+prefix `s[0 … i-1]` into `p` semi‑palindromic substrings.
+
+**Proof by induction over `i`.**
+
+*Base –* `i = 0`.  
+`dp[0][0] = 0` is correct (empty string, no changes).  
+For `p>0` there is no way to obtain a non‑empty partition, so `INF`
+is correct.
+
+*Induction step –* assume the statement holds for all `(i’,p)` with
+`i' < i`.
+
+For a fixed `p` every optimal partition of the first `i` characters
+has a last cut at some position `j` (`p-1 ≤ j < i`).  
+The first `j` characters are partitioned into `p-1` substrings –
+by induction hypothesis this needs `dp[j][p-1]` changes.  
+The last substring `s[j … i-1]` needs `cost[j][i]` changes (Lemma&nbsp;2).  
+Hence the total changes are
+`dp[j][p-1] + cost[j][i]`.  
+The algorithm considers all possible `j` and stores the minimum,
+therefore `dp[i][p]` equals the optimal number of changes. ∎
+
+
+
+##### Theorem  
+The algorithm returns the minimum possible number of letter changes
+required to partition the whole string `s` into `k` semi‑palindromic
+substrings.
+
+**Proof.**
+
+By Lemma&nbsp;3, `dp[n][k]` is the minimum number of changes for the
+full string.  
+The algorithm outputs exactly this value. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.   Complexity Analysis
+
+```
+Let n = |s|   ( n ≤ 200,          k ≤ n/2 ≤ 100 )
+```
+
+*Pre‑computation of costs*  
+`∑_{len=1}^{n} (n-len+1) * len * (#divisors(len))`  
+≈ `n³ / 6 * 8`  ≤ 1.3·10⁶ · 8 ≈ 1.0·10⁷ operations.
+
+*Dynamic programming*  
+`O(n² · k)` ≤ 200² · 100 = 4·10⁶ operations.
+
+Memory usage:  
+`cost` – `n × (n+1)` integers ≈ 40 000  
+`dp`   – `(n+1) × (k+1)` integers ≈ 20 000  
+Both well below the limits.
+
+Overall:
+
+```
+Time   :  O(n³)  (≈ 1.5·10⁷ elementary operations)
+Memory :  O(n²)
+```
+
+--------------------------------------------------------------------
+
+#### 5.   Reference Implementation  (Python 3)
+
+```python
+import sys
+from typing import List
+
+class Solution:
+    def minimumChanges(self, s: str, k: int) -> int:
+        n = len(s)
+        INF = 10 ** 9
+
+        # ---------- 1. divisors of every length ----------
+        divisors: List[List[int]] = [[] for _ in range(n + 1)]
+        for L in range(2, n + 1):
+            for d in range(1, L):
+                if L % d == 0:
+                    divisors[L].append(d)
+
+        # ---------- 2. cost[l][r] ----------  (l inclusive, r exclusive)
+        cost = [[INF] * (n + 1) for _ in range(n)]
+        for l in range(n):
+            for r in range(l + 1, n + 1):
+                length = r - l
+                if length == 1:          # cannot be a semi‑palindrome
+                    cost[l][r] = INF
+                    continue
+
+                best = INF
+                for d in divisors[length]:
+                    mism = 0
+                    for residue in range(d):
+                        first = l + residue
+                        if first >= r:
+                            continue
+                        # size of the group
+                        m = ((r - 1 - first) // d) + 1
+                        for t in range(m // 2):
+                            i1 = first + t * d
+                            i2 = first + (m - 1 - t) * d
+                            if s[i1] != s[i2]:
+                                mism += 1
+                    if mism < best:
+                        best = mism
+                cost[l][r] = best
+
+        # ---------- 3. DP over partitions ----------
+        dp = [[INF] * (k + 1) for _ in range(n + 1)]
+        dp[0][0] = 0
+
+        for i in range(1, n + 1):
+            max_p = min(k, i)          # cannot have more substrings than chars
+            for p in range(1, max_p + 1):
+                best = INF
+                # last cut at position j (prev prefix length)
+                for j in range(p - 1, i):
+                    if dp[j][p - 1] == INF:
+                        continue
+                    c = cost[j][i]
+                    if c == INF:
+                        continue
+                    val = dp[j][p - 1] + c
+                    if val < best:
+                        best = val
+                dp[i][p] = best
+
+        return dp[n][k]
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required function signature.
