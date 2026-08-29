@@ -2335,3 +2335,47 @@ Append-only. One entry per work session. See `campaign/PLAN.md` for the design.
   the exit and auto-started `campaign_extend_150.py` with no manual
   intervention -- confirmed its first arm (gsm8k/gptoss/mentored_dec/
   alpha=0.15, 100 cases, case_051..150) actually started end-to-end.
+
+- **User: "did you use the buggy livecodebench checker again?"** Good
+  catch, wrong mechanism though -- not a reversion of the 2026-08-22
+  stdin-vs-functional harness bug (confirmed still fixed: `testtype`
+  branching and the functional-harness code are intact in
+  `scripts/grade_livecodebench.py`, `git diff --stat` clean against the
+  `61e72473b` fix commit). The real, NEW bug: `prompts/livecodebench/
+  test_cases.json` is a static file fetched ONCE (streamed from HF's
+  `test.jsonl`, matched by `question_id`, 12 rows) for the original
+  12-case build -- `extend_borrowed_prompts.py` (used to grow
+  livecodebench to 50 then 90 this session) copies prompt directories but
+  never touches this file, since it's shared/model-independent (see the
+  2026-08-20 journal entry on why it's NOT duplicated per model family).
+  Every one of the 38 newly-collected cases' `question_id`s were missing
+  from it, so `grade_livecodebench.py`'s own `grade()` returned
+  `"grader_error"` for all of them (line 236: `entry = test_cases_by_qid
+  .get(question_id) or {}` -> empty -> error verdict) -- not in
+  `correct_verdicts={"passed"}`, so every one counted as wrong. Measured
+  effect: `campaign/results/livecodebench.csv` accuracy at n=50 had
+  dropped to ~0.12-0.22 across arms, down from ~0.75-1.0 at the original
+  n=12 -- a real, near-floor-looking number, exactly the shape that
+  made the user's question the right instinct even though the specific
+  bug wasn't the one from before.
+  - **Fix**: re-ran the same fetch discipline as the original
+    (`~/.claude/jobs/.../fetch_livecodebench_tests.py`, found via a repo
+    search) against all 78 missing `question_id`s (case_013..090 --
+    covers both the already-done extend50 range AND extend150's target of
+    90, so no further fetch needed for this dataset). Streamed HF's
+    `test.jsonl` again (never written to disk in full), matched by ID,
+    public test cases only (same reasoning as before: unpickling
+    `private_test_cases` from a URL is a real code-exec risk, not
+    revisited). All 78 found, 0 missing. `test_cases.json` now 90/90
+    rows. Re-ran `campaign_report.py --dataset livecodebench{,_qwen3}`:
+    accuracy correctly jumped back to ~0.7-0.86, matching the original
+    12-case values' range.
+  - **Checked every other grader for the same static-lookup pattern**
+    before calling this done: `grade_gsm8k`/`grade_aime`/
+    `grade_humaneval`/`grade_longbench` all read exclusively from
+    `run.json`/`config.json` (per-run) and `metadata.json`/`source.json`
+    (per-case, written automatically by every prompt build/extend script
+    -- confirmed `humaneval/case_050/source.json` carries its own full
+    `test`/`canonical_solution` inline, no external subset file). Only
+    `grade_livecodebench` has an external, non-auto-extended lookup file
+    -- this was an isolated gap, not a pattern to hunt for elsewhere.
