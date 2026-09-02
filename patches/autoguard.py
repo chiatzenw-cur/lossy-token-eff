@@ -58,31 +58,39 @@ over the ``[num_tokens, vocab]`` tensors are fine; a python loop over the
 vocab is not. No file I/O, no new imports beyond torch / stdlib.
 
 ======================================================================
-ACTIVE STRATEGY -- iteration 6: iter4 (wide K=8 window + stuck-run
-full-strict backstop) with the backstop threshold pulled in to 14000.
+ACTIVE STRATEGY -- iteration 7: iter6 + a CLUSTER gate on the window
+trigger (a marker arms a window only when it is part of a marker cluster).
 ======================================================================
 
-Current best is iter4 (wide K=8 window + >24000 backstop): 12626 vs 13364
-baseline (-5.5%, acc 6/8, fire 0.347).
+Current best is iter6 (wide K=8 window + >14000 full-strict backstop):
+12062 vs 13364 baseline (-9.7%, acc 6/8, fire 0.452). Its residual cost is
+the tax the window still puts on the already-short healthy cases:
+case_008 1250 -> 3923, case_007 5206 -> 6947, case_001 1551 -> 2051
+(~+5200 tokens spread over the 8 = ~+650 on the mean). That tax is
+isolated wide-set connectives ("so" / "now" / "thus") firing windows in
+healthy prose (analysis Direction A: forcing strict at such a token can
+swap the word and trigger *more* hedging).
+
+iter3 removing the connectives from the set entirely broke case_002 and
+case_006 accuracy -- they are load-bearing *inside the spirals*. iter7
+keeps the wide set but gates the TRIGGER: a marker only (re)arms a
+K-window when there are at least _CLUSTER_MIN markers within the last
+_CLUSTER_WIN committed/drafted tokens -- i.e. the trajectory is in a
+hesitation cluster, not just using one connective in a normal step. The
+spiraling cases (case_002/003/004 sit at ~35 markers / 1000 tokens
+throughout) keep their windows; isolated markers in short healthy runs
+(case_007 tails off to ~5-13 / 1000) stop arming. Backstop and K=8
+unchanged. Measured against iter6's 12062; revert on any accuracy loss.
 
 History: iter1 (ungated wide K=8 window) 13056 (-2.3%). iter2 (len>6000
-gate) and iter3 (narrow marker set) both regressed -- the gate suppressed
-case_002's beneficial early window; narrowing broke case_002/case_006
-accuracy. iter5 (K=12 window) regressed to 15117: it RESCUED case_003 for
-the first time (32768-cap-wrong -> 18738-correct) but destabilised two
-healthy runs (case_002, case_007 -> the cap). Lesson: case_003 is fixable,
-but only with strict coverage through its dense-marker early region -- and
-K=12 windows are too long for the healthy trajectories.
-
-Iteration 6 keeps K=8 (safe for the healthy runs) and instead lowers the
-backstop from 24000 to 14000, so a run that is long AND has still not
-opened its harmony ``final`` channel (token 17196 absent) gets forced
-fully strict ~10000 tokens earlier. This targets case_003's early region
-without lengthening any window. The healthy long case, case_002, opens its
-final channel at ~13688 committed tokens in iter4 -- before 14000 -- so it
-still never trips the backstop; every shorter healthy case is far below
-the threshold. Full strict is provably lossless (all-True === strict), so
-even a mistimed trip cannot cost accuracy. Measured against iter4's 12626.
+gate) and iter3 (narrow marker set) both regressed. iter4 added the
+full-strict stuck-run backstop at 24000 -> 12626. iter5 (K=12 window)
+regressed to 15117 but RESCUED case_003 once (32768-cap-wrong ->
+18738-correct) at the cost of case_002/007 -> the cap. iter6 pulled the
+backstop in to 14000 (case_004 27024 -> 22516) -> 12062. case_003's
+non-termination is the model's own reasoning not converging on a hard
+combinatorics problem, not drafter pull -- neither full strict (iter4/6)
+nor a mask can fix it; only iter5's K=12 perturbation did, unreliably.
 
 Underlying window mechanism (unchanged from iter 1): port of
 ``spec_casc_tok_semantic_guard_future_guard`` (K=8, the best result in
@@ -140,16 +148,25 @@ _K = 8
 _FINAL_TOKEN = 17196
 _BACKSTOP_LEN = 14000
 
+# Cluster gate: a marker only (re)arms a K-window when at least _CLUSTER_MIN
+# markers fall within the last _CLUSTER_WIN tokens -- suppresses windows
+# from isolated discourse connectives in healthy prose while leaving the
+# marker-dense spirals fully guarded.
+_CLUSTER_WIN = 32
+_CLUSTER_MIN = 2
 
-def _window_remaining_at_round_start(committed_token_ids: list[int]) -> int:
+
+def _window_remaining_at_round_start(
+    committed_token_ids: list[int], cluster_active: bool
+) -> int:
     """Reconstruct the future-guard window counter (0..K) as it stands at
     the start of this round, from committed history alone. Only the last K
     committed tokens can matter: a marker older than that has already
-    counted all the way down."""
+    counted all the way down. Markers only arm while cluster_active."""
     tail = committed_token_ids[-_K:]
     remaining = 0
     for tok in tail:
-        if tok in _MARKER_IDS:
+        if tok in _MARKER_IDS and cluster_active:
             remaining = _K
         elif remaining > 0:
             remaining -= 1
@@ -178,13 +195,24 @@ def decide(
     ):
         return torch.ones(n, dtype=torch.bool, device=draft_token_ids.device)
 
-    remaining = _window_remaining_at_round_start(committed_token_ids)
+    # Marker count in the recent context -> is the trajectory in a cluster?
+    recent = committed_token_ids[-_CLUSTER_WIN:]
+    cluster_count = sum(1 for t in recent if t in _MARKER_IDS)
+
+    remaining = _window_remaining_at_round_start(
+        committed_token_ids, cluster_count >= _CLUSTER_MIN
+    )
     draft = draft_token_ids.tolist()
     flags = [False] * n
+    dc = cluster_count
     for j in range(n):
         flags[j] = remaining > 0
         if draft[j] in _MARKER_IDS:
-            remaining = _K
+            dc += 1
+            if dc >= _CLUSTER_MIN:
+                remaining = _K
+            elif remaining > 0:
+                remaining -= 1
         elif remaining > 0:
             remaining -= 1
     return torch.tensor(flags, dtype=torch.bool, device=draft_token_ids.device)
