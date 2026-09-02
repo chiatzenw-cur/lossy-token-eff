@@ -113,6 +113,7 @@ HSR_GUARD_WINDOW="${HSR_GUARD_WINDOW:-600}"          # committed-token window fo
 HSR_GUARD_BUDGET="${HSR_GUARD_BUDGET:-25}"           # recurrence-crossings required within WINDOW to trip the guard -- not 3, see patches/HASHES.txt's own "fixed" entry
 HSR_GUARD_PERCENTILE="${HSR_GUARD_PERCENTILE:-99.9}" # self-calibrated per-generation, not one fixed global score cutoff -- not 99.0, see patches/HASHES.txt
 HSR_GUARD_ACTUATOR_K="${HSR_GUARD_ACTUATOR_K:-8}"    # strict-verification window length once tripped
+SPEC_CASC_TOK_AUTOGUARD_ALPHA="${SPEC_CASC_TOK_AUTOGUARD_ALPHA:-0.3}"  # spec-casc-tok's own alpha; the guard mask is whatever autoguard.py::decide() returns (autoresearch/), no extra knob
 SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA="${SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA:-0.3}"  # spec-casc-tok's own alpha; free-judgment observation always on
 # Fixed to match vllm-0.26.0-free-judgment-model-runner.patch's own
 # _FREE_JUDGMENT_CRITERION_PATTERN length -- NOT independently configurable
@@ -208,6 +209,11 @@ hsr_guard_budget_file="/tmp/lossy-token-eff-hsr-guard-budget-$(id -u)"
 hsr_guard_percentile_file="/tmp/lossy-token-eff-hsr-guard-percentile-$(id -u)"
 hsr_guard_actuator_k_file="/tmp/lossy-token-eff-hsr-guard-actuator-k-$(id -u)"
 hsr_guard_remaining_file="/tmp/lossy-token-eff-hsr-guard-remaining-$(id -u)"
+# autoguard has its OWN alpha file (same "own file, never alias plain
+# spec-casc-tok's" convention as every guard variant above). The guard mask
+# itself is code (vllm/v1/sample/autoguard.py::decide()), not a knob, so
+# there is nothing else to write here -- see autoresearch/README.md.
+spec_casc_tok_autoguard_file="/tmp/lossy-token-eff-spec-casc-tok-autoguard-alpha-$(id -u)"
 
 neutralise_all_knobs() {
   # Each method's own "no relaxation" value -- NOT uniformly 0.0. See
@@ -250,6 +256,7 @@ neutralise_all_knobs() {
   printf '%s\n' "99.9"   > "$hsr_guard_percentile_file"
   printf '%s\n' "8"      > "$hsr_guard_actuator_k_file"
   printf '%s\n' "0"      > "$hsr_guard_remaining_file"  # runtime signal, not config -- reset so a stale guard window can't leak into a fresh run
+  printf '%s\n' "-inf"   > "$spec_casc_tok_autoguard_file"  # strict point; autoguard.py::decide() is inert next to it but the arm still recovers strict
 }
 
 common_args=(
@@ -635,8 +642,19 @@ PY
         # every round for EAGLE3's own drafting.
         echo "mode=lossy rule=spec_casc_tok_hsr_guard alpha=$SPEC_CASC_TOK_HSR_GUARD_ALPHA window=$HSR_GUARD_WINDOW budget=$HSR_GUARD_BUDGET percentile=$HSR_GUARD_PERCENTILE actuator_k=$HSR_GUARD_ACTUATOR_K (via $spec_casc_tok_hsr_guard_file, $hsr_guard_window_file, $hsr_guard_budget_file, $hsr_guard_percentile_file, $hsr_guard_actuator_k_file, $hsr_guard_remaining_file -- live S_32 hidden-state-recurrence trigger forces strict verification for actuator_k committed tokens on a self-calibrated recurrence-crossing budget) draft=$DRAFT_MODEL_PATH k_spec=$NUM_SPEC port=$PORT seed=$SEED"
         ;;
+      spec_casc_tok_autoguard)
+        printf '%s\n' "$SPEC_CASC_TOK_AUTOGUARD_ALPHA" > "$spec_casc_tok_autoguard_file"
+        # _AUTOGUARD_HISTORY: unique to this patch -- plain spec_casc_tok also
+        # defines _SPEC_CASC_TOK_ALPHA, so probing that wouldn't catch plain
+        # spec_casc_tok being installed instead of this variant.
+        probe_patched "_AUTOGUARD_HISTORY" || {
+          echo "LOSSY_RULE=spec_casc_tok_autoguard needs the patch: bash patches/apply.sh spec-casc-tok-autoguard" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_tok_autoguard alpha=$SPEC_CASC_TOK_AUTOGUARD_ALPHA (via $spec_casc_tok_autoguard_file -- guard mask = vllm/v1/sample/autoguard.py::decide(), the one file autoresearch/ edits; see autoresearch/README.md) draft=$DRAFT_MODEL_PATH k_spec=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
       *)
-        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|spec_casc_tok_antiloop|r_fuzzy_semantic_guard|r_fuzzy_semantic_guard_v2|r_fuzzy_window_entropy_guard|spec_casc_tok_semantic_guard|spec_casc_tok_semantic_guard_v2|spec_casc_tok_semantic_guard_and|spec_casc_tok_semantic_guard_future_guard|spec_casc_tok_semantic_guard_future_guard_and|spec_casc_tok_force_commit|spec_casc_tok_self_check|spec_casc_tok_free_judgment|spec_casc_tok_judge_nudge|spec_casc_tok_hsr_guard|synthetic)" >&2
+        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|spec_casc_tok_antiloop|r_fuzzy_semantic_guard|r_fuzzy_semantic_guard_v2|r_fuzzy_window_entropy_guard|spec_casc_tok_semantic_guard|spec_casc_tok_semantic_guard_v2|spec_casc_tok_semantic_guard_and|spec_casc_tok_semantic_guard_future_guard|spec_casc_tok_semantic_guard_future_guard_and|spec_casc_tok_force_commit|spec_casc_tok_self_check|spec_casc_tok_free_judgment|spec_casc_tok_judge_nudge|spec_casc_tok_hsr_guard|spec_casc_tok_autoguard|synthetic)" >&2
         exit 2
         ;;
     esac

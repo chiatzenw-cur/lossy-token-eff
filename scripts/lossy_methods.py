@@ -53,7 +53,7 @@ class MethodSpec:
             "spec_casc_tok_semantic_guard", "spec_casc_tok_semantic_guard_v2",
             "spec_casc_tok_semantic_guard_and",
             "spec_casc_tok_semantic_guard_future_guard", "spec_casc_tok_semantic_guard_future_guard_and",
-            "spec_casc_tok_hsr_guard",
+            "spec_casc_tok_hsr_guard", "spec_casc_tok_autoguard",
         ) and alpha == 0.0:
             raise ValueError(
                 f"{self.name} alpha=0.0 is NOT the strict point for this method (alpha=-inf is) -- "
@@ -173,6 +173,15 @@ class MethodSpec:
                 "would accept (min(p,pi_rej) as the effective target, same AND-combination as "
                 "spec_casc_tok_semantic_guard_and but applied to the K-window instead of the marker "
                 "itself) -- see analysis/semantic_guard/README.md"
+            )
+        if self.name == "spec_casc_tok_autoguard":
+            return (
+                f"pi_rej(v) = q(v)+eta*p(v) for v with p(v) >= (1-{alpha:g})*max(p), else eta*p(v) -- "
+                "UNLESS vllm/v1/sample/autoguard.py::decide() (the one file the autoresearch loop "
+                "edits) returns True for that drafted position, in which case the trusted top set is "
+                "forced empty (pi_rej=p exactly, this method's own strict limit) for that position -- "
+                "round-granular plain Python, no kernel-carried state, same mechanism as "
+                "spec_casc_tok_semantic_guard/spec_casc_tok_hsr_guard -- see autoresearch/README.md"
             )
         if self.name == "spec_casc_tok_hsr_guard":
             return (
@@ -506,6 +515,24 @@ METHODS: dict[str, MethodSpec] = {
                 "found to have a real, reproducible rearm-while-active bug this investigation)",
                 "paper_name": "spec-casc-tok-hsr-guard",
                 "reference": "analysis/semantic_guard/README.md",
+            },
+        ),
+        MethodSpec(
+            name="spec_casc_tok_autoguard",
+            hashes_label="spec-casc-tok-autoguard",
+            env_var="SPEC_CASC_TOK_AUTOGUARD_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-tok-autoguard-alpha-{_uid()}"),
+            log_prefix="[SPEC-CASC-TOK-AUTOGUARD PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf), NOT 0.0 for strict",
+            default_alpha=0.3,
+            taxonomy={
+                "family": "spec-casc-tok + autoguard (autoresearch/, this repo's own autonomous-"
+                "experiment scaffold, not in Xia et al.) -- the guard mask is whatever "
+                "vllm/v1/sample/autoguard.py::decide() returns, the one file autoresearch/ rewrites "
+                "each iteration; everything else (kernel, this patch, harness, grading) is frozen",
+                "paper_name": "spec-casc-tok-autoguard",
+                "reference": "autoresearch/README.md",
             },
         ),
     )
