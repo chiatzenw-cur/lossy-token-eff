@@ -58,17 +58,42 @@ over the ``[num_tokens, vocab]`` tensors are fine; a python loop over the
 vocab is not. No file I/O, no new imports beyond torch / stdlib.
 
 ======================================================================
-ACTIVE STRATEGY -- iteration 1: future-guard, K=8, wide marker set.
+ACTIVE STRATEGY -- iteration 4: iter1's wide-set future-guard window,
+PLUS a stuck-run full-strict backstop.
 ======================================================================
 
-Port of ``spec_casc_tok_semantic_guard_future_guard`` (K=8, the best result
-in analysis/semantic_guard/: -1.4% mean length on 30-case AIME24 at 25/30
-vs 26/30 baseline -- the only guard there that was *cheaper* than baseline
-without a large accuracy cost). It leaves an accepted hesitation/discourse
-marker's OWN verification untouched and forces strict on the K drafted
-positions that FOLLOW it, on the theory (analysis SUMMARY.md sec 5) that
-the length blow-up is a round-count effect: the drafter rides a marker into
-a self-correction / restart cascade, and a short forced-strict window right
+Iteration 1 (ungated future-guard K=8, wide 38-id set) is the current best:
+13056 vs 13364 baseline (-2.3%, acc 6/8, fire 0.267). Iterations 2
+(length-gate) and 3 (narrow marker set) both regressed -- the length gate
+suppressed case_002's beneficial early window; narrowing the set broke
+case_002 and case_006 accuracy (the wide connectives are load-bearing).
+
+The one case iter1 does NOT help is case_003: it stays pinned at the 32768
+token cap (finish=length, final channel never opened) in both baseline and
+iter1 -- a pure "analysis-channel ramble that never commits to a final
+answer" failure. That single case is 32768/8 = 4096 tokens of the mean.
+
+Iteration 4 leaves iter1's window mechanism exactly as-is and adds a
+backstop: once the run has emitted more than _BACKSTOP_LEN committed
+tokens AND the harmony ``final`` channel has never opened (token 17196
+absent from the whole committed history), force strict on the ENTIRE draft
+block every round. This is provably lossless (all-True === strict ===
+spec_casc_tok's own alpha=-inf limit) so it cannot cost accuracy; it only
+fires on genuinely non-terminating rambles, where removing the drafter's
+ability to pull the trajectory off the target distribution should let it
+collapse toward what the trusted model alone would produce (case_004
+already terminated under iter1's window alone: 32768 -> 30466).
+_BACKSTOP_LEN = 24000 clears case_002's worst observed length (20070 in
+the baseline) with margin, so the healthy long case is never touched.
+
+Underlying window mechanism (unchanged from iter 1): port of
+``spec_casc_tok_semantic_guard_future_guard`` (K=8, the best result in
+analysis/semantic_guard/: -1.4% mean length on 30-case AIME24 at 25/30 vs
+26/30 baseline). It leaves an accepted hesitation/discourse marker's OWN
+verification untouched and forces strict on the K drafted positions that
+FOLLOW it, on the theory (analysis SUMMARY.md sec 5) that the length
+blow-up is a round-count effect: the drafter rides a marker into a
+self-correction / restart cascade, and a short forced-strict window right
 after the marker lets the trusted model settle the trajectory before the
 relaxed rule resumes.
 
@@ -109,6 +134,14 @@ _MARKER_IDS = frozenset((
 ))
 _K = 8
 
+# Stuck-run backstop: harmony bare "final" token (the one that follows
+# <|channel|>), and the committed-length past which a run that has still not
+# opened its final channel is treated as non-terminating and forced fully
+# strict. All-True is provably lossless (=== strict), so this is
+# accuracy-safe by construction.
+_FINAL_TOKEN = 17196
+_BACKSTOP_LEN = 24000
+
 
 def _window_remaining_at_round_start(committed_token_ids: list[int]) -> int:
     """Reconstruct the future-guard window counter (0..K) as it stands at
@@ -138,6 +171,14 @@ def decide(
     n = int(draft_token_ids.shape[0])
     if n == 0:
         return torch.zeros(0, dtype=torch.bool, device=draft_token_ids.device)
+
+    # Stuck-run backstop: a long run that has never opened its final channel
+    # is non-terminating -- force the whole block strict (lossless).
+    if (
+        len(committed_token_ids) > _BACKSTOP_LEN
+        and _FINAL_TOKEN not in committed_token_ids
+    ):
+        return torch.ones(n, dtype=torch.bool, device=draft_token_ids.device)
 
     remaining = _window_remaining_at_round_start(committed_token_ids)
     draft = draft_token_ids.tolist()
