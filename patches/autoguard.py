@@ -58,33 +58,31 @@ over the ``[num_tokens, vocab]`` tensors are fine; a python loop over the
 vocab is not. No file I/O, no new imports beyond torch / stdlib.
 
 ======================================================================
-ACTIVE STRATEGY -- iteration 4: iter1's wide-set future-guard window,
-PLUS a stuck-run full-strict backstop.
+ACTIVE STRATEGY -- iteration 6: iter4 (wide K=8 window + stuck-run
+full-strict backstop) with the backstop threshold pulled in to 14000.
 ======================================================================
 
-Iteration 1 (ungated future-guard K=8, wide 38-id set) is the current best:
-13056 vs 13364 baseline (-2.3%, acc 6/8, fire 0.267). Iterations 2
-(length-gate) and 3 (narrow marker set) both regressed -- the length gate
-suppressed case_002's beneficial early window; narrowing the set broke
-case_002 and case_006 accuracy (the wide connectives are load-bearing).
+Current best is iter4 (wide K=8 window + >24000 backstop): 12626 vs 13364
+baseline (-5.5%, acc 6/8, fire 0.347).
 
-The one case iter1 does NOT help is case_003: it stays pinned at the 32768
-token cap (finish=length, final channel never opened) in both baseline and
-iter1 -- a pure "analysis-channel ramble that never commits to a final
-answer" failure. That single case is 32768/8 = 4096 tokens of the mean.
+History: iter1 (ungated wide K=8 window) 13056 (-2.3%). iter2 (len>6000
+gate) and iter3 (narrow marker set) both regressed -- the gate suppressed
+case_002's beneficial early window; narrowing broke case_002/case_006
+accuracy. iter5 (K=12 window) regressed to 15117: it RESCUED case_003 for
+the first time (32768-cap-wrong -> 18738-correct) but destabilised two
+healthy runs (case_002, case_007 -> the cap). Lesson: case_003 is fixable,
+but only with strict coverage through its dense-marker early region -- and
+K=12 windows are too long for the healthy trajectories.
 
-Iteration 4 leaves iter1's window mechanism exactly as-is and adds a
-backstop: once the run has emitted more than _BACKSTOP_LEN committed
-tokens AND the harmony ``final`` channel has never opened (token 17196
-absent from the whole committed history), force strict on the ENTIRE draft
-block every round. This is provably lossless (all-True === strict ===
-spec_casc_tok's own alpha=-inf limit) so it cannot cost accuracy; it only
-fires on genuinely non-terminating rambles, where removing the drafter's
-ability to pull the trajectory off the target distribution should let it
-collapse toward what the trusted model alone would produce (case_004
-already terminated under iter1's window alone: 32768 -> 30466).
-_BACKSTOP_LEN = 24000 clears case_002's worst observed length (20070 in
-the baseline) with margin, so the healthy long case is never touched.
+Iteration 6 keeps K=8 (safe for the healthy runs) and instead lowers the
+backstop from 24000 to 14000, so a run that is long AND has still not
+opened its harmony ``final`` channel (token 17196 absent) gets forced
+fully strict ~10000 tokens earlier. This targets case_003's early region
+without lengthening any window. The healthy long case, case_002, opens its
+final channel at ~13688 committed tokens in iter4 -- before 14000 -- so it
+still never trips the backstop; every shorter healthy case is far below
+the threshold. Full strict is provably lossless (all-True === strict), so
+even a mistimed trip cannot cost accuracy. Measured against iter4's 12626.
 
 Underlying window mechanism (unchanged from iter 1): port of
 ``spec_casc_tok_semantic_guard_future_guard`` (K=8, the best result in
@@ -140,7 +138,7 @@ _K = 8
 # strict. All-True is provably lossless (=== strict), so this is
 # accuracy-safe by construction.
 _FINAL_TOKEN = 17196
-_BACKSTOP_LEN = 24000
+_BACKSTOP_LEN = 14000
 
 
 def _window_remaining_at_round_start(committed_token_ids: list[int]) -> int:
