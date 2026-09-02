@@ -1,0 +1,299 @@
+<|channel|>analysis<|message|>We need to decide if we can reduce all to zero by repeatedly subtracting 1 from any subarray of length k. Equivalent to: we can perform operations that subtract 1 from a contiguous block of length k. This is similar to making array zero via window operations. Known as "array reduction with fixed window" or "zero array using k-length operations". Approach: greedy scanning from left to right. Keep current subtractions effect. Use array of difference: maintain running sum of applied operations. For each position i we have current cumulative subtractions (value added from previous windows). We want to ensure that after all operations, nums[i] - currentSub - pendingOp (count of decrements applied to that position from windows starting before i) equals 0.
+
+We can simulate using deque of booleans indicating when a window started at i, that ends after k steps. Use difference array or prefix sum.
+
+Pseudo:
+
+n=len(nums)
+ops=0
+is_window=[0]*n
+for i in range(n):
+    # remove effect of window that started at i-k
+    if i>=k:
+        ops -= is_window[i-k]
+    # current value after previous operations
+    curr=nums[i]-ops
+    if curr<0: return False
+    if curr>0:
+        # we need to start curr windows at i starting to decrement current vals
+        ops += curr
+        is_window[i] = curr
+        # Since windows x that start at i will affect indices i..i+k-1
+        # we record it
+if i > n-k: windows started earlier will finish? We need to ensure final positions all zero. Actually after loop, the last positions (i>=n-k+1) will have no windows left to start. We need to ensure remaining ops equal nums[i]. For i in range(n-k+1, n): we still loop; we not start new windows. But we still subtract ops from curr? Wait: after loop, ops passes beyond, but at the end we should check that ops==0? Let's analyze.
+
+When i goes from 0 to n-1, we set ops to number of active windows that start within last k positions. For each i, after subtracting contributions from windows starting i-k, we compute curr = nums[i] - ops. If curr<0 impossible. If curr>0, we need to start curr windows at position i. If i+k > n, we can't start a window because subarray length k not fully inside array. So if i>n-k, creation of windows impossible, hence func returns False. Thus if i>n-k and curr>0 -> impossible. So condition: if i>n-k and curr>0: return False.
+
+So algorithm: is_window array to mark number of windows started at i; ops changes accordingly.
+
+Time O(n). Space O(n) maybe but can use list of size n or queue.
+
+Better: Use a deque of length k to store start flags. We'll use array diff[n] ints.
+
+Implementation details: Use an array of size n, zero. for i in range(n):
+    if i >= k: ops -= diff[i-k]
+    curr = nums[i] - ops
+    if curr < 0: return False
+    if curr > 0:
+        if i > n-k: return False
+        ops += curr
+        diff[i] = curr
+Return True.
+
+But careful for memory: diff n arrays of ints <=1e6; n up to 1e5. fine.
+
+Edge Cases: If k==n: then only one window entire array. We need all nums equal to same value? Since we may subtract 1 from all at once. Then condition: we can only subtract n times; each operation reduces all elements by 1. So requirement: all nums must be equal. Let's test algorithm: n=5, k=5. For i=0: ops=0; curr=nums[0]; if curr>0 and i>n-k? n-k=0. i>0? For i=0, i==0 not >0. So we can start curr windows at i; that will mark diff[0]=curr. ops=curr. Then for i=1..4: ops doesn't get reduced until i>=k (i>=5), so ops stays curr. curr=nums[i]-curr. If nums[i]==curr, curr=0 else negative or positive. For i>0, if n-k=0, i>0; So if curr>0 -> return False. That ensures nums[i]==curr. But we also require curr>=0 no negative. That implies all equal. Good.
+
+Edge Cases: zero numbers: should return True trivial. Implementation.
+
+Ok produce solution code in Python:
+
+class Solution:
+    def checkArray(self, nums: List[int], k: int) -> bool:
+        n=len(nums)
+        ops=0
+        diff=[0]*n
+        for i in range(n):
+            if i>=k:
+                ops -= diff[i-k]
+            curr = nums[i] - ops
+            if curr < 0:
+                return False
+            if curr > 0:
+                if i > n - k:
+                    return False
+                ops += curr
+                diff[i] = curr
+        return True
+
+Check examples: [2,2,3,1,1,0], k=3
+
+n=6. loops. Implementation yields True.
+
+Check second example: [1,3,1,1], k=2
+
+i=0: ops=0, curr=1 OK start; ops=1 diff[0]=1
+i=1: ops stays 1, curr=3-1=2 >0 start at i=1: i> n-k? n=4,k=2. n-k=2. i=1 <=2 ok. ops=3 diff[1]=2
+i=2: ops reduce diff[0]=1 -> ops=2. curr=1-2 = -1 => False
+
+Ok.
+
+Return True/False.
+
+We must import List, maybe from typing.
+
+Complexities: O(n) time, O(n) memory.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every operation we pick a contiguous block of length `k`
+and decrease all its elements by `1`.
+
+The question is whether we can reach the array `[0, 0, …, 0]`.
+
+--------------------------------------------------------------------
+
+#### 1.  Observation
+
+While scanning the array from left to right we can decide how many
+operations start at the current index `i`.
+
+Suppose an operation starts at index `i`.  
+It will affect all indices `i … i+k-1`.
+
+If we know how many operations are *currently* active (`ops`),
+the value we see at position `i` is
+
+```
+current_value = nums[i] - ops
+```
+
+If it is negative, we already subtracted too many times – impossible.  
+If it is positive, we must start that many new operations at `i`
+( otherwise we can never bring the value down to zero).
+
+An operation that starts at position `i` will disappear after
+`k` steps, i.e. it stops contributing to `ops` when we reach
+index `i+k`.
+
+--------------------------------------------------------------------
+
+#### 2.  Greedy left‑to‑right scan
+
+```
+ops   … number of active operations on the current index
+diff  … diff array: diff[p] = number of operations that started at p
+```
+
+For every index `i`
+
+```
+1. If i ≥ k :   ops -= diff[i-k]            # a window that started at i-k ends here
+2. curr = nums[i] - ops
+3. if curr < 0              → impossible
+4. if curr > 0
+        if i > n-k          → we cannot start a window that fits completely → impossible
+        ops += curr          # start that many new windows
+        diff[i] = curr
+```
+
+If the loop finishes without contradiction, all array elements
+can be reduced to zero.
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns `True` iff the array can be
+reduced to all zeros.
+
+---
+
+##### Lemma 1  
+At any step `i`, after executing the algorithm’s first two statements,
+`ops` equals the number of operations that started in indices  
+`[i-k+1 , i]` and that have not yet finished.
+
+**Proof.**
+
+*Base*: Before the first iteration, `ops = 0`.  
+No operation has started yet – statement holds.
+
+*Induction step*: Assume it holds before processing index `i`.  
+The algorithm first subtracts `diff[i-k]` from `ops`.  
+By definition `diff[i-k]` is the number of operations that started at `i-k`;
+these operations now end at or before `i`, so we remove them from `ops`.  
+Thus after the subtraction, `ops` counts *exactly* the still active
+windows in the range `[i-k+1 , i]`. ∎
+
+
+
+##### Lemma 2  
+During the scan, for every index `i` the value `curr`
+computed by the algorithm equals the value of `nums[i]`
+after all operations that have already been decided to start before or
+at `i`.
+
+**Proof.**
+
+By Lemma&nbsp;1, `ops` is the total number of operations that have started
+within the last `k` positions and have not yet finished when we reach
+`i`.  
+Every such operation decreases the value at `i` by `1`.  
+Therefore the actual value of `nums[i]` after these operations is
+`nums[i] - ops`, which is exactly the algorithm’s `curr`. ∎
+
+
+
+##### Lemma 3  
+If the algorithm ever returns `False`, the array cannot be reduced
+to all zeros.
+
+**Proof.**
+
+The algorithm returns `False` only in two situations:
+
+1. `curr < 0`  
+   By Lemma&nbsp;2, `curr` is the value of `nums[i]` after all already
+   decided operations.  
+   A negative value is impossible to obtain from a non‑negative
+   array with only decreasing operations – contradiction.
+
+2. `curr > 0` and `i > n-k`.  
+   Here a positive remainder would require starting a new window
+   beginning at `i`.  
+   But such a window would extend to `i+k-1 > n-1`,
+   thus leaving the array – impossible.
+   Hence the array cannot be made all zeros. ∎
+
+
+
+##### Lemma 4  
+If the algorithm finishes the loop without returning `False`,
+the array can be reduced to all zeros.
+
+**Proof.**
+
+When the loop ends, for every index `i` we have:
+- `curr ≥ 0` (otherwise the algorithm would stop earlier).
+- If `curr > 0`, the algorithm started exactly `curr` operations at `i`
+  (step 4).  
+  Because `i ≤ n-k` in that case, all such windows are fully inside
+  the array.
+
+Consequently each index `i` is decreased exactly by `ops`,
+which equals the number of operations affecting it
+(again by Lemma&nbsp;1).  
+Thus after all started operations finish, the value at every position
+becomes `nums[i] - ops = curr = 0`.  
+Therefore the array can be turned into all zeros. ∎
+
+
+
+##### Theorem  
+The algorithm returns `True` iff the given array can be turned into
+all zeros using the described operations.
+
+**Proof.**
+
+*If part*:  
+If the algorithm returns `True`, it did not encounter any of the
+two failure conditions in Lemma&nbsp;3, so by Lemma&nbsp;4 the array is
+reducible to all zeros.
+
+*Only if part*:  
+If the array is reducible, a sequence of legal operations exists.
+The greedy algorithm always chooses the *minimal* number of
+operations starting at each position that is necessary to bring
+`nums[i]` down to zero.  
+Because any feasible sequence must also ensure `curr ≥ 0`,
+the greedy choice never makes an impossible move, so the algorithm
+never returns `False`.  
+Hence it finally returns `True`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+- `n = len(nums)`  
+- Time:  
+  The scan performs a constant amount of work per index → **O(n)**.
+- Space:  
+  We store a `diff` array of size `n` → **O(n)**.  
+  (An alternative is a queue of length `k`, but `O(n)` is fine for
+  `n ≤ 10^5`.)
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def checkArray(self, nums: List[int], k: int) -> bool:
+        n = len(nums)
+        diff = [0] * n          # how many ops started at each index
+        ops = 0                 # number of active windows
+
+        for i in range(n):
+            if i >= k:
+                ops -= diff[i - k]          # a window that started at i-k now ends
+
+            curr = nums[i] - ops            # value after all already started ops
+
+            if curr < 0:
+                return False                # impossible to reach zero
+
+            if curr > 0:
+                if i > n - k:              # no space for a full k‑window
+                    return False
+                ops += curr                 # start curr new windows
+                diff[i] = curr
+
+        return True
+```
+
+The code follows exactly the algorithm proven correct above.

@@ -1,0 +1,281 @@
+<|channel|>analysis<|message|>We need to solve problem: Given array nums of length n and integer k, we can modify each element at most once, changing it to any integer in [nums[i]-k, nums[i]+k]. After modifications, we want maximum length of longest subsequence with equal elements. We can choose to adjust each element independently. Equivalent: we can pick a target value x, and convert each nums[i] to x if x is within allowed range of that nums[i]. For each index i, we can include it in the subsequence with target x if |nums[i] - x| <= k. But note we can choose at most one operation per index; we pick a target at most once across all indices? Actually we decide to adjust to x. Since we can change any element to integer in that range exactly once; each index we choose at most once. So we can transform each element to any value within its range: for each i, we can choose to set to an integer in [nums[i]-k, nums[i]+k]. So to maximize subsequence length of a particular value x, we can choose any indices i such that x in [nums[i]-k, nums[i]+k]; for those indices, we can change them to x. Others cannot reach x. So maximum number of indices that can reach x is the count of i such that |nums[i] - x| <= k. This is the maximum beauty if we make value x.
+
+Thus we need to find maximum value over x in [0..maybe up to 1e5 + k] (max nums[i] up to 1e5) of count of i such that |nums[i]-x| <= k. That is count of elements whose value lies within [x-k, x+k]. Equivalent to finding maximum overlap of intervals of length k among numbers. Each index i defines interval [nums[i]-k, nums[i]+k] of possible target values. We need to find maximum count of intervals covering any point x.
+
+Thus the answer can be computed by sweep line using endpoints. Since each interval is closed [Li, Ri]. The intervals up to 1e5 +- k <= 2e5, within manageable range. Since n up to 1e5.
+
+We can do standard sweep: for each i, left = nums[i] - k; right = nums[i] + k. Add event +1 at left, -1 at right + 1 (since inclusive). Then sweep sorted by coordinate. Or use counting array by +1 for all coordinates where we can maintain prime? Since ranges up to 2e5, we can allocate large 200k+something ~ 2e5+1. Quick solution: we can maintain array diff of length maxCoord+2, then increment diff[left]++, diff[right+1]--. Then prefix sum to find max coverage.
+
+But we need careful with negative coordinates: left can be negative if k > nums[i]. But k <= 1e5 as well as nums[i] <= 1e5. So left can be negative down to -1e5. So we can offset by +k or a shift of min coordinate to 0. But k <=1e5 => max negative is -1e5; max coordinate about 2e5. So we can shift by +k to make all non-negative: offset = k. For each i, left=nums[i]-k, right=nums[i]+k. After shift, coordinates shift by +k to guarantee non-negative: shift left offset = left+offset, shift right = right+offset. We can use array size maxCoord+2 maybe up to ~1e5+1e5+... Actually we need bound for maxCoord+offset: maximum right is 1e5+1e5=2e5. + offset=1e5 yields 3e5. So we can use array size 3e5+2 maybe 3e5+2.
+
+Thus algorithm: compute maxCoord= max(nums)+k. minCoord = min(nums)-k. But we shift by offset = -minCoord (if we want to handle negative). But easier: offset = k (because minCoord >= min(nums)-k>=0? Actually min(nums)-k can be negative up to -1e5. So offset = k ensures that all left+offset >=0. Because left = nums[i]-k >= -k? Actually if nums[i] could be 0, left = -k. So left+offset >= 0. So offset = k ensures. Good.
+
+Max index needed = max(nums)+k + offset? maxCoord = max(nums)+k. shift = maxCoord + offset +1? But we just use dict of diff size maybe 3e5+2.
+
+Implementation: diff = [0]*(maxCoord+offset+3). Because we will need at coordinate right+1 + offset; right+1 <= maxCoord+1. plus offset yields <= maxCoord+offset+1. So size = maxCoord+offset+2. But we also need arrays for negative left? left+offset ensures non-negative. So diff size: maxCoord+offset+2.
+
+Compute loop:
+
+for num in nums:
+    left = num - k
+    right = num + k
+    diff[left + offset] +=1
+    diff[right + offset + 1] -=1
+
+Then prefix sum: current=0; best=0; for i in range(len(diff)): cur += diff[i]; best = max(best,cur)
+
+Return best.
+
+Time O(n + range) ~ 3e5.
+
+Let's test with example: [4,6,1,2], k=2. nums: [4,6,1,2]
+max(nums)+k = 6+2=8. offset=2. array size 8+2+2=12? But easier: size range maxCoord+offset+2=8+2+2=12. We'll compute.
+
+For each num:
+4: left=2, right=6; shift: left+offset=2+2=4; right+offset+1=6+2+1=9 => diff[4]++ ; diff[9]--.
+6: left=4, right=8; shift: left+offset=4+2=6; right+offset+1=8+2+1=11 => diff[6]++ ; diff[11]--.
+1: left=-1, right=3; shift: left+offset=-1+2=1; right+offset+1=3+2+1=6 => diff[1]++ ; diff[6]--.
+2: left=0, right=4; shift: left+offset=0+2=2; right+offset+1=4+2+1=7 => diff[2]++ ; diff[7]--.
+
+Now compute prefix sum: indexes [0..11] maybe. Let's manually: diff[0]=0; diff[1]=1; diff[2]=1; diff[3]=0; diff[4]=1; diff[5]=0; diff[6]=1-1? Actually diff[6] from second update +? Wait we set diff[6]++ from second number (value 6) and diff[6]-- from 1? Actually diff[6] is updated by the third number: diff[6]-- from 1. So diff[6] = +1 -1 =0. diff[7] = -1 from 2. diff[8]=0. diff[9] = -1. diff[10]=0. diff[11] = -1.
+
+Prefix sums: i=0: cur=0; best=0. i=1 cur=1; best=1. i=2 cur=2; best=2. i=3 cur=2; best=2. i=4 cur=3; best=3. i=5 cur=3; best=3. i=6 cur=3; best=3. i=7 cur=2; best=3. i=8 cur=2. i=9 cur=1. etc. max=3 => output correct.
+
+Edge cases: k=0. Then intervals reduce to single points. So we need maximum count of identical numbers. Could be computed by same algorithm (size of array). Equivalent to counting frequencies with the same value; algorithm will produce result may coincide with same value. Works.
+
+Now writing.
+
+Complexities: O(n + Kmax) where Kmax= maxCoord+offset ~ 3e5. okay.
+
+Implementation details: read nums array; compute max_n; maxCoord = max(nums)+k; offset = k. diff size: maxCoord + offset + 2 maybe (maxCoord + offset +2). Use range (maxCoord+offset+2). Provide sliding? Would be fine.
+
+Note: Need to implement solution with function
+class Solution:
+    def maximumBeauty(self, nums: List[int], k: int) -> int:
+        # code
+
+Check import path.
+
+Test with example: return 3.
+
+Edge case: k=0; numbers: [1,1,1,2]; intervals: [1,1], [1,1], [1,1], [2,2] -> diff arrays: offset=0; diff[1]++ etc; diff[1] length arrays; result 3.
+
+Also for n=1, single element: result 1 obviously.
+
+Large numbers: handle. Use list.
+
+Also we mention gcd.
+
+Let's craft solution with diff array of length maybe 300002 + 3 to hold. Use 3e5+5 safe.
+
+Now produce final solution.
+
+Time complexity: O(n + range). memory: O(range)..
+
+Now produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every element `nums[i]` we can change it only once.
+After a change `nums[i]` becomes any integer in the interval  
+
+```
+[nums[i] – k , nums[i] + k]          (1)
+```
+
+Suppose we want to build a subsequence of the equal value `x`.
+All indices that can be changed to `x` are exactly the ones whose
+interval (1) contains `x`.
+
+So for a fixed `x`
+
+```
+beauty(x) = #{ i |  |nums[i] – x| ≤ k }
+```
+
+The answer is the maximum beauty over all possible `x`.
+
+
+
+--------------------------------------------------------------------
+
+#### Observation
+
+For every element `i` the set of possible `x` is the interval
+
+```
+Li = nums[i] – k ,   Ri = nums[i] + k
+```
+
+Thus we need the largest number of intervals that contain a single
+point `x`.  
+This is the classic *maximum overlap of intervals* problem.
+
+--------------------------------------------------------------------
+
+#### Transforming the problem
+
+The interval endpoints are
+
+```
+Li  = nums[i] – k   (as low as –k)
+Ri  = nums[i] + k   (as high as 2·k + max(nums))
+```
+
+`k ≤ 100 000`, `nums[i] ≤ 100 000`,
+hence all coordinates lie in `[ -k , 2·k + max(nums) ]`
+ – about `3·10^5` integers.  
+We can build an array of that size and use a sweep line.
+
+--------------------------------------------------------------------
+
+#### Sweep line with difference array
+
+For each interval `(Li , Ri)` we add
+
+```
++1 at Li   (inclusive)
+-1 at Ri+1   (exclusive)
+```
+
+After the sweep the prefix sum tells us how many intervals cover a point.
+The largest prefix sum is the required answer.
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the maximum possible beauty.
+
+---
+
+##### Lemma 1  
+For any integer `x`, the number of indices that can be turned into `x`
+equals the number of intervals `[Li , Ri]` that contain `x`.
+
+**Proof.**
+
+`nums[i]` can be turned into `x` iff `x ∈ [Li , Ri]`.  
+This is exactly the definition of that interval. ∎
+
+
+
+##### Lemma 2  
+For every integer `x` the algorithm stores in the prefix sum
+`cnt[x]` a value that equals the number of intervals that contain `x`.
+
+**Proof.**
+
+The difference array is updated with
+
+```
+diff[Li]   += 1
+diff[Ri+1] -= 1
+```
+
+During the prefix sum:
+
+```
+cnt[x] = Σ_{t ≤ x} diff[t]
+```
+
+Every interval contributes `+1` at its left end and `-1` immediately after
+its right end, so `cnt[x]` counts precisely the intervals with `Li ≤ x ≤ Ri`. ∎
+
+
+
+##### Lemma 3  
+The maximum value `mx` over all prefix sums equals  
+`max_x  #{ i | |nums[i] – x| ≤ k }`.
+
+**Proof.**
+
+By Lemma&nbsp;2 the value of the prefix sum at position `x`
+equals the number of intervals covering `x`.  
+Therefore the maximum prefix sum value equals the maximum number of
+intervals that contain a point, i.e. the maximum over all `x`
+of the set size described in the lemma. ∎
+
+
+
+##### Theorem  
+The algorithm returns the maximum possible beauty of the array after
+at most one allowed modification per element.
+
+**Proof.**
+
+*Optimality*  
+Let an optimal solution change some indices to a common value `x*`.  
+By Lemma&nbsp;1 the beauty of this solution equals  
+`#{ i | |nums[i] – x*| ≤ k }`.  
+By Lemma&nbsp;3 the algorithm outputs at least this value, because
+`mx ≥ #{ i | |nums[i] – x*| ≤ k }`.  
+
+*Achievability*  
+Let `x*` be the point where the algorithm reaches the maximum
+prefix sum `mx`.  
+An index can be changed to `x*` iff its interval contains `x*`.  
+Choosing exactly the indices that contain `x*` (all of them) yields
+a subsequence of length `mx`.  
+Hence a beauty of `mx` is attainable.
+
+Since the algorithm is both optimal and achievable,
+it returns the maximum possible beauty. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+Let  
+
+```
+n = |nums|  (≤ 100 000)
+M = 2·k + max(nums)  (≤ 3·10^5)
+```
+
+*Building the difference array*: `O(n)`.
+*Prefix sum over all coordinates*: `O(M)`.
+*Memory*: `O(M)` integers.
+
+Both limits are easily within the constraints.
+
+--------------------------------------------------------------------
+
+#### Reference Implementation (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def maximumBeauty(self, nums: List[int], k: int) -> int:
+        if not nums:
+            return 0
+
+        # Compute relevant bounds
+        max_val = max(nums)
+        max_coord = max_val + k                 # largest right end
+        offset = k                              # shift to make negatives non‑negative
+
+        size = max_coord + offset + 2          # +2 to hold right+1 position safely
+        diff = [0] * size
+
+        # Build the difference array
+        for num in nums:
+            left = num - k
+            right = num + k
+            diff[left + offset] += 1
+            diff[right + offset + 1] -= 1
+
+        # Sweep line, keep the maximum prefix sum
+        best = 0
+        cur = 0
+        for val in diff:
+            cur += val
+            if cur > best:
+                best = cur
+
+        return best
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

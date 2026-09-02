@@ -1,0 +1,238 @@
+<|channel|>analysis<|message|>We need to find maximum possible length of subsequence all equal after operations.
+
+Each element can be changed at most once to any integer within [nums[i]-k, nums[i]+k]. We can choose any subset of indices and set them to some value v within their range. For each index not chosen, we must keep original value. We want to choose some target value v and set as many indices as possible to v by considering which indices can be changed to v (i.e., v in [nums[i]-k, nums[i]+k]).
+
+Wait also indices that already equal v can be included without change. And we might not change them.
+
+Thus for each index, we have ability to set to v if v in [nums[i]-k, nums[i]+k]. We may choose to change it or not.
+
+The maximum subsequence all v equals: we can choose v; count. The best answer is: max over v of number of indices such that v in [nums[i]-k, nums[i]+k]. Since we can choose any subset for subsequence; we can select all indices that can become v. Because we can change each index at most once, no conflict. So answer is maximum over v of count of ranges covering v. Equivalent to maximum overlapping intervals length of coverage at any integer.
+
+Therefore, each index i gives an interval [0, k] shift: [nums[i]-k, nums[i]+k] (within non-negative limit). But note the bounds are inclusive? Problem originally allows any integer from [nums[i]-k, nums[i]+k], which can include negative numbers if below 0? They said integers from range [nums[i]-k, nums[i]+k]. Not bounded by 0. But given nums[i] and k up to 100k, and typical constraints allow negative results? They didn't say non-negative integer. But we can consider integer range unlimited. Since target v can be any integer; but only those within intervals. If the intervals contain negative numbers, might be included. But we only care about max overlapping. So we can ignore range boundaries like 0.
+
+We just need to compute maximum number of intervals covering any point. This is a classic sweep line problem. For each interval [l, r], we can add +1 at l and -1 at r+1, if we treat inclusive endpoints. But simpler: we can use events: (l, +1), (r+1, -1). Sort events. Then sweep accumulate.
+
+Since values up to 200k, but intervals [nums[i]-k, nums[i]+k] may be large up to 200k. Wait nums[i] up to 1e5, k up to 1e5 => ranges up to 2e5. So coordinate small enough to use array of events 0..2e5? But there might be negative values if k > nums[i]; but we can shift offset. But easier: use events dictionary up to 2e5+1 difference, but also negative? Suppose nums[i]=0,k=1 => interval [-1,1]. Negative -1. So maintain offset of -min. But naive dict fine. Complexity O(n log n). n up to 1e5, fine.
+
+Edge cases: duplicates: intervals may be same many times. answer cannot exceed n.
+
+Implementation: use list of tuples events. For each li=nums[i]-k, ri=nums[i]+k, events.append((li,1)), events.append((ri+1,-1)). Then sort by point. Then sweep accumulate.
+
+But we might need to handle large values up to 300k maybe. Let’s compute: nums[i] up to 1e5, k up to 1e5, numbers[i] - k could be as low as -1e5 and numbers[i] + k up to 2e5. So range width 3e5 per index. So events size 2n <= 2e5; sorting O(n log n).
+
+Return max.
+
+Let's test with example: nums=[4,6,1,2], k=2.
+
+Intervals: 4 -> [2,6]; 6-> [4,8]; 1->[ -1,3]; 2->[0,4]. Count overlaps? We can find that value 4 belongs to interval of 4,6,2? Wait 4 within [2,6] yes; [4,8] yes; [0,4] yes; [-1,3] no. So 3. So answer 3. Good.
+
+Edge: When no intervals overlap, answer 1? Actually if k=0, each interval is [nums[i], nums[i]] . We need to find all equal values that exist? Wait we want to choose v that belongs to intervals. For each index with same value, typically there exists overlap. For all distinct values, choose v = some value that is in exactly one interval. So answer 1. Good.
+
+Implementation details: Use Python's sort.
+
+Testing: n=4, intervals [2,6], [4,8], [-1,3], [0,4]. Events: (2,1),(7,-1), (4,1),(9,-1),(-1,1),(4,-1), (0,1),(5,-1). Sorting: (-1,1), (0,1), (2,1). (4,1),(4,-1)... Actually representation careful: events sorted by position; need to process +1 before -1 at same point? When points equal, need to accumulate before moving? The approach with r+1 ensures no adjacency issue. But if we use inclusive r, then events at same coordinate can be +1 and -1. With r+1, we avoid conflict: we add -1 at r+1. So at r+1 we subtract. So no conflict at same coordinate. We'll keep with that.
+
+Thus algorithm:
+
+- events = []
+- for num in nums:
+    l = num - k
+    r = num + k
+    events.append((l, 1))
+    events.append((r+1, -1))
+- sort events by position
+- cur=0
+- best=0
+- for pos, delta in events:
+    cur += delta
+    best = max(best, cur)
+- return best
+
+Edge: using large negative start, ensure int conversion fine.
+
+Complexities: O(n log n).
+
+Return int.
+
+Let's produce final code inside class Solution.
+
+Also import typing.
+
+Return value. Provide explanation.
+
+Let's produce answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every index `i` we may change `nums[i]` once to *any* integer inside
+
+```
+[ nums[i] – k ,  nums[i] + k ]
+```
+
+(If the interval contains negative values we can still use them – they are
+valid integers as well.)
+
+After all changes we want the longest subsequence that contains the same
+value.  
+When we fix a target value `v` we can keep or change all indices for which
+`v` lies inside their interval.
+Because we can change each index at most once, there is no conflict between
+different indices – we may simply choose **all** indices that can become `v`.
+
+--------------------------------------------------------------------
+
+#### Key Observation
+
+For a fixed value `v` the number of indices that can become `v` is exactly
+the number of intervals that contain `v`.  
+Hence the answer equals the maximum number of indices whose intervals all
+share a common point:
+
+```
+answer = max over all integers v  of  (# intervals containing v)
+```
+
+So the problem turns into a classic “maximum overlap of intervals” problem.
+
+
+
+--------------------------------------------------------------------
+
+#### Algorithm
+```
+read n = len(nums)
+create empty list events
+
+for each value x in nums
+        l = x - k
+        r = x + k
+        events.append((l,  +1))                         # interval starts
+        events.append((r + 1, -1))                     # interval ends   (exclusive)
+
+sort events by position
+
+curr = 0
+best = 0
+for each (pos, delta) in events in sorted order
+        curr += delta
+        best = max(best, curr)
+
+return best
+```
+
+* Why `r+1`?  
+  Using a half‑open interval `[l, r+1)` guarantees that the addition and
+  subtraction events never happen at the same coordinate, so the sweep
+  line works without deciding ties.
+
+The sweep line visits each event once, maintaining the current number of
+overlapping intervals (`curr`). The maximum value of `curr` is the desired
+beauty.
+
+
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the maximum possible beauty.
+
+---
+
+##### Lemma 1  
+For any integer value `v` the number of indices that can be set to `v`
+equals the number of given intervals that contain `v`.
+
+**Proof.**
+
+Each index `i` generates the interval `[nums[i]-k, nums[i]+k]`.
+`v` can be used at this index iff `v` lies in that interval.
+Thus the number of indices that support `v` is exactly the count of
+intervals covering `v`. ∎
+
+
+
+##### Lemma 2  
+During the sweep line, after processing all events with position `p`,
+`curr` equals the number of intervals that contain `p`.
+
+**Proof.**
+
+Intervals are stored as events:
+* a +1 at their left end `l`
+* a –1 at their right end +1 `r+1`
+
+When the sweep reaches position `p`, every interval with `l ≤ p` has already
+added +1, and every interval with `r+1 ≤ p` has already added –1.
+Thus `curr` counts exactly the intervals with `l ≤ p < r+1`, i.e. the
+intervals that contain `p`. ∎
+
+
+
+##### Lemma 3  
+`best` is the maximum number of intervals covering any integer.
+
+**Proof.**
+
+By Lemma&nbsp;2, after each event the current value is precisely the number
+of intervals covering that event’s position.
+`best` is updated with the maximum of all these values,
+hence it equals the maximum overlap over all integer positions. ∎
+
+
+
+##### Theorem  
+The algorithm returns the maximum possible beauty of the array.
+
+**Proof.**
+
+*Let `OPT` be the true optimum.*  
+By Lemma&nbsp;1, `OPT` equals the maximum over all integers `v` of the
+number of intervals that contain `v`.  
+By Lemma&nbsp;3 this maximum is exactly the value returned by the algorithm,
+call it `BEST`.  
+Therefore `BEST = OPT`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+Let `n = len(nums)`.
+
+* Creating events: `O(n)`
+* Sorting events: `O(n log n)`
+* Sweep line: `O(n)`
+
+Total time: `O(n log n)`  
+Memory usage: `O(n)` for the event list.
+
+
+
+--------------------------------------------------------------------
+
+#### Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def maximumBeauty(self, nums: List[int], k: int) -> int:
+        events = []
+        for x in nums:
+            l = x - k
+            r = x + k
+            events.append((l, 1))
+            events.append((r + 1, -1))
+
+        events.sort()
+        curr = 0
+        best = 0
+        for _, delta in events:
+            curr += delta
+            if curr > best:
+                best = curr
+        return best
+```
+
+The implementation follows exactly the algorithm proven correct above.

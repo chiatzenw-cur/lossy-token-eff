@@ -1,0 +1,326 @@
+<|channel|>analysis<|message|>We need to solve problem: For each query [x, y], find maximum sum nums1[j] + nums2[j] over indices j where nums1[j] >= x and nums2[j] >= y. n up to 1e5, queries up to 1e5, values up to 1e9. Need efficient algorithm.
+
+We can treat the pair (nums1[j], nums2[j]) as points. For each query, we need maximum sum among points with both coordinates >= thresholds. Equivalent to: For each query, find max over points with x >= X and y >= Y of sum S = x + y. This is like dominated maxima or 2D range maximum query.
+
+We can preprocess. Since both coordinates up to 1e9, we need efficient structure.
+
+Approach: Sweep line on one coordinate, using segment tree or BIT on other coordinate. For each query with thresholds (x, y), we need sum of point with x >= X and y >= Y maximum. Sort points by nums1 descending. Sort queries by x descending. As we sweep, we insert points with nums1 >= current X into a data structure keyed by nums2 to maintain best sum for each y. For each query, we need max sum among points inserted with nums2 >= Y. So we need a data structure that supports update at position nums2 with value sum, and query maximum over suffix from Y to infinity. We can compress nums2 values.
+
+Thus algorithm:
+
+- Build list of tuples (nums1[j], nums2[j], sum).
+- Sort by nums1 descending.
+- Build queries list with (x, y, idx). Sort by x descending.
+- Use compressed coords for nums2 values: get all nums2 values, sort unique. Use index mapping.
+- Build segment tree or Fenwick tree able to query max over suffix. Since suffix, we can use BIT for maximum pref? Actually BIT supports prefix max. To get suffix max, we can reverse coordinates: map to index such that higher y corresponds to lower index. Or we can use segment tree with ranges.
+
+Simpler: Use segment tree for range maximum; build size m. For each point, update index of its y with value sum. We need to maintain the maximum sum for that y; if multiple points share same y, keep max. Then query over range [pos_y, m-1] for max.
+
+Fenwick tree can support prefix max; we can map y to index from 1..m, sort ascending. To get suffix query, we can transform by reversing: use pos of Y in sorted ascending; suffix is [pos, m]. But Fenwick tree can't easily query suffix. We can use Fenwick tree on reversed order: sort y ascending, but we can query max over all indices >= pos. We can do BIT with suffix by using max over prefix of reversed index. Option: compute compressed index ascending. And for query Y, we need max over indices >= pos. We can implement BIT that supports prefix max but we can store reversed: define idx' = m - idx + 1. Then updating at idx original -> bit.update(m - idx + 1, val). Query for suffix >= pos original -> corresponds to all indices <= m - pos + 1 in reversed. So we can query prefix max up to m - pos + 1. That works.
+
+Alternatively, use a segment tree for range max. Complexity O((n+q) log m). n up to 1e5, m up to 1e5.
+
+Edge cases: multiple points, queries with x thresholds > all nums1, etc.
+
+Implementation details:
+
+- compress y: sorted list of nums2 unique array. For each point we need compressed index (1-based). For BIT reversed: idx_rev = m - idx + 1.
+
+- BIT: array size m+2. update idx_rev with val: while idx <= m: bit[idx] = max(bit[idx], val); idx += idx & -idx.
+
+- prefix query: query idx: res = -inf; while idx>0: res = max(res, bit[idx]); idx -= idx & -idx.
+
+- For query Y: find pos = lower_bound(y_values, Y). If pos == len(list) -> no y >= Y. Then answer -1. Else idx_rev = m - pos + 1. Get max = bit.query(idx_rev). If max <= 0? Actually sums can be negative? nums1 and nums2 positive. So sum >0. But if no valid points inserted, query returns 0? We can initialize bit with 0. But points sum >= 2. So we can test if max==0 => no candidate. But could sum be 0? No. So we can use 0 sentinel. But if we inserted sums >0, 0 indicates none. Works.
+
+- Process sorted queries: iterate through descending x. Keep pointer p over points sorted by nums1 descending. For each query (x, y), while p < n and points[p].nums1 >= x: update with points[p]. sum. p++.
+
+- Then answer for query.
+
+Time complexity O((n+q) log m). Works.
+
+Edge: queries may have thresholds not matching any y. Use bisect.
+
+Test with examples.
+
+Let's craft code.
+
+Also note algorithm known as "Maximum Sum Queries".
+
+Now produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every query `q = (x , y)` we need
+
+```
+max { nums1[j] + nums2[j] | 0 ≤ j < n , nums1[j] ≥ x , nums2[j] ≥ y }
+```
+
+If no `j` satisfies the two inequalities the answer is `-1`.
+
+The lengths of the arrays are up to `10^5`, so a brute force check for every query is
+far too slow.  
+The problem is a classic *2‑dimensional dominance* problem:
+```
+point p = (nums1[j] , nums2[j])   with value  v = nums1[j] + nums2[j]
+```
+For a query `(x , y)` we have to find the maximum value among all points
+lying in the **south‑east** corner `(x , y)` to `(inf , inf)`.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Sweep on the first coordinate
+
+Sort all points by `nums1` **decreasing**.
+Sort the queries also by `x` **decreasing** and remember their original indices.
+
+While we sweep over the sorted queries,
+we keep a pointer `ptr` into the list of points.
+For the current query with threshold `x`
+
+```
+while ptr < n and points[ptr].nums1 >= x:
+        insert point[ptr] into a data structure
+        ptr += 1
+```
+
+After the loop, **all** points that have `nums1 ≥ x` are in the data structure,
+exactly the set that can satisfy the first inequality of the query.
+
+
+
+--------------------------------------------------------------------
+
+#### 2.  Data structure for the second coordinate
+
+Inside the data structure we have to answer
+
+```
+max { value | y_of_point ≥ Y }
+```
+
+`y_of_point` is the second coordinate of the point, `Y` is the query’s
+second threshold.
+
+Only the *maximum* value matters, therefore we can use a
+`Fenwick Tree (Binary Indexed Tree)` that stores
+the maximum value for each compressed `y` coordinate.
+
+*Compression*
+
+All `nums2` values are collected, sorted and de‑duplicated.
+For a value `y` its compressed index is
+
+```
+idx = lower_bound(all_y, y)          // 0‑based
+```
+
+The Fenwick tree uses 1‑based indices.
+To obtain a suffix maximum (`y ≥ Y`) with a Fenwick tree that supports
+*prefix* maximums we store the points in *reversed* order:
+
+```
+rev_idx = m - idx          // 0‑based in reversed order
+tree.update(rev_idx , value)
+```
+
+For a query threshold `Y`
+
+```
+pos = lower_bound(all_y , Y)      // first index with y ≥ Y
+if pos == m:   // no such y
+        answer = -1
+else:
+        rev_pos = m - pos
+        answer = tree.query(rev_pos)   // maximum value for y ≥ Y
+        if answer == 0: answer = -1   // 0 means “no point inserted”
+```
+
+All sums are positive (`nums1 , nums2 ≥ 1`), therefore a `0` returned by the
+tree means “no point with the required `y` has been inserted”.
+
+Both `update` and `query` take `O(log m)` time,
+`m` is the number of distinct `nums2` values, `m ≤ n`.
+
+
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the required answer for every query.
+
+---
+
+##### Lemma 1  
+After processing the first `k` queries in the sorted order,
+the Fenwick tree contains exactly the set of points `p` with  
+`p.nums1 ≥ x_q` where `x_q` is the threshold of the currently processed query.
+
+**Proof.**
+
+Initially the tree is empty; the loop that moves `ptr` inserts points
+with `nums1 ≥ x_q`.  
+Since the queries are processed in decreasing `x`, once a point is inserted
+it will stay in the tree for all later queries (their `x` thresholds are
+smaller or equal).  
+No point with `nums1 < x_q` is inserted because the while‑condition
+checks `points[ptr].nums1 ≥ x_q`.  
+Hence the invariant holds. ∎
+
+
+
+##### Lemma 2  
+For a fixed query `(x, y)` the value returned by the Fenwick tree
+after the insertions of Lemma&nbsp;1 equals  
+
+```
+max { nums1[j] + nums2[j] | 0 ≤ j < n , nums1[j] ≥ x , nums2[j] ≥ y }
+```
+
+**Proof.**
+
+By Lemma&nbsp;1 the tree contains exactly the points satisfying `nums1 ≥ x`.  
+The tree stores for each compressed `y` the maximum sum among all points
+with that exact `y`.  
+Querying the suffix (`y ≥ Y`) returns the maximum over all stored points
+with `y ≥ Y`.  
+Combining the two inequalities yields precisely the set in the statement. ∎
+
+
+
+##### Lemma 3  
+If the tree query returns `0`, then no point satisfies both inequalities of
+the current query.
+
+**Proof.**
+
+All sums are positive, thus any inserted point increases the tree entry
+by a positive value.  
+If the suffix query result is `0`, all positions belonging to the suffix
+contain `0`, therefore no point with `y ≥ Y` has been inserted.  
+Consequently no point has both `nums1 ≥ x` and `nums2 ≥ Y`. ∎
+
+
+
+##### Theorem  
+For every query the algorithm outputs
+
+* the maximum possible value of `nums1[j] + nums2[j]`
+  among all indices `j` satisfying the two inequalities, or
+* `-1` if no such index exists.
+
+**Proof.**
+
+Consider an arbitrary query `(x, y)`.
+
+*If the algorithm outputs a positive number.*  
+By Lemma&nbsp;2 the tree value equals the maximum over all qualifying
+points, so the algorithm is correct.
+
+*If the algorithm outputs `-1`.*  
+This happens only when the tree query returns `0`.  
+By Lemma&nbsp;3 no point satisfies both inequalities, thus the answer is
+indeed `-1`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+```
+Let n = len(nums1) = len(nums2)
+Let q = len(queries)
+Let m = number of distinct nums2 values   (m ≤ n)
+```
+
+*Sorting points and queries:* `O(n log n + q log q)`  
+*Compression of y:* `O(n log n)`  
+*Processing:* each point is inserted once, each query is answered once  
+`O((n + q) log m)`  
+
+Total time: `O((n + q) log n)`  
+Memory usage: the arrays, the list of points, the Fenwick tree  
+`O(n + m)` – well below the limits.
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+from bisect import bisect_left
+from typing import List
+
+class Fenwick:
+    """Fenwick tree for prefix maximums (1‑based indices)."""
+    def __init__(self, size: int):
+        self.n = size
+        self.bit = [0] * (size + 2)
+
+    def update(self, idx: int, val: int) -> None:
+        """Set tree[idx] = max(tree[idx], val)."""
+        while idx <= self.n:
+            if val > self.bit[idx]:
+                self.bit[idx] = val
+            idx += idx & -idx
+
+    def query(self, idx: int) -> int:
+        """Maximum value on prefix [1 .. idx]."""
+        res = 0
+        while idx > 0:
+            if self.bit[idx] > res:
+                res = self.bit[idx]
+            idx -= idx & -idx
+        return res
+
+
+class Solution:
+    def maximumSumQueries(self, nums1: List[int], nums2: List[int],
+                          queries: List[List[int]]) -> List[int]:
+        n = len(nums1)
+        # ---------- prepare points ----------
+        points = [(nums1[i], nums2[i], nums1[i] + nums2[i]) for i in range(n)]
+        points.sort(key=lambda x: -x[0])          # descending nums1
+
+        # ---------- compress y ----------
+        y_vals = sorted(set(nums2))
+        m = len(y_vals)
+
+        # ---------- prepare queries ----------
+        qlst = []
+        for idx, (x, y) in enumerate(queries):
+            qlst.append((x, y, idx))
+        qlst.sort(key=lambda x: -x[0])           # descending x
+
+        # ---------- Fenwick tree on reversed y ----------
+        tree = Fenwick(m)
+
+        ans = [-1] * len(queries)
+        p = 0  # pointer in points
+
+        for x, y, qi in qlst:
+            # insert all points with nums1 >= x
+            while p < n and points[p][0] >= x:
+                _, y_point, val = points[p]
+                pos = bisect_left(y_vals, y_point)          # 0‑based
+                rev_idx = m - pos        # 1‑based for Fenwick
+                tree.update(rev_idx, val)
+                p += 1
+
+            # query for y >= Y
+            pos = bisect_left(y_vals, y)
+            if pos == m:
+                ans[qi] = -1
+            else:
+                rev_pos = m - pos
+                best = tree.query(rev_pos)
+                ans[qi] = best if best != 0 else -1
+
+        return ans
+```
+
+The implementation follows exactly the algorithm proven correct above and
+conforms to the required function signature.

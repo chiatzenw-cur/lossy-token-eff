@@ -1,0 +1,611 @@
+<|channel|>analysis<|message|>We need min absolute difference between two elements with indices at least x apart. So basically we consider all pairs (i, j) with |i-j| >= x. We need min |nums[i]-nums[j]|.
+
+Constraints up to 1e5, so O(n^2) impossible. Need efficient algorithm.
+
+Observations: The requirement is that indices are at least x apart. Equivalent: we can consider sliding window of length x; for each index i, we consider j <= i-x or j >= i+x. But we can just consider all pairs where j <= i - x. We can process left to right; maintain a data structure of earlier elements that are at least x indices away. For each i, we need to find min |nums[i] - value| over all values in set of previous indices <= i - x. We can maintain a balanced BST (like sorted list) to allow querying closest value. Complexity O(n log n). Use bisect on sorted list. In Python we can use bisect module with sorted list.
+
+Alternatively, use a segment tree. But sorted list is fine.
+
+Edge cases: x=0 means indices can be equal? Wait "at least x indices apart" meaning difference >= x. If x=0, then any pair including same index? Abs(i-j) >= 0 always true. But do we allow same index? The difference would be 0. Then min absolute difference would be 0. But problem typical might want indices distinct; but with x=0, any pair including same index qualifies. So answer 0. But our algorithm that only considers j <= i - x would ignore j=i if x=0. So we need to handle x=0 separately: return 0.
+
+But we might also consider j >= i + x, but we only consider j <= i - x as we go left to right; each pair will be considered once. That's fine.
+
+Implementation details:
+
+sorted_list = [] ; we add nums[i] to sorted_list when i >= x? Wait we need to add nums[i] to the set after we have processed i + x? Actually we need to add element i when we reach i + x to be considered as pair with future indices. Because for future index j, we need to consider earlier indices <= j - x. So we maintain set of indices that are at least x behind current index. So when we iterate j from 0 to n-1, we maintain pointer to add index i to set when i <= j - x. Equivalent to at j, we add nums[i] to sorted_list when i <= j - x. So we can maintain a pointer 'addIndex' that increments.
+
+Simpler: iterate j from 0 to n-1. We'll maintain sorted_list of values of indices i such that i <= j - x. That means we can add nums[j - x] to sorted_list when j >= x. But we need to keep adding all indices from previous earlier ones. So we can have index 'i' that goes from 0 to n-1; for each j, we add nums[j - x] to the set if j >= x. We can use bisect.insort. But we also need to maintain min difference.
+
+Implementation:
+
+def minAbsoluteDifference(nums, x):
+    n = len(nums)
+    if x == 0:
+        return 0
+    from bisect import bisect_left, insort
+    sorted_list = []
+    ans = 10**18
+    for j in range(n):
+        if j >= x:
+            # add nums[j - x]
+            insort(sorted_list, nums[j - x])
+        if sorted_list:
+            # find closest to nums[j]
+            pos = bisect_left(sorted_list, nums[j])
+            if pos < len(sorted_list):
+                ans = min(ans, abs(nums[j] - sorted_list[pos]))
+            if pos > 0:
+                ans = min(ans, abs(nums[j] - sorted_list[pos-1]))
+    return ans
+
+But we also need to handle case where x > n-1? But constraint says x < nums.length, so x <= n-1.
+
+Edge case: if x = n-1, then only pair is (0, n-1). Our algorithm would add nums[0] when j >= n-1? For j = n-1, we add nums[0] (j-x). Then we check for j but we may also have earlier j like n-1? Actually for j = n-1, we have sorted_list containing nums[0]. Then we compute difference. Works.
+
+Complexity: Each insertion O(n). insort O(k) best. We're doing O(n^2) worst-case. But we can use bisect + insert but each insertion O(n). That's heavy. Instead use "bisect" with `bisect.insort` and list of size up to n, each insertion O(n). So total O(n^2). Not good.
+
+Need more efficient: Use a balanced BST like `bisect` on a sorted list but we can use `sortedcontainers` library but not allowed. We can use a `bisect` on a list but we may maintain a `deque` of sorted values? Not.
+
+Better approach: Since we just need to find min absolute difference between two elements with index difference >= x, we can use divide and conquer or use segment tree for min difference?
+
+But we can do two-way: We can process both directions: left-to-right and right-to-left. For each position i, we consider the min difference between nums[i] and any element at least x away. That could be min of two sets: left set (indices <= i-x) and right set (indices >= i+x). But we can process left to right as described.
+
+Problem: insertion into sorted list O(n). We can use `bisect` but we can keep two lists: left sorted and right sorted but they still need to support insertions.
+
+Better: Use binary indexed tree for count of values? But values are up to 1e9. We could compress values but we need min absolute difference. Could use "multiset" logic but using sorted list with insertion cost O(n). For n=1e5, O(n^2) unacceptable.
+
+We need a more efficient data structure. In Python, we can use `bisect` on a list but insertion cost O(n). However we can use `bisect` on a `array` and use `bisect.insort` but that's O(n). That's too slow.
+
+Alternative: Use `heapq`? Not.
+
+We can use `bisect` on a list of size up to n but we can use `bisect` to find index but we need to maintain sorted list. Instead we can use `bisect` on a `sortedlist` implementation using `bisect` and `list` but expensive.
+
+Better: Use `bisect` on a `collections.deque`? Not.
+
+Therefore perhaps we can solve using sliding window approach but we need difference between two elements that are at least x apart. Equivalent to we can compute min difference between pairs with distance at least x. Another approach: we can compute min difference between all elements, but the pair must be at least x apart. We can use a two-pointer technique if we sort indices by value? Wait.
+
+Consider sorting the array by value. Then we need to find min difference between values such that indices differ >= x. Sorting gives pair with minimal difference in values; we can check whether index difference >= x. But we need to consider all pairs in sorted order. We can sort pairs (value, index). Then iterate over sorted array and maintain a sliding window of indices that are at least x apart? Wait.
+
+We can think of this: we need to find minimal difference between numbers with index difference requirement. After sorting by value, we can iterate over sorted list and maintain a prefix of indices? For each element at sorted position k, we need to find element with minimal difference that is at least x apart. Since sorted by value, the difference is just v_j - v_i. For adjacent sorted values, difference is minimal. But we need to ensure indices differ >= x. So we can iterate over sorted list and maintain for each element, we might want to consider neighbours but skip those that don't satisfy index difference. But we need to find minimal difference among all pairs that satisfy. The minimal difference will be among a pair of relatively close values in sorted order, but maybe not adjacent due to index constraint. So we can use two-pointer sliding window over sorted list to find minimal difference among indices that satisfy index difference. For each index i in sorted list, we want to find j > i such that index difference >= x and difference minimal. Since sorted list sorted by value, the difference increases with j. So we can maintain a pointer j that moves forward until index difference >= x. But j might need to skip indices to satisfy difference. But we can maintain for each i, we can push j forward until index difference >= x. But j may not be minimal difference for that i. So we need to find minimal difference among indices j that satisfy difference >= x. Equivalent to scanning sorted list and for each i, we want to find the first j > i such that indices difference >= x. But if that j still diff > minimal diff found so far, we can skip. But we might need to consider j > i that might give smaller difference but index difference bigger? Wait difference increases with j, so the first j meeting index difference >= x will have minimal difference among all j > i that satisfy constraint (since sorted by value). So we can just for each i, we can find j via binary search on sorted list indices that satisfy index difference >= x. But j may be earlier index with smaller value but index difference bigger? Let's analyze.
+
+Because sorted by value ascending, difference between a[i] and a[j] is a[j] - a[i] (assuming j>i). For fixed i, as j increases, a[j] increases, so difference increases. So the minimal difference for i occurs at the smallest j > i that satisfies index difference >= x. Same for using left side: j < i. So we can find minimal difference overall by scanning i from 0 to n-1 and for each, find j = i+1 candidate; but we need to find j such that |index_i - index_j| >= x. Since indices difference might be small, we want to find j greater than i but with index difference >= x. However be careful: indices difference is absolute, not sorted order. So we could check either j > i or j < i. For each i, we can look at j > i such that index difference >= x. But if index difference is negative? We can just consider j > i. But we also need to consider i's left side j < i where difference is small. But we can just have two loops: first consider pairs where j > i. But if we iterate i from 0 to n-1, and for each i, find j > i such that |index_i - index_j| >= x. Since j > i, we just check if index_j >= index_i + x or j < i? Wait index difference refers to indices in original array, not in sorted list. So difference is |index_i - index_j|. So we cannot guarantee that for j>i in sorted list, indices difference will be large. So we need to check both possibilities.
+
+Thus we can't rely solely on sorted list order.
+
+Alternative: Use a min-heap or balanced BST with ability to get predecessor and successor. We can use `bisect` on sorted list but maintain only elements that are at least x apart. Sorted list of size up to n but we keep only elements that are at least x behind current index. That is dynamic: at each step we add an element at position i-x to the set. The set size is at most n; each insertion O(n). So worst-case O(n^2). But maybe n=1e5, 1e5^2 = 1e10, too high.
+
+We need better. We can use Python's built-in `bisect` with `array` but still O(n).
+
+But we can use a `bisect` on `collections.deque`? Not.
+
+We can use `sortedcontainers` library, but not standard.
+
+We can implement a balanced binary search tree ourselves using `bisect` on a `list` but with `bisect` plus "bisect.insort" we can use `bisect` but we can circumvent O(n) by using `bisect` on a `sortedlist` segment tree.
+
+Alternate approach: Use a segment tree over values to store minimal difference in values? But we need to query min difference in a set of values. Balanced BST easier.
+
+Maybe we can use `bisect` on Python's `list` but use `bisect` on a structure like `array('I')` but still O(n).
+
+But I recall there's a known solution for this problem using "multiset" style with `bisect` but it's O(n log n) if we use `bisect` with `list` plus `insort`. But each insertion is O(n). Wait, but if we use `bisect` and `list`, insertion cost O(n). So it's O(n^2). But we can do O(n log n) by using a binary indexed tree or segment tree over values after compression.
+
+We can compress values to 1..n after sorting unique values. Then we can use a BIT that can store for each value the presence of an element (0 or 1). But we need to find nearest value to a given value in the set. We can find predecessor and successor by using BIT prefix sums: find the largest index <= value with presence, and smallest index >= value with presence. That's possible by binary search on BIT. That will be O(log n) per query/insertion. So we can implement BIT with prefix sum and binary search to find kth. For predecessor, we can compute prefix sum up to value-1, then if sum>0, we need to find largest index with presence. We can use binary search on BIT: find maximum index where prefix sum <= sum. Solve using BIT's "find" function. Similarly for successor.
+
+We can compress values? Since values up to 1e9 but they are up to 1e5 elements. So we can get sorted unique values and map each to index 1..m. Then we can use BIT array of size m. For each insertion, we do BIT.update(pos, 1). For queries, we need to find predecessor and successor names. We can find predecessor: find maximum index <= compressed value such that count >0. We can compute `prefix = bit.sum(compVal)`. If prefix==0, no predecessor. Else we need to find the largest index where prefix sum equals prefix. That's a standard find Kth with BIT: find index with sum=prefix. But BIT find returns index of that cumulative sum. For `prefix` being the cumulative sum up to that index, we can find the index by binary search on BIT: find largest index where prefix sum <= target. So we can use bit.find(prefix). That's O(log n). Similarly for successor: we can compute `prefix = bit.sum(compVal-1)`. If prefix==total, no successor. Else we need to find index with sum = prefix+1. That's next existing element.
+
+Thus we can maintain a BIT with counts. Complexity O(n log n). Implementation details: BIT find first index with cumulative sum >= k. Use typical binary search on BIT: we can find index with prefix sum >= k by using bit's internal binary search. For predecessor we need prefix sum <= k. But we can compute k as total sum. Wait.
+
+Implementation steps:
+
+- Compute array of tuples (value, index) sorted by value.
+
+- Compress values: value_to_comp = {value: idx} 1-indexed.
+
+- BIT size m.
+
+- For each i from 0 to n-1: we need to consider pairs with earlier indices <= i - x. We'll maintain a pointer addIndex = i - x. When addIndex>=0, we add element at position addIndex to the BIT: compVal = comp[nums[addIndex]]; BIT.update(compVal, 1). For each i, we query BIT for predecessor and successor of nums[i]. Use compressed value compVal.
+
+- But we need to query only if addIndex>=0; i.e., if BIT has at least one element.
+
+- For each query, we find predecessor and successor. Compute differences.
+
+- Keep min ans.
+
+Edge case: if x==0, answer 0.
+
+We'll need to implement BIT functions: add, sum, find_by_order.
+
+Implementation of find:
+
+```
+def find_kth(bit, k):
+    idx = 0
+    bit_mask = 1 << (bit.size.bit_length() - 1)
+    while bit_mask:
+        next_idx = idx + bit_mask
+        if next_idx <= bit.size and bit.tree[next_idx] < k:
+            k -= bit.tree[next_idx]
+            idx = next_idx
+        bit_mask >>= 1
+    return idx + 1
+```
+
+This returns index with cumulative sum >= k.
+
+So for predecessor: we'd like to find the largest index <= compVal where sum>0. We can compute prefix = bit.sum(compVal). If prefix==0: none. Else predecessor index = find_kth(prefix). That's the index of the last element <= compVal. Similarly for successor: we need the smallest index > compVal. We can compute prefix = bit.sum(compVal). If prefix == total: no successor. Else successor = find_kth(prefix + 1). Because total count of elements in BIT is prefix+1? Wait: Suppose we want successor that is > compVal. The next element after compVal is the element with cumulative sum prefix+1. Since prefix= number of elements <= compVal. So next element is prefix+1. So call find_kth(prefix+1).
+
+Implementation detail: BIT sum returns prefix sum. We'll maintain variable total_count = i - x (since added that many elements). So we can compute prefix as sum(compVal). Then if prefix==0: no predecessor. else predecessor_index = find_kth(prefix). For successor: if prefix==total_count: no successor. else successor_index = find_kth(prefix+1). Then compute diff = abs(nums[i] - sorted_vals[predecessor_index-1]) etc.
+
+Finally update ans.
+
+Edge: if ans == 0, we can break early.
+
+Complexities: O(n log n).
+
+Let's double-check correctness with examples.
+
+Example 1: nums=[4,3,2,4], x=2. n=4. Compression values: 2->1,3->2,4->3. We'll iterate i=0..3.
+
+i=0: addIndex= -2 <0, no addition. BIT empty -> skip.
+
+i=1: addIndex= -1 <0, skip.
+
+i=2: addIndex=0. Add nums[0]=4 (comp=3). BIT now has 3.
+
+Now query nums[2]=2 (comp=1). prefix = sum(1)=0. So no predecessor. prefix==total_count? total_count=1, prefix=0 -> successor exists: successor_index = find_kth(0+1)=1. That corresponds to value 2. Wait but 2 is not present in BIT? Wait we inserted 4 (comp=3). So how can successor index be 1? That is wrong. Because we inserted 4 only, but we are querying for comp=1. The sum upto 1 is 0, so prefix=0, total_count=1, so prefix!=total_count. So successor index should be find_kth(1). But element at index 1 may not exist. However find_kth returns the index where cumulative sum >= k. Since we only have 1 element at position 3, the cumulative sum upto 3 is 1. So find_kth(1) will return index 3. Good. So we should get successor_index=3. So diff = abs(2-4)=2. ans=2.
+
+i=3: addIndex=1. Add nums[1]=3 (comp=2). BIT: elements at 3 and 2. total_count=2.
+
+Now query nums[3]=4 (comp=3). prefix=sum(3)=2 (both). prefix !=0 => predecessor exists. predecessor_index = find_kth(2) => index 3 (since 2 and 3 exist). diff = 0. ans=0.
+
+Return 0.
+
+Example 2: nums=[5,3,2,10,15], x=1. compression: 2->1,3->2,5->3,10->4,15->5. Iterate i=0..4.
+
+i=0: addIndex=-1 none. BIT empty.
+
+i=1: addIndex=0. Add nums[0]=5 (comp=3). Query nums[1]=3 (comp=2). prefix=sum(2)=0. total_count=1. successor_index=find_kth(1)=3. diff=abs(3-5)=2. ans=2.
+
+i=2: addIndex=1. add nums[1]=3 (comp=2). BIT now has 3,2. total_count=2. Query nums[2]=2 (comp=1). prefix=sum(1)=0. successor_index=find_kth(1)=2. diff=abs(2-3)=1. ans=1.
+
+i=3: addIndex=2. add nums[2]=2 (comp=1). total_count=3. Query nums[3]=10 (comp=4). prefix=sum(4)=3. predecessor exists: find_kth(3)=4. diff=abs(10-10)=0? Wait value 10 at index 4 diff=0. But indices difference? We need to check indices difference >= x: indices 3 and 3? Not allowed. But we are using previous indices that are at least x behind: we added indices 0,1,2 to BIT. At i=3, we have values 5,3,2. No 10. So diff=0 incorrectly. Oops. This occurs because we inserted 10 incorrectly? Wait we inserted 10 only at index 3? Actually we haven't added index 3 yet. So BIT has 5,3,2. So sum(4)=3. find_kth(3)= index of 3rd element inserted: that's comp=4? Wait but comp=4 is 10. But it's not in BIT. So `find_kth(3)` returns index 3? Let's check: BIT has counts at positions 3,2,1. So cumulative sums: at 1:1, at 2:2, at 3:3. So find_kth(3) returns index 3. That's comp=3, which is value 5. Wait we mis-ordered: Actually comp indexing: 1->value2, 2->3, 3->5, 4->10, 5->15. So bit has 3,2,1 present. So cumulative sum at 3 is 3. So find_kth(3)=3. So predecessor index=3. diff=abs(10-5)=5. Good.
+
+Thus algorithm works.
+
+Edge: we need to ensure we don't pair index with itself: but we only add element from index i-x, which is at least x behind current index, so no same index.
+
+Thus algorithm works.
+
+Let's test with n=1? x=0. We'll handle separately.
+
+Time complexity: For each i we compute sum and find_kth twice. Each is O(log n). So total O(n log n).
+
+Implementation details:
+
+- In BIT, we need to support sum up to idx inclusive.
+
+- For find_kth, we need to guarantee that k <= total count. We'll use standard binary search.
+
+- Need to maintain total_count variable.
+
+Let's code.
+
+Also we need to import typing: List.
+
+Let's compute compressed list sorted unique values.
+
+Edge Cases:
+
+- If x==0: return 0.
+
+- If x==n-1: only extreme pair. We can compute directly difference between nums[0] and nums[n-1]. But algorithm will handle.
+
+- If ans never updated? but there will be at least one pair because x < n. So we will get at least one pair.
+
+- For ans initial large value: maybe 10**18.
+
+Let's implement.
+
+Test on examples.
+
+Example 3: nums=[1,2,3,4], x=3. Setup: compression 1->1,2->2,3->3,4->4. loop.
+
+i=0: addIndex=-3 none.
+
+i=1: addIndex=-2 none.
+
+i=2: addIndex=-1 none.
+
+i=3: addIndex=0. Add nums[0]=1 (comp=1). Query nums[3]=4 (comp=4). prefix=sum(4)=1. predecessor exists: find_kth(1)=1. diff=abs(4-1)=3. ans=3.
+
+Return 3.
+
+Works.
+
+Edge: duplicates: Example 1 has duplicates. Works.
+
+Test scenario where ans=0 but not at pair (i,i). For example: nums=[1,2,3,1], x=2. Since 1 at index0 and 1 at index3 difference 3 indices >=2. Our algorithm will find that.
+
+Let's test: compression: 1->1,2->2,3->3.
+
+i=0: no.
+
+i=1: no.
+
+i=2: no.
+
+i=3: addIndex=1 -> add nums[1]=2 (comp=2). Query nums[3]=1 (comp=1). prefix=sum(1)=0. successor index = find_kth(1)=2 (comp=2). diff=abs(1-2)=1. ans=1. But we didn't check pair with index0's 1. Because we didn't add index0 yet because i=3 and x=2: j=3, we need to add i=3-2=1. So index0 not added. So pair (0,3) not considered. Wait but indices difference 3 >=2, so valid pair. But we only added index1. So we missed pair (0,3). Because our algorithm only adds indices i-x, but not earlier indices that are >=x behind? Actually we need to add all indices <= i - x. But the way we add only i-x each time is insufficient. We need to add all indices that become at least x behind current index. We can maintain a pointer addIndex and at each step we add all indices less than current index - x. But we can do it by adding at each step: addIndex = i - x. But we have to add all indices from previous added index+1 to addIndex. But we can just add each time we move forward: at i, we add index i - x (only one). But we also need to keep earlier indices that were already added earlier. That's fine: because we add indices as we go. For i=3, we will have added indices 0? Let's check: at i=0, addIndex=-2 none. i=1, addIndex=-1 none. i=2, addIndex=0: add index0. Wait earlier we said no. But we had i=2, x=2, i - x =0. So we add nums[0] at i=2. Good. So at i=3, we already had added indices 0 and 1? Let's simulate: i=2: addIndex=0 -> add index0. Then process i=2. Next i=3: addIndex=1 -> add index1. So at i=3, we have indices 0 and 1 in BIT. So diff with 1 vs 1 should be 0. Let's test: at i=3: BIT contains 1 and 2. Wait we added 1 at index0 and 2 at index1. So query 1 at index3: prefix sum up to 1 is 1 (since 1 present). So predecessor index = find_kth(1) -> comp=1. diff=abs(1-1)=0. Good. So algorithm works.
+
+Thus algorithm fine.
+
+Edge Cases: When there are many duplicates, we maintain counts. For predecessor or successor, we find the exact values but duplicates considered. For duplicates, diff may be zero.
+
+Large n: 1e5, BIT size 1e5. Works.
+
+Now produce final solution code.
+
+Let's write class Solution:
+
+```
+class Solution:
+    def minAbsoluteDifference(self, nums: List[int], x: int) -> int:
+        n = len(nums)
+        if x == 0:
+            return 0
+        # compress values
+        sorted_vals = sorted(set(nums))
+        comp = {v:i+1 for i,v in enumerate(sorted_vals)}
+        m = len(sorted_vals)
+        class BIT:
+            def __init__(self, n):
+                self.n = n
+                self.bit = [0]*(n+1)
+            def add(self, idx, val):
+                i = idx
+                while i <= self.n:
+                    self.bit[i] += val
+                    i += i & -i
+            def sum(self, idx):
+                res = 0
+                i = idx
+                while i > 0:
+                    res += self.bit[i]
+                    i -= i & -i
+                return res
+            def find_kth(self, k):
+                idx = 0
+                bit_mask = 1 << (self.n.bit_length() - 1)
+                while bit_mask:
+                    next_idx = idx + bit_mask
+                    if next_idx <= self.n and self.bit[next_idx] < k:
+                        k -= self.bit[next_idx]
+                        idx = next_idx
+                    bit_mask >>= 1
+                return idx + 1
+        bit = BIT(m)
+        total = 0
+        ans = 10**18
+        for i in range(n):
+            if i - x >= 0:
+                bit.add(comp[nums[i - x]], 1)
+                total += 1
+            if total == 0:
+                continue
+            val = nums[i]
+            idx = comp[val]
+            pref = bit.sum(idx)
+            # predecessor
+            if pref > 0:
+                pre_idx = bit.find_kth(pref)
+                pre_val = sorted_vals[pre_idx - 1]
+                ans = min(ans, abs(val - pre_val))
+                if ans == 0:
+                    return 0
+            # successor
+            if pref < total:
+                succ_idx = bit.find_kth(pref + 1)
+                succ_val = sorted_vals[succ_idx - 1]
+                ans = min(ans, abs(val - succ_val))
+                if ans == 0:
+                    return 0
+        return ans
+```
+
+Test quickly.
+
+Edge: x=0 handled.
+
+Edge: maybe answer remains large if no pairs? But there will always be at least one pair.
+
+We also need to import List.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every pair of indices `i , j` with `|i – j| ≥ x` we are interested in
+
+```
+|nums[i] – nums[j]|
+```
+
+and we have to output the minimum of all such differences.
+
+The array length is up to `10^5`, therefore a quadratic scan is impossible.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* When we look at position `i` we only need to compare `nums[i]` with
+  elements whose index is at least `x` positions **before** `i`.
+  All indices `≤ i – x` are “already behind” and can be used.
+  The other half of the pair (`j > i`) will be considered later.
+* The set of “already behind” elements changes only by adding a new
+  element at each step – we never delete an element.
+* We only need to know the closest value (in the sorted order of the
+  values) that is present in the set.  
+  That gives the minimal difference for the current element.
+
+So the problem reduces to:
+
+```
+Maintain a dynamic set of values that can be queried for
+“closest value to X” in O(log n) time.
+```
+
+--------------------------------------------------------------------
+
+#### 2.  Data structure – Binary Indexed Tree (Fenwick)
+
+*Values are large (`≤ 10^9`) but we only have `n` of them*  
+→ we compress all values to the range `1 … m` (`m ≤ n`).
+
+The Fenwick tree stores the **count** of each compressed value.
+With it we can
+
+* `add(pos, +1)` – when a new element becomes “behind” the current
+  index.
+* `sum(pos)` – number of elements with compressed value `≤ pos`.
+* `find_kth(k)` – the smallest index `t` with `sum(t) ≥ k`.  
+  This is the standard Fenwick find‑kth operation.
+
+With the position of a value we can immediately access the real
+value from the sorted list of unique numbers.
+
+--------------------------------------------------------------------
+
+#### 3.  Algorithm
+
+```
+If x == 0  → answer is 0 (any index is allowed)
+
+Compress all values → sorted_vals[0 … m-1]
+Build Fenwick tree of size m
+
+ans = +∞
+total = 0                     # number of elements already in the set
+
+for i from 0 to n-1:
+        # element i - x becomes eligible
+        if i - x >= 0:
+                pos = compressed value of nums[i - x]
+                add(pos, +1)
+                total += 1
+
+        if total == 0:          # no eligible element yet
+                continue
+
+        cur = nums[i]
+        comp = compressed value of cur
+
+        # ----- predecessor (≤ cur) -----
+        pref = sum(comp)          # how many elements ≤ cur
+        if pref > 0:
+                pre_pos = find_kth(pref)   # last element ≤ cur
+                pre_val = sorted_vals[pre_pos-1]
+                ans = min(ans, abs(cur - pre_val))
+
+        # ----- successor (≥ cur) -----
+        if pref < total:
+                succ_pos = find_kth(pref + 1)   # first element > cur
+                succ_val = sorted_vals[succ_pos-1]
+                ans = min(ans, abs(cur - succ_val))
+
+        if ans == 0:                 # minimal possible difference
+                return 0
+
+return ans
+```
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the minimum possible absolute
+difference.
+
+---
+
+##### Lemma 1  
+At the beginning of the iteration for index `i` the Fenwick tree
+contains exactly the elements `nums[0 … i-x]` (if any of them exist).
+
+**Proof.**
+
+*Initialization*  
+Before the first iteration (`i = 0`) we have added nothing,
+so the tree contains the empty set – correct.
+
+*Induction step*  
+Assume the lemma holds for the current `i`.  
+During the iteration for `i` we add `nums[i-x]` to the tree (only if
+`i-x ≥ 0`).  
+After the addition the tree contains all elements
+`nums[0 … i-x]` and no others.
+For the next iteration `i+1` the required set is
+`nums[0 … i+1-x] = nums[0 … i-x] ∪ { nums[i+1-x] }`,
+exactly the content of the tree after the insertion.
+∎
+
+
+
+##### Lemma 2  
+For a fixed index `i` the algorithm computes the minimum
+`|nums[i] – nums[j]|` over all indices `j` with `j ≤ i-x`.
+
+**Proof.**
+
+By Lemma&nbsp;1 the tree contains exactly the values of all indices
+`j ≤ i-x`.  
+The algorithm considers the predecessor and successor of `nums[i]`
+in the sorted set of these values.  
+Let `p` be the predecessor (if it exists) and `q` the successor
+(also if it exists).
+
+Because the values are sorted, every element between `p` and `q`
+is farther from `nums[i]` than at least one of them.
+Consequently the minimal difference for this `i` is achieved by
+either `p` or `q`.  
+The algorithm evaluates both possibilities and keeps the smaller one,
+hence it really finds the minimum over all admissible `j`. ∎
+
+
+
+##### Lemma 3  
+The algorithm examines every admissible pair of indices exactly once.
+
+**Proof.**
+
+Take an arbitrary pair `(i , j)` with `|i-j| ≥ x`.  
+Without loss of generality let `i < j`.  
+When the algorithm processes index `j`:
+
+* Because `i ≤ j-x`, by Lemma&nbsp;1 the element `nums[i]`
+  is already present in the tree.
+* The algorithm compares `nums[j]` with the closest value(s) in the
+  tree, therefore it considers the pair `(i , j)`.
+
+No other iteration compares `nums[j]` with `nums[i]` again:
+when `i` is processed, `j` is not yet in the tree, and when
+`i` is processed later the time difference becomes `< x`.
+
+Hence every admissible pair is examined once. ∎
+
+
+
+##### Theorem  
+The algorithm returns the minimum possible absolute difference between
+two elements whose indices differ by at least `x`.
+
+**Proof.**
+
+Let `ans` be the value returned by the algorithm.
+By Lemma&nbsp;3 all admissible pairs are examined.
+By Lemma&nbsp;2 for each examined pair the algorithm computes the
+exact absolute difference of that pair.
+`ans` is the minimum over all examined values, therefore it is the
+minimum over all admissible pairs. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+*Compression* – `O(n log n)`  
+*Fenwick operations* – each step performs a constant number of
+`add`, `sum` and `find_kth` operations, each `O(log n)`.
+
+```
+Time   :  O(n log n)
+Memory :  O(n)   (Fenwick tree + auxiliary arrays)
+```
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def minAbsoluteDifference(self, nums: List[int], x: int) -> int:
+        n = len(nums)
+        if x == 0:
+            return 0
+
+        # ---- value compression ----
+        sorted_vals = sorted(set(nums))
+        comp = {v: i + 1 for i, v in enumerate(sorted_vals)}  # 1‑based
+        m = len(sorted_vals)
+
+        # ---- Fenwick tree ----
+        class BIT:
+            def __init__(self, n: int):
+                self.n = n
+                self.bit = [0] * (n + 1)
+
+            def add(self, idx: int, delta: int) -> None:
+                while idx <= self.n:
+                    self.bit[idx] += delta
+                    idx += idx & -idx
+
+            def sum(self, idx: int) -> int:
+                s = 0
+                while idx > 0:
+                    s += self.bit[idx]
+                    idx -= idx & -idx
+                return s
+
+            # returns the smallest index t with prefix sum >= k
+            def find_kth(self, k: int) -> int:
+                idx = 0
+                bit_mask = 1 << (self.n.bit_length() - 1)
+                while bit_mask:
+                    nxt = idx + bit_mask
+                    if nxt <= self.n and self.bit[nxt] < k:
+                        k -= self.bit[nxt]
+                        idx = nxt
+                    bit_mask >>= 1
+                return idx + 1
+
+        bit = BIT(m)
+        total = 0          # number of elements already in the tree
+        INF = 10 ** 18
+        ans = INF
+
+        for i in range(n):
+            # add element that becomes eligible
+            if i - x >= 0:
+                bit.add(comp[nums[i - x]], 1)
+                total += 1
+
+            if total == 0:
+                continue
+
+            cur_val = nums[i]
+            cur_comp = comp[cur_val]
+
+            pref = bit.sum(cur_comp)      # how many elements ≤ cur
+
+            # predecessor
+            if pref > 0:
+                pre_pos = bit.find_kth(pref)
+                pre_val = sorted_vals[pre_pos - 1]
+                ans = min(ans, abs(cur_val - pre_val))
+                if ans == 0:
+                    return 0
+
+            # successor
+            if pref < total:
+                succ_pos = bit.find_kth(pref + 1)
+                succ_val = sorted_vals[succ_pos - 1]
+                ans = min(ans, abs(cur_val - succ_val))
+                if ans == 0:
+                    return 0
+
+        return ans
+```
+
+The implementation follows exactly the algorithm proven correct above
+and conforms to the required function signature.

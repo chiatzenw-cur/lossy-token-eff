@@ -1,0 +1,415 @@
+<|channel|>analysis<|message|>We need to understand problem: For each k in 1..n, we partition array a into blocks of size k sequentially. Define block sums: s_j = sum_{i=(j-1)*k+1}^{j*k} a_i for j=1..n/k. Only valid if n is divisible by k. We want over all possible k, compute maximum absolute difference between any two block sums: max_{k|n} max_{i,j} |s_i - s_j|. Equivalent to difference between max block sum and min block sum for that k: max_i s_i - min_i s_i. Then maximum over all k dividing n. If only one block (k = n) difference zero.
+
+Goal: compute max difference efficiently across all divisors of n (at most O(sqrt n)). For each divisor k requiring to compute block sums quickly.
+
+Brute force: Precompute prefix sums array P[0..n]. For given k, block sum for block j (1-index) is P[j*k] - P[(j-1)*k]. So we can compute min and max in O(n/k) per k. Sum over all divisors may be high but note sum of (n/k) across all divisors of n <= n * sum_{k|n} 1/k which is roughly n * (sum of reciprocals of divisors). This is generally like O(n log log n) worst-case? But n up to 150k overall across tests. Number of divisors is small; maximum divisors for n <= 150k ~ 128? Actually better: 151200 has 90 divisors. So for each test case, we can iterate over each divisor. Complexity per test: O(n * d(n)/k?) Wait: For each divisor k, we traverse n/k blocks. Total NBlocks = sum over divisors k|n of n/k. But the divisors come in pairs k and n/k. Let d= number of divisors. Sum_{k|n} n/k = n * sum_{k|n} 1/k. What's maximum of sum of reciprocals of divisors? For highly composite; let's approximate worst-case: n= 2*3*5*7*11*13 = 30030? That has many small divisors. sum of reciprocals maybe ~ something like product (1+1/prime+1/p^2+...). up to maybe 3? Let's compute quickly: For 2: 1+1/2+1/4+... =2. Similarly for 3: 1+1/3+1/9+...=1.5. Multiply get 3? Actually product of each factor. For primes up to 13: 2*1.5*1.333*1.25*1.2*1.166... approximate 2*1.5=3, *1.333=4, *1.25=5, *1.2=6, *1.166=7. So sum <= 7. So n * 7 <= 1M for n=150k? 150k*7=1.05M. That's fine. For all test cases sum n <= 150k, so overall maybe 1.05M operations; good. So straightforward approach works.
+
+Important: but we need maximum across k dividing n. We can compute for each k dividing n (except k=n because difference zero), compute max difference.
+
+Time to generate divisors: naive iterate i=1..sqrt(n), find divisors. O(sqrt n) per test. n <= 150k, fine. Implementation details:
+
+- Use prefix sum array of length n+1.
+
+- For each k in divisors: for j start at 0 stepping by k: block sum = P[j+k]-P[j]. Keep min and max.
+
+Use int. Differences may be up to sum of up to n/1 * 1e9 = 1.5e14 fits in 64-bit: Python int fine.
+
+Edge Cases: k=1 -> each block has single element; so difference = max(a)-min(a). k=n: one truck difference 0. So maximum across k will be at least max - min. Maybe bigger with k>1. Eg example 2 shows bigger difference 9 > 10-2? Actually max-min=10-1=9 equal. So.
+
+But we can also compute directly. Implementation: For each test case:
+
+- read n
+
+- read list a
+
+- compute prefix sums
+
+- compute divisors of n.
+
+- answer=0
+
+- For each k in divisors:
+
+   if k==n: continue
+
+   minsum=inf
+
+   maxsum=-inf
+
+   for start in range(0,n,k):
+
+      sumblock = P[start+k]-P[start]
+
+      if sumblock<minsum: minsum=sumblock
+
+      if sumblock>maxsum: maxsum=sumblock
+
+   answer=max(answer, maxsum-minsum)
+
+Return answer as integer.
+
+Check sample:
+
+Case 1: n=2, a= [1,2]. Divisors: 1,2 (k=1,2). k=1 -> each box: min=1 max=2 diff=1. k=2 -> single block diff=0. answer=1 matches.
+
+Case 2 n=6. We'll test quickly: k=1 diff= max 10 min 1 diff=9. k=2: blocks: [10,2],[3,6],[1,3] sums:12,9,4 diff=8. k=3: blocks [10,2,3],[6,1,3] sums=15,10 diff=5. k=6 diff=0. answer=9 matches.
+
+Case 3: n=4 all equal 1e9. Divisors:1: diff=0. k=2: blocks sum: 2e9,2e9 diff=0. answer 0.
+
+Case 4: compute maybe 189114.
+
+Ok.
+
+Potential optimization: maybe we don't need to compute divisors of n each time? Standard.
+
+Now memory: prefix length n+1. 150k each test: fine.
+
+Edge: n=1: Divisors only 1; answer=0 (since only one truck). k=1 (n=1) -> only one block diff=0. So algorithm will skip k==n? But k==n when n=1 same; will skip all divisors; answer stays 0 -> correct.
+
+But careful: if we skip all k==n then answer remains 0 if all divisors were n only. Works.
+
+Now complexity: For each divisor we loop all blocks. Could also use cunning to compute min and max via precomputations? Not necessary.
+
+Now Implementation details: reading input quickly - use sys.stdin.read().split().
+
+Now produce final answer lines.
+
+Let's test with sample: We need to produce each answer in new line.
+
+Potential pitfalls: Might be heavier when many divisors; but we estimate fine.
+
+Edge large numbers: use ints.
+
+Let's run logically through sample 4: n=15. We'll compute quickly.
+
+I think all good.
+
+Implementation:
+
+```
+def solve():
+    import sys
+    it=iter(map(int, sys.stdin.read().split()))
+    t=next(it)
+    out=[]
+    for _ in range(t):
+        n=next(it)
+        a=[next(it) for _ in range(n)]
+        pref=[0]*(n+1)
+        for i, val in enumerate(a,1):
+            pref[i]=pref[i-1]+val
+        # compute divisors
+        divs=[]
+        i=1
+        while i*i<=n:
+            if n%i==0:
+                divs.append(i)
+                if i!=n//i:
+                    divs.append(n//i)
+            i+=1
+        ans=0
+        for k in divs:
+            if k==n:
+                continue
+            minsum=10**20
+            maxsum=-1
+            for start in range(0,n,k):
+                s=pref[start+k]-pref[start]
+                if s<minsum: minsum=s
+                if s>maxsum: maxsum=s
+            diff=maxsum-minsum
+            if diff>ans: ans=diff
+        out.append(str(ans))
+    sys.stdout.write('\n'.join(out))
+```
+
+Check variable names etc.
+
+We need to use bigger sentinel for min: maybe float('inf') fine but int.
+
+Now check complexity: inner loops: for each divisor, we compute n/k times. sum <= n * sum 1/k <= n * H_d? previously estimated 7.. maybe 10. So operations <= 1.5M * 10 = 15M which is fine.
+
+Edge-case: when n large, we still iterate over all blocks for each divisor. Could we further optimize? Not necessary.
+
+But note: For n up to 150,000 and number of tests up to 10,000 sum of n <= 150,000. So total across tests moderate.
+
+Now produce final answer. Let's do final code.
+
+Possible bug: Use of big integer difference: We have ans initial 0. But maybe difference can be 0 for all divisors? Eg all equal weights. Works.
+
+Return ans.
+
+Let's also test with custom quick test:
+
+Input:
+
+```
+1
+5
+1 5 4 2 3
+```
+
+n=5 divisors:1,5. k=1 diff=5-1=4. k=5 diff=0. answer 4.
+
+Now with n=2 and both same weight -> diff 0.
+
+Works.
+
+Edge: n=0? no.
+
+Ok produce final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every possible truck size `k` ( `1 ≤ k ≤ n` )
+
+```
+   first k boxes   -> truck 1
+   next   k boxes  -> truck 2
+   ...
+   last  k boxes   -> truck n/k
+```
+
+The loading is only possible if `k` divides `n`.  
+For a fixed `k` we know all truck sums
+
+```
+S1 , S2 , … , S(n/k)
+```
+
+The value requested for this `k` is
+
+```
+max(Si) – min(Si)
+```
+
+because this is the largest possible absolute difference between two trucks for this `k`.
+
+The answer for the whole test case is the maximum over all divisors `k` of `n`
+(except `k = n`, because with one truck the difference is 0).
+
+So the task reduces to
+
+```
+for every divisor k of n, k != n
+    compute all block sums of size k
+    find their maximum and minimum
+    keep the maximum difference over all such k
+```
+
+--------------------------------------------------------------------
+
+#### 1.  Prefix sums
+
+The sum of every consecutive block of length `k` can be obtained in
+O(1) with a prefix sum array
+
+```
+pref[0] = 0
+pref[i] = a1 + a2 + … + ai          (1 ≤ i ≤ n)
+
+block sum for indices l … r   =  pref[r] – pref[l-1]
+```
+
+--------------------------------------------------------------------
+
+#### 2.  Enumerating divisors of `n`
+
+All divisors are found in `O(√n)`:
+
+```
+for d from 1 while d*d ≤ n
+    if n % d == 0
+         add d
+         if d != n/d   add n/d
+```
+
+The number of divisors of any number ≤ 150 000 is at most 128,
+so this is easily fast enough.
+
+--------------------------------------------------------------------
+
+#### 3.  Iterating over the blocks for one `k`
+
+For a fixed `k`
+
+```
+minsum = +∞
+maxsum = -∞
+for start = 0, k, 2k, …, n-k
+        s = pref[start+k] – pref[start]
+        update minsum, maxsum
+answer = max(answer, maxsum - minsum)
+```
+
+The loop executes `n / k` times.  
+The total number of block inspections over all divisors is
+
+```
+Σ (n / k)   for all k | n
+  = n * Σ (1 / k)   for all k | n
+```
+
+The sum of reciprocals of divisors is bounded by a small constant
+(≤ 7 for `n ≤ 150 000`), therefore the total work for one test case is
+well below one million operations – easily fast enough.
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm outputs the required maximum absolute
+difference.
+
+---
+
+##### Lemma 1  
+For a fixed divisor `k` of `n`, the algorithm computes the minimum
+and maximum of all truck sums of size `k`.
+
+**Proof.**
+
+All truck sums for this `k` are exactly the sums of the blocks
+`[1..k] , [k+1..2k] , … , [(n/k-1)k+1 .. n]`.  
+The prefix sums array gives each block sum in the loop.
+The algorithm keeps the smallest and largest of these sums by
+maintaining `minsum` and `maxsum`.  
+Thus after the loop finished,  
+`minsum = min{Si}` and  
+`maxsum = max{Si}`. ∎
+
+
+
+##### Lemma 2  
+For every divisor `k` of `n` with `k ≠ n`, the value
+`maxsum - minsum` computed by the algorithm equals the maximum
+possible absolute difference of two truck sums when using truck size
+`k`.
+
+**Proof.**
+
+During the loop over blocks for this `k`, all truck sums are examined
+once (Lemma&nbsp;1).  
+For any two trucks
+
+```
+|Si - Sj| ≤ maxsum - minsum          (by definition of max and min)
+```
+
+and equality is achieved by taking the trucks that realise
+`maxsum` and `minsum`.  
+Therefore `maxsum - minsum` is exactly the largest attainable
+absolute difference for this `k`. ∎
+
+
+
+##### Lemma 3  
+Let `Ans` be the value printed by the algorithm for a test case.
+Let `Opt(k)` be the true maximum absolute difference for truck size
+`k` (or 0 if only one truck).  
+Then
+
+```
+Ans = max over all divisors k of n    Opt(k)
+```
+
+**Proof.**
+
+The algorithm iterates over every divisor `k` of `n`.  
+For `k = n` it skips the block loop; this does not influence the
+maximum because `Opt(n) = 0`.  
+For each `k ≠ n` it computes `maxsum - minsum`,
+which equals `Opt(k)` by Lemma&nbsp;2, and keeps the largest of these
+values in variable `answer`.  
+After the loop, `answer` equals the maximum of all `Opt(k)`,
+hence `Ans = answer`. ∎
+
+
+
+##### Theorem  
+For every test case the algorithm outputs the maximum possible absolute
+difference between the total weights of any two trucks over all legal
+truck sizes.
+
+**Proof.**
+
+By Lemma&nbsp;3 the algorithm’s result equals  
+`max_k Opt(k)` over all divisors `k` of `n`.  
+This by definition is exactly the problem statement’s answer. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+For one test case with array length `n`
+
+* building prefix sums: `O(n)`
+* enumerating divisors: `O(√n)`
+* total block inspections over all divisors:  
+  `O( n * Σ_{k|n} 1/k )   ≤  O( 7n )`
+
+So the overall time complexity is `O(n)` (with a small constant).
+The sum of `n` over all test cases is at most `150 000`,
+hence the program runs comfortably within limits.
+
+Memory usage: the array of length `n+1`, i.e. `O(n)` integers.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+import sys
+
+def solve() -> None:
+    data = list(map(int, sys.stdin.buffer.read().split()))
+    it = iter(data)
+    t = next(it)
+    out_lines = []
+
+    for _ in range(t):
+        n = next(it)
+        a = [next(it) for _ in range(n)]
+
+        # prefix sums
+        pref = [0] * (n + 1)
+        for i, val in enumerate(a, start=1):
+            pref[i] = pref[i - 1] + val
+
+        # all divisors of n
+        divs = []
+        d = 1
+        while d * d <= n:
+            if n % d == 0:
+                divs.append(d)
+                if d != n // d:
+                    divs.append(n // d)
+            d += 1
+
+        best = 0
+        for k in divs:
+            if k == n:          # only one truck -> difference 0
+                continue
+
+            minsum = 10 ** 20
+            maxsum = -1
+            for start in range(0, n, k):
+                block_sum = pref[start + k] - pref[start]
+                if block_sum < minsum:
+                    minsum = block_sum
+                if block_sum > maxsum:
+                    maxsum = block_sum
+            diff = maxsum - minsum
+            if diff > best:
+                best = diff
+
+        out_lines.append(str(best))
+
+    sys.stdout.write("\n".join(out_lines))
+
+if __name__ == "__main__":
+    solve()
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required input/output format.

@@ -1,0 +1,551 @@
+<|channel|>analysis<|message|>We need to count integers in [low, high] whose divisible by k and number of even digits equals odd digits. There is a range up to 1e9 (whole up to 10 digits?). Actually up to 10^9 - inclusive up to 10^9 (9 digits). So naive brute force is impossible for large ranges.
+
+We need efficient counting, likely using digit DP + divisibility by k.
+
+Let n up to 1e9 let's create DP over digits.
+
+We need counting f(X) = number of numbers <= X satisfying conditions. Then answer = f(high)-f(low-1).
+
+We need to handle numbers without leading zeros? Counting zero? We can count numbers with no leading zeros, but digits included only actual number sign. So we can treat them as numbers with exactly the digit length of X. We'll handle DP with count of odd - even? We need parity count diff. We can maintain diff = #odd - #even. But we need even=odd => diff=0. So we count numbers with diff=0 at final position multiplied by divisibility by k. Also we must ensure we consider starting with first digit to avoid leading zeros. But mask of diff zero in DP when we add digit even or odd. But leading zeros cause earlier digits count of digits? zero digits are considered? For a number that has fewer digits than max length, it's considered with leading zeros; we need to not count leading digits counting deviation. So our DP can handle leading zeros as special flag: started. Until started, digits considered zero but not contribute to digits counts, and then cannot influence diff. Similarly divisibility by k must allow any length because we multiply by (10^order) at each step. But leading zeros correspond to prefixes of length n-digit number but we stop when we have started so we consider digits. We can treat zeros as digit leading zeros do not count as contributes and odd=even parity but not counted for leading zeros? But zero digit is even. But they would count as an even digit if we count them though they don't exist? For number 1-digit number the leading zeros are not present. So we need to treat zeros before started as no digits; so we cannot count them as even digits. So we need state flag 'started'. When started==False, we can choose digit=0 but it continues allowed, and we do not contribute to outcome? For v, we only add digit 0 if started. If we choose new digit=1..9, started becomes True: we update diff and modulo. So after at least one digit, we produce number. So we need to handle zero digit after starting: this is a zero, which is even by our description, but zero is a digit. It's still considered even. So we treat zeros as even: if started True and chosen digit 0, we add even count.
+
+Thus clusters: dpalike: dp[pos][diff_offset][mod][started], pos is index from 0..len; digits processed so far. But diff 0..unshifted. At each step, worst position changes by at most 9, but each digit can change diff by +-1. So diff can be between -pos and pos. So we can offset by length to stay positive.
+
+Additionally, we require diff =0 at end. Count numbers where started == True; but number counted 0? At start, initial state not started. The number 0 cannot have started in that case (since 0 requires no digits). But low > 0. So we don't count 0. But if we allow low=0? Not given.
+
+Hence to compute f(X), we can use digits from most significant to least. Implementation: for length L (digits of X). Use recursive function dp(idx, clue, pattern). Use pos's state: tight (whether digits so far match prefix). Count of diff even-odd etc.
+
+We can use memoization or iterative DP.
+
+Simpler: DP idx from 0.. len-1. For each state, we have indicator seq of diff and mod and started. When we see 0 and started false, we don't count. But if we see 0 and started true, still counts.
+
+Define dp[pos][diff][mod][started] = ways.
+
+Transitions: digit from 0..max = (tight? digits_by_pos : 9). At each dp, we skip over digits; new_tight = tight & (digit==max).
+
+Add to new_state.
+
+For digits v with v==0: new_started = started or deg? Initially stage: if current started false and digit==0: transition to started true but not counted? Actually, we want indicate number's leading zeros included if we cannot make many digits. But we only truly counted when we have a non-zero digit; but if we choose digit 0 and still appear before non-zero, we might skip effect. But if we cross a 0 after first non-zero or digit=0 after start (i.e., there is a zero in number), that zero should be counted as even digit 0. So logic: if not started True and digit==0 -> new_started false. But no effect on diff and mod. If curr digits after starting: i.e., start True or digit not zero? Wait "started" means we already have a non-zero digit earlier. So for d==0: if started false, digits remain not started, but there is no effect on number. If started true but adds deg (digit zero), it's even. That effect implicitly counts. So we can treat: if started true or step enters new digit non-zero: we keep started boolean. For within started true, we control count.
+
+Thus DP transitions: For each bit d from start to end:
+
+- new_started = started or d > 0
+
+- if new_started: diff updated by difference (1 if d odd else subtract 1). Actually we maintain odd-even diff. So diff.data: diff_{odd} - diff_{even}. So if new_started and d!=0 -> d odd -> diff+1. If d!=0 and even -> diff-1. If new_started but d is zero? Wait If new_started already true before d, d=0 means even and diff-1.
+
+But if we use new_started = started or d>0; we also need to consider effect on diff if new_started then d not zero or d==0? But d==0 occurs only if started or digit zero? In case start was false and d=0, new_started false, no effect. In case start false and d>0, d>0 a digit, we add diff accordingly.
+
+Thus final: if new_started: active_change = d being odd or even. diff += 1 if d%2==1 else -1.
+
+But careful: when started is false, d=0 leads new_started false; if next digit 0 stays minimal; still not contributed.
+
+Edge: number zero, start(false) ends with count 0, i.e., not counted => diff stays 0, but started? At end, at the last digit, we want to count only conditions when selected number had numbers with at least one digit (i.e., number > 0). We have already set up that we exclude started=false at end. So we can add to result only if started==True and diff==0 and mod==0.
+
+Alternatively, we may count digits length exactly from leading zero block; but number zero is rare because X>=1; we expect bound.
+
+So algorithm: def solve(x): get digits string at most d; len=... produce dp grid.
+
+Complexities: digits up to 10; diff can be up to ±Div. So diff range [-len, len], small.
+
+At each click we divide by d etc; we can use DP dimension by pos, diff+len, mod, started.
+
+mod: k up to 20; we maintain mod 0..k-1.
+
+Implementation details: store dp as dictionary/unbounded? Use 4D list as dp[10][2*len+1][k][2]? That's about 10*2*len <= 20*21 = 105 entries maybe per dp in rot initialization? With last dimension: dp small, at state with 3 dims maybe 8 combos? Actually we'd do DP iterative: dp[pos][diff_offset][mod][started]. But we have to count using DP array per state; but because we need to iterate states with current and next values. We'll use 3-d array for each pos, we don't need toggling? This is fine.
+
+Edge: efficient modulo: use next_mod = (current_mod*10 + d) % k (since digits used). numeric: if started false. But if started false? If start False and d=0, we're adding zero to mod value? But the base number hasn't started yet; dp remains 0 modulo? But because we don't consider number into yet value; we shouldn't treat the mod before start. But when starting false and we still must track current value? Actually when started false, number hasn't started; but 0 leading zeros is considered so we may get digits 0 (i.e., not started). For modular we need to keep modulo of the rest? But the digits to left are zeros but they don't contribute; but the final number will produce deterministic digits; but when we compute it as we build digits from left to right, we treat the numeric value as we build digits as we go from high positions to low ones. For started false, number is 0. Suppose we have number 10: digits 1,0. We process first digit 1 (non-zero, start). For first digit 1 -> value=1 mod k. For bigger digits 0 -> not started? Wait after first digit we progressed to started true, and we subsequently add 0 -> value = (1*10+0) %k. So algorithm becomes: We need to maintain mod for nights started false AND digits count? For number 1-digit numbers (like 9) but we process up to 2 digits length. So first digit may become leading zero? Wait consider X=8, length=1. Then DP for number 9? No such. For numerator digits as digits of X: distance = 8. But width 1. So nothing.
+
+But for length 3 digits, we produce numbers like 5: with leading zeros at first two positions. But we detect that first digit=0 (not started), second 0, decimal. Then third 5 (non-zero). So we must handle modulo changes accordingly.
+
+So for numbers with leading zeros, we set digits 0 for those positions. In mod calculation, we must consider when started false: digits before start. Example: X=100, 3-digit number '100', we want number '5' which is 5. We process the first digit '0', second '0', third '5'. They all must produce correct modulo.
+
+Thus for digits 0 before start, we should record ability that after step operation the partial value later remains unaffected: because earlier digits added 0*10^something. But modifications that we compute as (current_mod *10 + digit) % k. But we only compute modulo for numbers that are entirely zeros up to that point? Actually if we haven't started yet, we treat current_mod = 0 because earlier digits were zeros. Right.
+
+But what about variable "current_mod" is the prefix remainder of the number formed by the digits from the start onward. The prefix includes zeros which don't contribute to the current value. But if we treat them as "non-digit" if started true? Because for 0 at the start, it does not increase the value but still shift the multiplier but not in decimal digits? Wait we always parse digits left to right, and we maintain the current value mod k. So if we start earlier digits zeros value that step adds 0: to get new remainder: ((prefix (still prior number) mod k)*10 + digit)/k. For start false, we treat prefix value 0 (since no digits). So new remainder = (0*10 + digit) %k = digit%k. So after first non-zero 5, we continue remainder with previous 0. So we have not been shifting by 10 for previous msd zeros? Actually we can also treat leading zeros as not part of number. Implementation in DP: For numbers < len(X), we treat growth of the number as we have leading zeros. When we modify index to pos of value length, we treat DP with digits, but we might not parallel shift properly. But typical digit DP for numbers that consider leading zeros and doesn't add extra zeros. I'd maintain expectations: map from pos to length. We perform DP where we don't skip early zeros, but we use 'started' true after first non-zero digits. This ensures the number 5 (digit '5') is represented by digits 5 as some positions after leading zeros. Eg X=100 (digits 0,1,0,0). For number 5, we interpret digits [0,0,5]?? Wait leading zeros cause mis alignment.
+
+Let's better define digits and we compute DP representation as numbers that have been written in range [0,X]. But we can't skip zero; but they are still counted because we can choose digits <= digits... At typical operations, we maintain a flag: 'tight', 'is_set' (DP). When exploring digits, we treat transitions with index starting at 0 upwards. For a number of length M, digits 0..M-1. Suppose we treat number_digits wrongly: For number 5, we will want digits: [0,5?]. We can have no leading zeros; but if we have 'first digit' generation 0, we wouldn't have 'started' inadvertently but still produce valid digits; but if we only restrict to smaller digits after started, i.e., we decide to not start when there is zero, we are fine. We may produce digits that start before digit 5, but still considered correct because these zeros are actual digits preceding the number? But all numbers in decimal representation have no leading zeros. So we need to treat them as digits that are not part of the number. Equivalent to for DP with leading zeros, we generate a 'character' representing the number as M digits representation with leading zeros. But to compute nth number numeric value (not multi-digit) we need to compute modulo? Example: 100 -> digits 1,0,0. Suppose number '5'. We then need digits [0,0,5] or exactly [0,0,5]? Actually we treat DP with leading zeros: digits 0, 1, 0, 0? Wait we cannot arbitrarily set digits to 0 at first that are not digits for number; but representation: The first two digits that are zero are not part of number; we produce them as part of number's not digits. Example: number 5 splitted by digits '0','0','5' gives representation correct.
+
+However the test of divisibility of digits for OC? Wait we want the decimal representation of number 5: its digits are not 0's. So we should not miscount digits 0. Our DP uses "decided digits" which hold digits we choose, but we ensure that when we count digits of number, we only count those digits after the first non-zero. So for leading zeros, we effectively don't count them. Thus the remainder should reflect the number value dividing by k. For number 5, its digits 5 zero; but we compute IRPS: at start with first digits '0', never started => compute base remaining as 0. 0; no remainder. Next digit 0 -> still not started -> dp remains unchanged. That means we don't multiply by 10\n etc. After last digit 5 -> it's actual digit; we compute remainder = (0*10 + 5) %k: 5%k. So pattern correct. In this result, we didn't multiply by 10 for preceding zeros. That's correct because the new remainder is 5. So full solution correct.
+
+Hence we need to handle number value digits: current_mod only considered after started; when we encounter digit e.g. at step when started=False, we compute next_mod = (prev*10 + d) % k? But prev we started false? But we just treat "base" as 0. If started false, we treat current_mod is 0. So recurrence: if not started and d != 0: new_started true; new_mod = (0*10 + d) % k => d%k. For d=0: new_started false; new_mod=0. That matches requirement. For more defined version, we can simply compute new_mod = (prev*10 + d) % k regardless of started, because we maintain prev=0 when started false. But . Let's maintain prev=0; but if we had started false and d != 0: we set prev=false, but we no 'old remainder' because prev is conceptually 0 after running. So this formula is fine for n=0 correctly if we set prev=0.
+
+Thus we can compute next_mod = (previous_mod * 10 + d) % k regardless of started. But careful: previous_mod still ensures 0 if not started. For digits before start we will multiply and remain 0, just stays 0 at each step. So good.
+
+But we shift by 10 after each digit; So we should propagate 10 remains each digit but that doesn't care about started. Because pref has 0 values, after done, no change.
+
+But we must use start false when we had started false, which will produce value 0; but we computed 1st digit 0: remains 0. Then test tens: 10^ex. So each step multiplies by 10, type: we multiply 0 by 10. That's still 0. That ensures the numeric representation will be same for using 0 = 5. This is trivial.
+
+Now accomplish.
+
+Implementation details:
+
+dp loops using dictionaries: dp[pos][diff+offset][mod][started]. But we can do dynamic recursion. Use caching with lru.
+
+Pseudo:
+
+def count_leq(X):
+
+if X < 0: return 0
+digit_list = list(map(int, str(X))) len L. DP recursion index i, remaining.
+
+Use memoization with tuple (pos, tight, diff, mod, started).
+
+Return number.
+
+Transition with sum.
+
+Return result.
+
+Edge: diff can be -max..l??? But because all digits after start produce diff changes; small.
+
+Worst-case recursion states: pos=10, tight 0?? number of signs: (tight=2, diff=2*len+1 ~ 21, mod up to 20, started 2 combos) => 11*2*21*20*2 ~ 18480 states.
+
+Implement.
+
+Implementation for 2-digit function ok.
+
+We test with small examples:
+
+Example 1: low=10 high=20, k=3. Count <=20 (20) compute.
+
+Let's test manually.
+
+Simplify: can just compute.
+
+But might produce 3 lower numbers: 12,18? no 3? Let's compute (7 digits? Let's rely on code.
+
+Edge: we set to adjust for start but if low==0, we need to compute while low>0? Could also compute ignoring.
+
+Implementation: count(high)-count(low-1)
+
+Write function count_limit(mid):
+
+if mid==0: return 0? Actually for lower bound >1? Suppose low=1. m=0. Its representation: none.
+
+We should treat count_leq(0)=0.
+
+Now proceed.
+
+Testing: Example 1: low=10 high=20 pivot.
+
+Check for numbers: 10 (2 digits 1 odd, 0 even). 10 already digits 1 and 0 which are odd=1, even=1. That's false because 10 not divisible by 3. Good.
+
+Let's compute code.
+
+Simulate:
+
+Will produce highest.
+
+Edge: limit at 20: digits:
+We iterate over digits of string '20', pos 0.
+
+Explain DP code quickly.
+
+Let's test with simple eng.
+
+Potential bug: we might treat digits with start false when last digit is 0 (like 10) but treat that we skip counting? That should be fine because 10 has digits: first digit 1. For 10, we are fine.
+
+Edge: For numbers like 100: digits 1,0,0. For series with leading zeros, we maintain started after tens. But we are good.
+
+Ok.
+
+Now produce final solution.
+
+Edge: When k>0: mod may be 0. Works.
+
+Now produce code.
+
+Let's craft solution content.
+
+Implementation details: use recursion. Possibly implement as iterative stack with function.
+
+Return int.
+
+Testing: Provided sample:
+
+Input: low=10 high=20 k=3 -> result 2.
+
+Input: low=1 high=10 k=1 -> answer 1.
+
+Input: low=5 high=5 k=2 -> 0.
+
+Edge: we can test 1:6 10? Wait.
+
+Let's test small test: low=1 high=10 k=1. All.
+
+Triple: 10 is only boundary, 10 qualifies. But check 12 lower? 12 not <= 10 so not.
+
+Ok.
+
+Test some other case: low=1 high=100 small brute.
+
+General.
+
+Now produce final solution code.
+
+Edge: Ensure we use python pyro. Use recursion with mod = k.
+
+We'll produce.
+
+Will incorporate TOT.
+
+We choose not to use caching huge.
+
+Will return.
+
+Now produce final answer only.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a given `low`, `high` and `k`
+
+```
+A number is beautiful  ⇔
+    the count of even digits   =   the count of odd digits
+    and the number is divisible by k
+```
+
+We have to count beautiful integers in the closed interval `[low , high]`.
+
+Because `high ≤ 10^9` the possible number of candidates is up to a billion –  
+a brute force scan is impossible.
+
+--------------------------------------------------------------------
+
+#### 1.  Digit DP
+
+For an integer `N` let  
+
+```
+value(N)   – number of beautiful integers in [0 , N]
+```
+
+The answer we want is
+
+```
+value(high) - value(low-1)
+```
+
+Only the border `handle 0` is required (`value(x) = 0` for `x < 0`).
+
+We compute `value(N)` using a **digit DP** that explores all decimal
+representations of numbers from `0` to `N`.
+
+--------------------------------------------------------------------
+
+#### 2.  States of the DP
+
+*Number of processed digits (position)* `pos`  
+*Decomposition of the prefix of the number*  
+
+```
+diff        – current (#odd – #even) of the digits already chosen
+             (valid for the whole prefix).  indicates how many mismatched
+             odd / even digits have occurred so far.
+             If a digit are processed after a prefix of “zeroes”
+             (leading zeros) it does *not* change diff.
+mod         – current value of the already chosen prefix and
+                (prefix⋅10 + next_digit) % k                        
+
+started     – bool: has a non‑zero digit already been chosen?
+                - first digit ≤ 0 is a leading zero – it does not belong
+                  to the number (we do not count it internally).
+tight       – remember if the current prefix is identical to the
+              prefix of the upper bound `N`.  If it is true, when we
+              choose a digit we may not exceed the corresponding digit
+              of `N`; otherwise any digit `0 … 9` is allowed.
+
+
+State   (pos, diff, mod, started, tight)
+```
+
+Length of the number of `N` is at most `10`, therefore
+
+```
+diff and g   →   -10 … +10   →   21 possible values
+mod          →   0 … k-1    →   ≤ 20
+started      →   0 / 1
+tight        →   0 / 1
+```
+
+The number of states is far below 50 000.  
+Re‑compute once per query – a native memoization (`@cache`) is sufficient.
+
+
+
+--------------------------------------------------------------------
+
+#### 3.  Transitions
+
+For a current state we try every digit `d` that is allowed
+
+```
+limit = digit_of_N_at_pos(pos)          if tight
+         9                                 otherwise
+```
+
+```
+new_started = started or d > 0
+new_EvenOddDiff = diff
+if `d > 0`  (a real digit) and `new_started`:
+        new_diff += 1            if d is odd
+        new_diff -= 1            if d is even
+```
+
+`new_norm_mod = (mod * 10 + d) % k` – the value is **always** updated
+even if `started` is false (the number is still `0` that is
+0·10 + d = d, and all intermediate leading zeros keep the value `0`).
+
+new flag:
+
+```
+new_tight = tight and (d == limit)
+```
+
+Finally we process the next state.
+
+When the recursion reaches the end (pos == length of `N`):
+```
+If started == True and diff == 0 and mod == 0
+        → the built number is beautiful → count 1
+else
+        → 0
+```
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the exact number of beautiful
+integers inside `[low , high]`.
+
+---
+
+##### Lemma 1  
+For every `0 ≤ X ≤ N` the DP enumerates exactly one path that corresponds
+to the decimal representation of `X`.
+
+**Proof.**
+
+The DP processes digits from the most significant to the least
+satisfying the usual *tight* condition.
+
+* For a given `X` the rest of `X` digits are known to set a unique
+  assignment of digits:  
+  at position `pos` the value `X[pos]` must be taken.  
+  For sophisticated positions the DP condition `tight` ensures
+  that the value not exceed `N`, but equals the required value for the
+  processed prefix.  
+* For the transition from position `pos` to `pos+1` we only regard the
+  digit `d = X[pos]` – the branch with the correct `d` stays in the
+  tight period and continues the way.  
+  No other will lead to the same full number because keys are
+  independent.
+
+Consequently, the algorithm follows exactly one path that reproduces the
+decimal representation of every `X`. ∎
+
+
+
+##### Lemma 2  
+During the execution of a path that corresponds to a particular number
+`X`, the DP stores in the processing state
+
+* `diff` – the current difference (`#odd – #even`) of all digits that
+  already belong to `X`, i.e. the digits that are part of the number
+  (leading zeros do not influence it).
+
+* `mod` – `X % k`.
+
+* `started` – `True` iff at least one non‑zero digit of `X` appeared
+  in the processed prefix.
+
+**Proof.**
+
+Induction over the processed positions.
+
+*Base* – before first digit:  
+`diff = 0`, `mod = 0`, `started = False`.  
+All initial conditions are correct.
+
+*Induction step* – assume the lemma holds after processing the
+prefix `P` of positions `0 … pos-1`.  
+Let the next digit `d` be
+
+* `d == 0`  
+  *If `started == False`*: the digit is a leading zero
+    → it does *not* belong to the number, in which
+
+     * `did == 0` → new `diff` remains unchanged,
+     * `mod` also equals `MOD0 = (0*10 + 0) % k = 0` – still
+     **0** because the empty suffix does not influence `X` yet.
+     * `started` stays `False`.
+
+  *If `started == True`*: the digit is inside the number
+    * `diff` now decreases by one (→ even digit)  
+    * `mod = (old_mod * 10 + 0) % k` .
+    * `started` stays `True`.
+
+*At least one non‑zero digit** – updated.
+The value for this digit is _as usual_ from the standard decimal
+representation of the number `X`.
+
+Thus after the transition all numbers of the lemma are still
+satisfied. ∎
+
+
+
+##### Lemma 3  
+A path reaching the end of the DP state (pos = length) is counted
+**iff** the corresponding number `X` is beautiful.
+
+**Proof.**
+
+According to Lemma&nbsp;2 at the final position all conditions are:
+
+```
+started == True          →  X present in linear integer range
+diff    == 0            →  #odd = #even
+mod     == 0            →  X divisible by k
+```
+
+Therefore the decimal computation for `X` is correct, and the number
+is exactly counted **once** if it is beautiful and **zero** otherwise. ∎
+
+
+
+##### Lemma 4  
+`value(N)` equals the number of good integers inside `[0 , N]`.
+
+**Proof.**
+
+By Lemma&nbsp;1 all forbidden loops of numbers `≤ N` are enumerated,  
+by Lemma&nbsp;3 every satisfying number is counted exactly once,
+and no number violating the conditions is counted.  
+Thus the sum of returned values equals the required quantity. ∎
+
+
+
+##### Theorem  
+`Solution.numberOfBeautifulIntegers` returns the number of beautiful
+integers in the inclusive interval `[low , high]`.
+
+**Proof.**
+
+Using Lemma&nbsp;4 `value(high)` counts all aesthetically good numbers
+not exceeding `high`.  
+`value(low-1)` counts all those not exceeding `low-1`.  
+Subtracting removes precisely those numbers that are `< low`,
+leaving the number of beautiful numbers in `[low , high]`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+Let `L` be the number of decimal digits of `high`  
+(`L ≤ 10` for the given limits).  
+The DP array is a cache of size
+
+```
+state    =  O( L * diff_range * k * 2 * 2 )
+          ≤ 10 * 21 * 20 * 2 * 2  ≈  4.2·10^4
+```
+
+Each state is processed once and the transition iterates over at most
+10 digits.
+
+```
+Time   :  O( L * 21 * k * 2 * 2 * 10 )  ≤  0.9·10^6  operations
+Memory :  O( L * 21 * k * 2 * 2 )       ≤  4.2·10^4  integers
+```
+
+Both are comfortably inside the limits.
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+import sys
+import threading
+from functools import lru_cache
+
+
+class Solution:
+    def numberOfBeautifulIntegers(self, low: int, high: int, k: int) -> int:
+        """
+        Count numbers in [low , high] such that
+            the number of odd digits equals the number of even digits
+            and the number is divisible by k.
+        """
+        # ------------------------------------------------------------------
+        # helper: count numbers <= X that are perfect
+        def count_up_to(X: int) -> int:
+            if X < 0:
+                return 0
+            digits = list(map(int, str(X)))
+            n = len(digits)
+
+            @lru_cache(maxsize=None)
+            def dfs(pos: int, diff: int, mod: int, started: bool, tight: bool) -> int:
+                """
+                pos: current index in digits
+                diff: (#odd - #even) of digits that are already chosen
+                mod: current remainder modulo k of the constructed number
+                started: whether done with a non‑zero digit
+                tight: we already matched the key prefix of X
+                """
+                if pos == n:
+                    # finished constructing a number
+                    if started and diff == 0 and mod == 0:
+                        return 1
+                    return 0
+
+                limit = digits[pos] if tight else 9
+                total = 0
+
+                for d in range(limit + 1):
+                    new_started = started or d > 0
+                    new_diff = diff
+                    if new_started:
+                        if d % 2 == 0:          # even
+                            new_diff -= 1
+                        else:                   # odd
+                            new_diff += 1
+                    # modulo for current state
+                    new_mod = (mod * 10 + d) % k
+                    new_tight = tight and (d == limit)
+
+                    total += dfs(pos + 1, new_diff, new_mod, new_started, new_tight)
+                return total
+
+            # stop at top of restricted range
+            return dfs(0, 0, 0, False, True)
+
+        return count_up_to(high) - count_up_to(low - 1)
+
+
+# ---------------------------------------------------------------------------
+# small helper allows the online judge to run the main part safely:
+def main() -> None:
+    import sys
+
+    data = sys.stdin.read().strip().split()
+    if not data:
+        return
+    it = iter(data)
+    low = int(next(it))
+    high = int(next(it))
+    k = int(next(it))
+    sol = Solution()
+    ans = sol.numberOfBeautifulIntegers(low, high, k)
+    print(ans)
+
+
+if __name__ == "__main__":
+    threading.Thread(target=main).start()
+```
+
+The program follows exactly the algorithm proven correct above
+and respects the required time and memory limits.

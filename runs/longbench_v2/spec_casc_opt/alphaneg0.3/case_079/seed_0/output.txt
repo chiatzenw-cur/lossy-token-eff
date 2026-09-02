@@ -1,0 +1,60 @@
+<|channel|>analysis<|message|>We need to select the method used by the "StoryMaker" repository to achieve consistency of characters. The repository's code above includes many steps: there's a cropping of the image, using face alignment, crop of face. Then an IP-Adapter FaceID module. Let's analyze the question. (We might refer to the original technical paper for StoryMaker). The question: "Which method this repository uses to achieve this consistency?" They provide four options A-D.
+
+We need to reason which one matches the repository. Let's review the code.
+
+In the pipeline code:
+
+- The pipeline class extends StableDiffusionXLPipeline, with new methods for image generation using IP-Adapter and face-id encoder.
+
+- The method crop_image_ grabs crop of the face, does face_mask etc, and uses face_align.norm_crop from Insightface to crop face image. It uses face_info from face detection. It obtains clip_face image by crop, and clip_img of reference image (ref_img). Then passes to CLIPImageProcessor, clip_image, clip_face.
+
+- In _encode_prompt_image_emb, it collects prompts and images: if cloth is present, it uses pinched cloth. It also uses face_info. It uses faceid_plus (defined near the end, last class) to project id + image features: faceid_plus that uses cross-attention: it's basically a custom model combining identity embeddings and clipped features.
+
+- In _encode_prompt_image_emb they compute image embeddings using self.image_proj_model (faceid_plus), which is loaded from ckpt.
+
+- In _encode_prompt_image_emb they do: prompt_image_emb = self.image_proj_model(id_embeds, clip_image_embeds, clip_face_embeds). Then do some transformations and then passes through.
+
+- In _encode_prompt_image_emb: they also do, if do_classifier_free_guidance: neg_emb = self.image_proj_model(torch.zeros_like(id_embeds), torch.zeros_like(clip_image_embeds), torch.zeros_like(clip_face_embeds)).
+
+- The identity embeddings come from faceid_plus: they call faceid_plus constructor, which sets up projection layers from id_to, face to encoded features.
+
+- So method includes cropping face, feeding identity embeddings and image embeddings into some projection to integrate into the unet as IP-Adapter addition. The FaceID module includes the call to "faceid_plus" which appears to combine identity, clip embeddings, and face embeddings.
+
+- This suggests that it uses identity-based condition, face cropping, etc. It uses IP-Adapter with identity embeddings and image features. Option D: "StoryMaker merges conditional information based on facial identity and cropped character images (including clothing, hairstyles, and bodies). Specifically, we utilize a Position-Aware Perceiver Resampler (PPR) to integrate facial identity information with cropped character images, enabling the acquisition of diverse character features." That sounds close to this repository. There's a component called FacePerceiverResampler? Actually in the heavy code, we see a FacePerceiverResampler class after many definitions. Indeed, there is a class FacePerceiverResampler near the end. It projects to handle face features and combine with Perceiver encoder.
+
+But the actual pipeline uses faceid_plus. Let's compare.
+
+There is a class faceid_plus at the end. It uses self.proj, self.resample, etc. It also appears to use FacePerceiverResampler? Actually in the faceid_plus class, it uses:
+
+```
+self.proj = torch.nn.Sequential(
+          torch.nn.Linear(id_embeddings_dim, id_embeddings_dim*2),
+          torch.nn.GELU(),
+          torch.nn.Linear(id_embeddings_dim*2, cross_attention_dim*4),
+)
+self.norm = torch.nn.LayerNorm(cross_attention_dim)
+self.pos_embed = torch.nn.Parameter(torch.zeros(3, 4+16, cross_attention_dim))  #  maxperson=3
+self.bg_embed = torch.nn.Parameter(torch.zeros(1, 4+16, cross_attention_dim))  #  one bg embedding
+
+self.proj_out = torch.nn.Linear(cross_attention_dim, cross_attention_dim)
+self.norm_out = torch.nn.LayerNorm(cross_attention_dim)
+self.perceiver_resampler = FacePerceiverResampler(...)
+```
+
+So indeed, faceid_plus uses position aware perceiver resampler inside. But the question: "Which method this repository uses to achieve this consistency?" Option D basically matches. Option A says: "It uses a face recognition method to extract facial features, and uses image recognition model to describe clothing. The use of SDXL model and IP-Adapter enables consistency of characters across different scenes and environments." That might be true as well, but f alignment: cost? The code uses face alignment and a face id model to get embedding. But the method of "face recognition method to extract face features" begs that. But the code uses faceid_plus we see that it uses face identity embeddings plus image embeddings. But option A says "image recognition model to describe clothing." Does the code do that? Does the code break clothing image? There's cloth image in the demo: they pass cloth to the pipeline. In _encode_prompt_image_emb, if cloth is not None: clip_img = self.clip_image_processor(images=cloth.resize((224, 224)), ...) return. It hasn't ambiguous. But what purely for clothing: faceid_plus does face identity. The pipeline also uses face_info and cloth. But the faceid_plus is integrated into the pipeline? The pipeline learns face id and sets IP-Adapter scale. Actually the pipeline extends stable diffusion xxl, loads adapters for ip-id etc. The pipeline uses faceid_plus identity. The faceid_plus is used for IP-Adapter. But to incorporate identity, they also use do_classifier_free_guidance etc. The faceid_plus projects id, clip embedding, face embedding to get output for the IP-Adapter. The pipeline uses these images in the condition.
+
+Option D: "StoryMaker merges conditional information based on facial identity and cropped character images (including clothing, hairstyles, and bodies). Specifically, we utilize a Position-Aware Perceiver Resampler (PPR) to integrate facial identity information with cropped character images, enabling the acquisition of diverse character features." That seems fairly detailed.
+
+Option B: "It utilizes multiple attention mechanisms and has been extended for various scenarios." This is talk about the processors like AttnProcessor, IPAttnProcessor. That's used on the unet layer. But the consistent method? It just modifies the attention processors to incorporate IP-Adapter. But the key is the IP-Adapter integration? The code uses IP-Adapter, yes. But the question is about "consistent character generation". The code does that via face alignment and identity embeddings + face_id model. Option D specifically mentions Position-Aware Perceiver Resampler.
+
+Option A: "face recognition method to extract facial features of characters, followed by an image recognition model to describe the clothing. Use SDXL and IP-Adapter enables consistency." That also describes the use of face recognition and application of IP-Adapter. But the code uses faceid_plus, which uses face embeddings from face detection. The difference: Option A says "image recognition model to describe clothing" - in the pipeline, there's a "cloth" argument that passes a clothing patch. That can be used to embed clothing. The pipeline uses face_info and cloth. There is no explicit "image recognition model to describe clothing". But presumably the faceid_plus uses the identity embeddings from face detection. But the clothing feature is just given as an image. But the architecture should take the clothing into account. But the main described mechanism is the use of IP-Adapter, which passes additional embeddings to cross-attention. And the pipeline extrinsics might be face and cloth. The paper says that StoryMaker uses the IP-Adapter with identity embeddings, and uses PPR for identity. Option D likely matches. Let's check more details.
+
+The code includes the "faceid_plus" function defined near the bottom: they use Proj model. It uses a "FacePerceiverResampler" to merge the identity embedding and face embeddings. This is the core of the consistent identity. Option D mentions "Position-Aware Perceiver Resampler (PPR)". That is exactly the FacePerceiverResampler. And it's recommended for story generation. So likely D.
+
+Option B says "It utilizes multiple attention mechanisms... IP-Adapter is an enhanced model that integrates image features with textual prompts." That is also correct, but the question likely asks: "Which method this repository uses to achieve consistency?" It's more about the approach. The paper and repository uses IP-Adapter with face ID, and uses a Position-Aware Perceiver Resampler. So D.
+
+Given the repository code and the description of the structure (faceid_plus, FacePerceiverResampler), Option D matches. So answer: D.
+
+Thus respond with $\boxed{D}$.
+
+<|end|><|start|>assistant<|channel|>final<|message|>\boxed{D}

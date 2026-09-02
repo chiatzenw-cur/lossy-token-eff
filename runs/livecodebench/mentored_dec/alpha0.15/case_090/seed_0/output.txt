@@ -1,0 +1,310 @@
+<|channel|>analysis<|message|>We need to count integers in [low, high] whose number of even digits equals number of odd digits, and divisible by k. Range up to 1e9 (~10 digits). k <= 20.
+
+Brute force iterate from low to high impossible.
+
+We need to use digit DP counting numbers <= high satisfying conditions, then subtract numbers <= low-1 to get in range.
+
+Digit DP: state includes position, tight, count difference? We need count even digits equal odd digits. Equivalent to difference = even_count - odd_count. final difference zero. Represent difference offset by length. Max digits 10 -> difference can range [-10,10]. So we keep shift 10.
+
+Also need modulo k remainder to ensure divisible by k. So remainder modulo k.
+
+DP[pos][diff][rem][tight?] We'll implement recursion with caching.
+
+Digits array of number. We iterate positions from most significant to least.
+
+We have to consider that numbers may have leading zeros. Leading zeros shouldn't count as digits. E.g., number 5: digits '5'. When counting digits, leading zeros should not count. So we can track a flag 'started' indicating if we have started a non-zero digit. For leading zeros, we don't count even/odd digits. For number zero? but low>0.
+
+Thus state: pos, diff, rem, tight, started. When not started yet, diff remains 0, rem remains 0? For leading zeros, the number is 0; but remainder stays 0. When we pick a zero digit while not started, we skip counting. When we pick a non-zero digit, started becomes true; we update diff, rem accordingly.
+
+Edge case: number 0 not in range because low>0. So no worry.
+
+DP recursion: if pos==len(digits): if started and diff==0 and rem==0 return 1 else 0. Wait also possible started false i.e., number 0; we don't count; so return 0.
+
+But handle case where number zero is not valid as per constraints; so condition for valid: started==True and diff==0 and rem==0. Also rem must be modulo k; initial rem 0.
+
+Now transitions: upper = digits[pos] if tight else 9. For d in 0..upper: next_tight = tight and d==upper. next_started = started or d!=0. next_diff = diff; next_rem = rem; if next_started: we update diff and rem using digit parity. For d=0 if started or d!=0? Wait zero can be counted as even digit if started. So if next_started: we process digit d normally. Even if d==0, it's even digit. So implement: if not started and d==0: not started remains false, diff and rem unchanged. else started becomes true: diff += (d%2==0) - (d%2==1); remainder rem = (rem*10 + d)%k.
+
+Ok.
+
+Complexity: positions up to 10, diff range ~21, rem up to 20, tight 2, started 2 => around 10*21*20*2*2 ~ 16800 states.
+
+Good.
+
+Edge: high up to 1e9 => 10 digits length 10? Actually 1e9 is 10^9, 10 digits? 1,000,000,000 has 10 digits. good.
+
+Compute solve(limit). Write helper digits = list(map(int, str(limit))) length n.
+
+Implement recursive with lru_cache. Use positional index.
+
+Return count.
+
+Finally answer = count(high) - count(low-1). Ensure low-1 >= 0. if low==0? but constraints low>=1.
+
+All good.
+
+Examples: verify.
+
+Return integer.
+
+Let's produce final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every integer `x` we have to decide
+
+* does the number of even digits equal the number of odd digits ?
+* is `x` divisible by `k` ?
+
+The range `[low , high]` can contain up to `10^9` numbers, so a brute force
+scan is impossible.
+We use a **digit DP** that counts all integers `x ≤ bound`
+which satisfy the two properties.
+The answer for the requested interval is
+
+```
+count(high) – count(low – 1)
+```
+
+--------------------------------------------------------------------
+
+#### 1.   States of the DP
+
+While we scan the decimal representation of the bound from the most
+significant digit to the least significant one we keep the following
+information.
+
+| name      | meaning                                                                 |
+|-----------|-------------------------------------------------------------------------|
+| `pos`     | current index in the digit array                                   |
+| `diff`    | `even_count – odd_count` for the already processed digits          |
+| `rem`     | current remainder modulo `k` of the formed prefix                  |
+| `tight`   | `True`  – the already chosen prefix is exactly the same as the bound,
+  otherwise `False` (prefix already smaller)                              |
+| `started` | `True` – we have already placed a non‑zero digit (the number has
+  started), otherwise `False` (we are still in leading zeros)         |
+
+`diff` can change only by `±1` per digit, the length of the number is at
+most 10, therefore  
+`diff ∈ [ –10 , 10 ]` – we shift it by `10` when storing in the DP table.
+
+`rem` is always `0 … k‑1` ( `k ≤ 20` ).
+
+--------------------------------------------------------------------
+
+#### 2.   Transition
+
+For the current position we may choose a digit `d`
+between `0` and `upper` where  
+
+```
+upper = bound[pos]          if tight
+upper = 9                    otherwise
+```
+
+`next_tight = tight and (d == upper)`
+
+`next_started = started or (d != 0)`
+
+If `next_started` is *False* nothing changes – we are still forming the
+leading zeroes.  
+Otherwise the chosen digit counts:
+
+```
+if d is even:   diff += 1
+else:           diff -= 1
+
+rem = (rem * 10 + d) % k
+```
+
+--------------------------------------------------------------------
+
+#### 3.   Base case
+
+When all positions are processed (`pos == n`)
+
+```
+if started and diff == 0 and rem == 0:
+        return 1          # a beautiful integer found
+else:
+        return 0
+```
+
+The number `0` never contributes because the constraint  
+`low > 0` guarantees that the interval never contains `0`.
+
+--------------------------------------------------------------------
+
+#### 4.   Complexity
+
+Number of states  
+
+```
+positions : 10
+diff      : ~21
+rem       :  k ≤ 20
+tight     : 2
+started   : 2
+```
+
+≈ 10 × 21 × 20 × 2 × 2  ≈ 17 000 states – negligible.
+
+Each state is processed in a small loop over at most 10 digits.
+Time complexity: **O(number of states × 10)**  
+Memory consumption: **O(number of states)**.
+
+--------------------------------------------------------------------
+
+#### 5.   Correctness Proof  
+
+We prove that the algorithm returns the number of beautiful integers in
+`[low, high]`.
+
+---
+
+##### Lemma 1  
+For any bound `B`, the DP function `f(pos, diff, rem, tight, started)`
+returns the number of integers `x` such that
+
+* the prefix processed up to position `pos`
+  is equal to the first `pos` digits of `B` if `tight == True`,
+  otherwise is strictly smaller,
+* the already processed part of `x` has the digit difference `diff`,
+  remainder `rem` modulo `k`,
+* `started` indicates whether any non‑zero digit has been placed already,
+* the suffix appended freely (digits arbitrarily chosen) yields a number
+  that satisfies the two required conditions.
+
+**Proof.**
+
+By induction over `pos`.
+
+*Base (`pos == n`).*  
+All digits have been processed.  
+If `started` is true, `diff == 0`, and `rem == 0`, the composed number
+has equal numbers of even and odd digits and is divisible by `k` – exactly
+one beautiful integer.  
+Otherwise no integer satisfies all conditions, hence return 0.
+Thus the statement holds.
+
+*Induction step.*  
+Assume the statement holds for position `pos+1`.  
+At position `pos` we iterate over all allowed digits `d`.  
+For each digit we compute the next state `(pos+1, diff', rem', tight', started')`
+according to the transition rules.  
+By induction hypothesis, `f(pos+1, …)` already counts all completions
+that satisfy the conditions when the prefix is extended with `d`.  
+The sum over all valid `d` therefore counts *exactly* all integers that
+extend the current prefix and satisfy the conditions. ∎
+
+
+
+##### Lemma 2  
+`count(bound)`, defined as `f(0, 0, 0, True, False)`, equals the number of
+beautiful integers in `[1, bound]`.
+
+**Proof.**
+
+All integers `x` in `[1, bound]` are represented by a digit string of
+length at most `len(bound)` without leading zeros.  
+During the DP, `tight = True` initially, and available digits are
+exactly constrained to not exceed `bound`.  
+The flag `started` guarantees that leading zeros are ignored, so the DP
+consider only numbers with no leading zeros.  
+By Lemma&nbsp;1 the DP counts precisely the numbers that satisfy both
+conditions.  
+Vectors with value `0` are excluded because their remainder would be
+`0` but `started` would be `False`.  
+Hence `count(bound)` counts the desired integers. ∎
+
+
+
+##### Lemma 3  
+For any `low` and `high` (`1 ≤ low ≤ high`),
+
+```
+answer = count(high) – count(low-1)
+```
+
+equals the number of beautiful integers in `[low, high]`.
+
+**Proof.**
+
+`count(high)` counts all beautiful numbers `x ≤ high`.  
+`count(low-1)` counts all beautiful numbers `x ≤ low-1`.  
+Their difference therefore counts all beautiful numbers `x` such that
+
+```
+low ≤ x ≤ high .
+```
+
+∎
+
+
+
+##### Theorem  
+The algorithm `numberOfBeautifulIntegers` returns the exact number of
+beautiful integers in `[low, high]`.
+
+**Proof.**
+
+The algorithm implements `count(bound)` via the DP described above,
+computes `count(high)` and `count(low-1)`, and outputs their difference.  
+By Lemma&nbsp;2 each `count` is correct, and by Lemma&nbsp;3 the
+difference gives the desired quantity. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.   Reference Implementation  (Python 3)
+
+```python
+import sys
+import threading
+def solve() -> None:
+    import sys
+    sys.setrecursionlimit(1 << 25)
+    class Solution:
+        def numberOfBeautifulIntegers(self, low: int, high: int, k: int) -> int:
+            def count(bound: int) -> int:
+                digits = list(map(int, str(bound)))
+                n = len(digits)
+
+                from functools import lru_cache
+
+                @lru_cache(maxsize=None)
+                def dp(pos: int, diff: int, rem: int, tight: bool, started: bool) -> int:
+                    if pos == n:
+                        return int(started and diff == 0 and rem == 0)
+                    upper = digits[pos] if tight else 9
+                    total = 0
+                    for d in range(upper + 1):
+                        ntight = tight and (d == upper)
+                        nstarted = started or (d != 0)
+                        ndiff = diff
+                        nrem = rem
+                        if nstarted:
+                            # count parity
+                            if d % 2 == 0:
+                                ndiff += 1
+                            else:
+                                ndiff -= 1
+                            nrem = (nrem * 10 + d) % k
+                        total += dp(pos + 1, ndiff, nrem, ntight, nstarted)
+                    return total
+
+                return dp(0, 0, 0, True, False)
+
+            return count(high) - count(low - 1)
+
+    # read input
+    data = sys.stdin.read().strip().split()
+    if not data:
+        return
+    low, high, k = map(int, data)
+    sol = Solution()
+    print(sol.numberOfBeautifulIntegers(low, high, k))
+
+threading.Thread(target=solve).start()
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required function signature.

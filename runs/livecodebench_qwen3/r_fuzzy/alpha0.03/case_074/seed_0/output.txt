@@ -1,0 +1,777 @@
+<think>
+Okay, I need to find the total number of continuous subarrays in a given array where for every pair of elements in the subarray, the absolute difference is at most 2. Hmm. Let me think about how to approach this.
+
+First, the problem says that a subarray is continuous if for all pairs in it, the absolute difference is between 0 and 2. So, for any subarray, the maximum and minimum elements must differ by at most 2. Because if the max and min differ by more than 2, then there's at least one pair (the max and min) that violates the condition. Conversely, if the max and min differ by <=2, then all pairs in the subarray will satisfy the condition. So the problem reduces to finding all subarrays where max - min <= 2.
+
+So the problem becomes similar to finding the number of subarrays where the max and min differ by at most 2. Now, how do I efficiently compute this for large arrays, given that the constraints say nums can be up to 1e5 elements long?
+
+A brute-force approach would check every possible subarray, compute max and min, and count if the difference is <=2. But for an array of size n, there are O(n^2) subarrays, which would be way too slow for n=1e5. So brute force is not feasible here.
+
+So I need a more efficient approach. Let me think about sliding window techniques. But sliding window usually works for problems where the condition is monotonic. However, here the condition is that the max and min of the window differ by <=2. Maintaining max and min in a sliding window is tricky. How can I track these efficiently?
+
+Another thought: for each right index, find the smallest left index such that the subarray from left to right is valid (max - min <=2). Then, for each right, the number of valid subarrays ending at right is (right - left +1). Summing this over all right gives the total count.
+
+But how do I find that left index efficiently? Because for each new element added to the window (as we expand right), we need to adjust the left to ensure that the max and min in the window are within 2. However, maintaining max and min in a sliding window is not straightforward. 
+
+Possible data structures to track max and min in a window: maybe using two deques, one for max and one for min. Let me think. For example, when adding a new element to the window, we can maintain a deque for max that keeps track of the elements in the window in decreasing order. Similarly for min. Then, for each window, the front of the max deque is the current max, and the front of the min deque is the current min. 
+
+But how to adjust the left pointer when the condition is violated? For example, when adding nums[right], if the current window's max - min exceeds 2, we need to move the left pointer forward until the condition is satisfied again. However, the problem is that when moving left, we might need to remove elements from the deques. 
+
+Let me think about how to manage this. For example, let's say we have a window [left, right], and when adding nums[right], the current max and min are such that max - min >2. Then, we need to increment left until the condition is met again. But how to track the max and min as left moves?
+
+Alternatively, perhaps we need to use a data structure that allows us to keep track of the current max and min in O(1) time, and can efficiently remove elements as the window moves. The deques approach can work here. Let me outline the approach:
+
+We can use a sliding window where for each right, we keep expanding the window as much as possible. The window is [left, right]. For each new right, we add nums[right] to the deques. Then, while the current max - min exceeds 2, we need to increment left and remove elements from the deques if they are outside the window. 
+
+Wait, but how do we manage the deques when elements are removed from the left? For example, if the left pointer moves forward, and the element that was at left was the current max or min, we need to remove it from the deque. 
+
+So here's the plan:
+
+Initialize left=0. For each right in 0 to n-1:
+
+- Add nums[right] to the deques (max_deque and min_deque). The max_deque maintains elements in decreasing order, and the min_deque maintains elements in increasing order. So when adding a new element, we remove all elements in the max_deque that are smaller than the new element (since they can't be the max anymore once the new element is added). Similarly for min_deque.
+
+- Then, while the current max (max_deque[0]) minus current min (min_deque[0]) is greater than 2, we need to move left forward. For each step, we check if the element at left is the current max or min. If it is, we remove it from the deque. Then, increment left.
+
+- Once the window is valid, the number of valid subarrays ending at right is right - left +1. Summing this for all right gives the total count.
+
+Wait, this approach may work. Let me think through an example.
+
+Take the first example: [5,4정,2,4]. Let's walk through it.
+
+Initially, left=0. For right=0 (value 5):
+
+max_deque is [5], min_deque is [5]. max - min is 0 <=2. So add 1 (right-left+1=1) to the total.
+
+For right=1 (value4):
+
+Add 4 to deques. max_deque is [5,4] (since 5>4, so 5 is first, then 4). min_deque is [4,5]? No, wait. Wait, for min_deque, when adding new elements, we remove all the elements in the deque that are greater than the new element. So for min_deque, when adding 4, since the deque was [5], we remove 5 (since 5>4), then add 4. So min_deque becomes [4]. So the current max is 5, min is4 audiences, difference is 1. So valid. So add 2 (right-left+1=2) to the total. Total so far is 1+2=3.
+
+For right=2 (value2):
+
+Add 2 to deques. For max_deque, since 2 is less than 5 and 4, we add it to the end. So max_deque is [5,4,2]. min_deque: current elements are [4], and adding 2. Since 2 is less than 4, remove 4 and add 2. So min_deque becomes [2]. Now current max is 5, current min is 2. Difference is 3>2. So we need to move left forward.
+
+So while max - min >2:
+
+Check the current max and min. Since 5-5=0? Wait, no. Wait the max is 5 and min is 2. So 5-2=3>2. So we need to move left forward. 
+
+At this condition, we need to check if the element at left (which is 0, value 5) is the current max or current min. The current max is 5, which is at left. So we remove it from the max deque. Then left becomes 1. Now, the max deque is [4,2]. The max is 4. The min deque is [2]. So max - min is 2, which is allowed. So now, the window is from left=1 to right=2. So the number of valid subarrays ending at right=2 is 2 (right-left+1=2). So add 2 to the total (total becomes 3+2=5).
+
+Wait, for right=2, the valid subarrays are [4,2], [2]. But in the example, the valid subarrays of size 2 are [4,2], and the size 3 subarray [4,2,4] is valid. Wait, but in the step right=2, the current window is [4,2]. So adding that gives 3? Or no?
+
+Wait for right=2, after moving left to 1, the window is [1..2]. So the subarrays ending at right=2 are [4,2], [2]. So two subarrays. So adding 2 to the total. So total so far is 1 (from right=0) + 2 (right=1) + 2 (right=2) = 5.
+
+Then for right=3 (value4). Now, add this to the deques. For the max_deque, current elements are [4,2]. Adding 4: remove elements from the end that are less than 4. So 2 is less than 4, so remove it. Then 4 is added. So max_deque becomes [4,4]. For the min_deque, the current elements are [2]. Adding 4, since it's larger than 2, we add it to the end. So min_deque is [2,4]. Now, the max is 4, the min is 2. Difference is 2, which is allowed. So the window is from left=1 to right=3. So the number of subarrays ending at right=3 is 3 (right-left+1=3). So adding 3 to the total, total now 5+3=8. Which matches the example. So that seems to work.
+
+So the approach seems to work. Now, how to implement the deques. Let me think.
+
+For the max deque, we want to maintain elements in decreasing order. So when adding a new element, we remove all elements from the end of the deque that are less than the new element to ensure that the deque remains in decreasing order. Similarly for the min deque, we remove elements from the end that are greater than the new element. This way, the front of the deque is the maximum (for max deque) and the minimum (for min deque) of the current window.
+
+But when the left pointer moves, we need to check if the element being removed is the front of the deque. For example, when left is 0, and we remove nums[0], if that element was the front of the max deque, we pop it from the deque. Similarly for the min deque.
+
+So during the process, for each right, we process the elements and adjust the deques. Then, while the current max - min exceeds 2, we increment left, and check if the element at left is the front of either deque. If so, we remove it from the deque.
+
+So the algorithm would be:
+
+Initialize left=0, total=0.
+
+For each right in 0 to len(nums)-1:
+
+   while max_deque and nums[right] > max_deque[-1]:
+       remove from max_deque
+   add nums[right] to max_deque
+
+   while min_deque and nums[right] < min_deque[-1]:
+       remove from min_deque cities
+   add nums[right] to min_deque
+
+   while (max_deque[0] - min_deque[0] > 2):
+       if nums[left] == max_deque[0]:
+           remove from max_deque
+       if nums[left] == min_deque[0]:
+           remove from min_deque
+       left += 1
+
+   total += (right - left +1)
+
+Wait, but how to handle when the current window's max and min are not the front of the deques? Because the deques track the max and min in the current window. So for example, when we add nums[right], the deques are updated. Then, during the while loop, we check if the max (front of max deque) minus min (front of min deque) is >2. If so, then we need to temporarily move left forward. But the problem is that when we move left forward, we have to check if the element being removed is the front of the deques. Because if it is, then the front of the deque is no longer valid for a window that starts at left+1.
+
+But how do we know if the element being removed (nums[left]) is the current max or min? Because if the window is [left, right], and if the element at left is the current one being removed (as we increment left), then we need to check if it's the front in either deque.
+
+So during the while loop, after adding the current element to the de queues, we check the max and min. If their difference is >2, then we have to move left forward. For each left increment, we check if the element at left (before incrementing) is the front of the max or min deque. If yes, we pop it from the deque.
+
+But how do we handle that? Because when you increment left, you're removing nums[left] from the window. So the deques need to remove the element if they are at the front.
+
+Wait, the deques contain elements in the window. For example, max_deque holds elements in the current window, but only in such a way that they are in decreasing order. So any element in the deque is part of the current window. So for example, if the current window is [left, right], then the elements in the max_deque are the elements in the window, ordered so that the front is the maximum each time.
+
+So when we remove nums[left] from the window (because left increments), we need to check if nums[left] is the front of the max or min deque.
+
+So in code, for each step:
+
+Once we have updated the deques for the new right, we check if the current max and min (front of deques) difference exceeds 2. If yes,
+
+We need to move left forward. For each step of moving left, we check if the element at left (before incrementing) is the front of the max or min deque. If yes, we remove it from the deque. Then left is incremented.
+
+So the code for that part would be:
+
+while (current_max - current_min > 2):
+
+   if nums[left] == current tale:
+
+       remove from_files
+
+   if nums[left] == current_min:
+
+       remove from min deque
+
+   left +=1
+
+But how to check if nums[left] is the current max or min. Because the current max is deque[0], and current min is deque[0] of the min deque.
+
+Wait, but the current max and min are the front of the deques.
+
+So, for example, when the window is [left, right], the max is max_deque[0], min is min_deque[0]. So during the while loop, the difference is >2. So we need to move left forward. So, the element nums[left] is being removed from the window. So if that element is equal to max_deque[0], then we need to remove it from the max_deque. Similarly for min_deque.
+
+But wait, how can the element being removed (nums[left]) be the same as the front of the deque? Because the front of the deque is the maximum in the window. So if the element being removed is the maximum, then after removing it, the new maximum is the next element in the deque. So that's correct.
+
+So in code, during the while loop:
+
+Once we have added nums[right], we check if the current max and min difference exceeds 2. If so, we need to move left forward.
+
+But during this step, the element at left (before incrementing) could be the current max or min.
+
+So in code:
+
+current_max = max_deque[0]
+
+current_min = min_deque[0]
+
+while current_max - current_min > 2:
+
+   if nums[left] == current_max:
+
+       max_deque.popleft()
+
+   if nums[left] == current_min:
+
+       min_deque.popleft()
+
+   left +=1
+
+   # after moving left, we need update current_max and current_min
+
+   current_max = max_deque[0] if max_deque else ... ?
+
+Wait, but after moving left, the window is [left, right]. So after moving left, the max_deque and min_deque should have the elements in the current window. So, after removing the nums[left] (if it was in the front of deque), the new front is the new current max or min.
+
+But in the code, the loop is:
+
+after adding nums[right], check while current_max - current_min > 2:
+
+   process removing nums[left] from the deques (if needed), then increment left.
+
+So for example, when the window is [left, right], and we find that the max and min differ by more than 2, then we need to move left forward. But when moving left, the element being removed (nums[left]) could be the current max or min.
+
+Wait, but the current max and min are the deque's front. So, for example, if the current max like 5 is at index left, then when we remove that element from the window, it's removed from the deques. So, in code, during the while loop, for each iteration, we check if the element at left is the current max or min. If yes, then we remove it. Then increment left. Then, check again the current max and min (since after removing, the deques may have new elements at front).
+
+But how do we get the current max and min after each removal?
+
+We can't just check once. So perhaps the loop should be:
+
+Once the new element is added to the deques, we check the max and min of the current window. Then, while the difference is more than 2, we need to move left forward. So during the loop:
+
+while max_deque[0] - min_deque[0] > 2:
+
+   if nums[left] is the current max (i.e., equals max_deque[0]):
+
+       remove from max deque
+
+   if nums[left] is the current min (i.e., equals min_deque[0]):
+
+       remove from min deque
+
+   left +=1
+
+But after removing, the max_deque and min_deque will have the next elements. So this loop continues until the max and min of the current window are within 2.
+
+But how do we handle that the element at left is not the current max or min?
+
+For example, suppose the current window is [4, 2, 4], and the max is 4 and min is 2. So the difference is 2, which is allowed. So no need to move left.
+
+But if the window is [5,4,2,4] (the original example), then when right=3 (value 4), the window is from left=0 to 3. Then, the max is 5, min is 2. Difference is 3, which is more than 2. So the loop starts.
+
+We check if nums[left] (which is 5) is equal to the current max (5) and min (2). So the current max is 5, which would be in the max deque. So we pop from the max deque. Now, the max deque would have [4,4], and the current max is 4. Then left is incremented to 1. Now, the current max (4) and min (2) difference is 2, allowed. So the loop ends.
+
+So the code would correctly adjust the deques.
+
+Therefore, the sliding window approach can be implemented with two deques, and for each right, we process and adjust the window.
+
+Now, the key point is to manage the deques correctly. Also, note that the deques may have elements that are not in the current window, but this is handled by checking during the left increment steps.
+
+Wait, but when we add elements to the deques, they are added to max_deque and min_deque. However, during the sliding window process, the deques may contain elements that are no longer in the window. For example, if the window is moving left, and the deque's front element is no longer in the window. But that's handled because when we increment left, we check if the element being removed is the front of the deque. If yes, we remove it. So the deques only contain elements in of the current window.
+
+Wait, but inavalid case, say the window is [a, b, c, d], and the max deque is [a, c, d], but then we move left forward to remove a. So we check if a is the front of the deque, and if yes, we remove it. Then the new front is c, which is the current max. So the deques always track the max and min for the current window.
+
+Therefore the approach should work.
+
+Now, how to implement this in Python. We can use collections.deque for the deques. For each right, we process as follows.
+
+But let's think about the steps for each right:
+
+Initialize left =0, total=0.
+
+max_deque = deque()
+
+min_deque = deque()
+
+for right in range(len(nums)):
+
+   while max_deque and nums[right] > max_deque[-1]:
+
+       max_deque.pop()
+
+   max_deque.append(nums[right])
+
+   while min_deque and nums[right] < min_deque[-1]:
+
+       min_deque.pop()
+
+   min_deque.append(nums[right])
+
+   while max_deque[0] - min_deque[0] > 2:
+
+       if nums[left] == max_deque[0]:
+
+           max_deque.popleft()
+
+       if nums[left] == min_deque[0]:
+
+           min_deque.popleft()
+
+       left +=1
+
+   total += right - left +1
+
+But wait, there's a problem here. The elements in the deque are the actual list elements, not the indices. So for example, when the window moves left, the nums[left] may not be the same as the deque's front. Wait, no. Because the deque holds elements of the current window, and when we increment left, the nums[left] is the element being removed. So if the max_deque[0] is the maximum element in the current window. If the left element is that max, then when we remove it from the window, we need to remove it from the deque.
+
+But how can we check if nums[left] is equal to max_deque[0]?
+
+Because the deque holds the elements in the window, but the same value could appear multiple times. For example, if the window has two 4s, then max_deque may have two 4s. So when the left is pointing to one of them, how do we know whether to remove it from deque?
+
+Wait, but the deque is not tracking indices. So, for example, suppose the deque has [5,4,4], and the current window is [left, right]. Suppose the element at left is 5. When we increment left, we remove that 5 from the deque, but if there are other 5s in the deque, they are still there. However, that is incorrect. Because the deque should contain only elements in the current window. So if the left pointer moves past an element, but that element is present in the deque, then the deque is not tracking the current window correctly.
+
+Ah, here's a problem. Because the deques contain elements, not indices. So when we remove elements from the deque, we can't just check if nums[left] is equal to the deque's front. Because there could be multiple same elements. For example, suppose the deque has [5,4,4], and the current window includes two 4s. But if the left pointer is moving past the first 5, then the deque's front (5) is removed. But if the deque has multiple copies, like [5,5,4], then when left is at index 0 (the first 5), we check if nums[left] is equal to deque[0], which it is. Then we pop it. But what if the deque has multiple elements with the same value?
+
+But how can this happen? Let me think. Let's say the deque is built as follows. When adding elements to the deque, we remove elements from the end that are smaller (for max deque) than the new element. So for example, if the current window has elements [5,5], then the max deque would have [5,5], because when adding the second 5, the previous elements are not removed. So during the processing, when the left moves forward, if the element being removed is the first 5, and the deque has multiple 5s, then the deque's front is still the max. But when we remove the first 5, the next one (another 5) is still the max. So the code would correctly remove the deque's front (since nums[left] is equal to deque[0]). However, if the deque has multiple elements, but the element being removed is not the front, then the code would not remove it. Which is correct because those elements are still in the window.
+
+Wait, no. For example, the window is [5,5,4]. The max deque would be [5,5]. When the left is at 0 (element 5), and we remove it from the window, we need to check if that element is the front of the deque. Which it is. So we remove it, and the deque becomes [5]. Which is correct. Then, when left increments to 1, the current window is [5,4]. The deque's front is 5, which is the max. The min deque is maintaining the min of the window, which for this example, would be [4,5] if the min deque was built properly? Or maybe I need to re-examine the process.
+
+Wait, let's take an example. For nums = [5,5,4].
+
+Processing right=0 (5):
+
+max_deque is [5], min_deque is [5]. 
+
+Processing right=1 (5):
+
+max_deque: since 5 is not less than the last element (5), we add it. So max_deque is [5,5].
+
+min_deque: same as for max. So min_deque is [5,5].
+
+Now the window is [0,1], max - min is 0. 
+
+Processing right=2 (4):
+
+For max_deque, we check if 4 is larger than last element (5). No, so add to deque. max_deque becomes [5,5,4].
+
+For min_deque: 4 is less than last element (5), so we remove 5, then again 5, and add 4. So min_deque is [4].
+
+So now, current max is 5 (front of max deque), current min is 4. Difference is 1, allowed. So the window is [0,2]. So the number of subarrays ending at right=2 is 3.
+
+But now, if we have a window where the left pointer is 0, and we need to remove elements. Let's say if during some step, the max - min is more than 2. For example, suppose the window is [5,5,4], and the current max is 5, min is 4. Now, say the difference is 1, which is allowed. 
+
+But if the window had elements [5,5,6], then the max - min would be 1. But if the window is [5, 4, 6], the max is 6 and min is 4. Difference is 2, allowed.
+
+But if the window is [5, 4, and then another element 3], then the min is 3 and max is 5. Difference is 2. 
+
+But suppose the window is [5, 4, 7]. Then max is 7, min is 4. Difference is 3>2. So we need to move left forward. 
+
+Now, the left pointer is 0. nums[left] is 5. So check if 5 equals the current Books front (7?) No. Wait, the max deque would have [7, ...], because when adding 7, we would pop all elements less than 7. Let me re-examine the process.
+
+Let me take nums = [5, 4, 7]. 
+
+For right=0: max_deque is [5], min_deque [5].
+
+right=1: nums[right] =4. 
+
+For max_deque: 4 <5, so add to deque. max_deque is [5,4]. 
+
+For min_deque: 4 <5, so pop 5, add 4. min_deque is [4]. 
+
+Now, max is 5, min is 4. difference 1 <=2.
+
+right=2: nums[right] is7.
+
+For max_deque: while 7>4, pop 4. then remaining [5]. 7>5, pop 5. add 7. max_deque becomes [7]. 
+
+For min_deque: 7 is larger than 4, so just add to deque. min_deque is [4,7]. 
+
+Current max is7, min is4. difference 3>2. So enter the while loop.
+
+Check if nums[left] (left=0, which is 5) is equal to current max (9? No. Wait, the current max is 7 (max_deque[0] is7), current min is 4 (min_deque[0] is4). So the difference is 3. 
+
+So since nums[left] is 5, which is not equal to the current max (7) or current min (4), so we do nothing. Then left is incremented to 1. Now, the window is from left=1 to right=2. Now, check again the max and min. 
+
+The max deque is [7], and the min deque is [4,7]. So current max is7, min is4. Still difference is3>2. So again, enter the loop.
+
+Check if nums[left] (left=1, value4) is equal to current max (7) or min (4). 
+
+Yes, it's equal to min (4). So we remove it from min_deque. min_deque becomes [7]. Now, current max is7, current min is7. difference 0. So loop ends.
+
+So after incrementing left to 1 and removing 4 from the min deque, then left is 1. So the window is [1, 2], and the valid subarrays ending here would be 2 (right-left+1=2). 
+
+But how does the code handle this? Because during the while loop, the code checks the current max and min. So during the first iteration of the while loop, after moving left to 1, we check again max and min. 
+
+So in this scenario, the code works correctly.
+
+So but how does the code know to remove the min element? Because when the left is 1, the element is 5 (no, wait the nums array is [5,4,7]. left is 1, nums[left] is 4. Which is the current min (4) in the min deque. So the code checks if nums[left] is equal to the front of the min deque (4), which is yes, so it's removed. Then, the min deque is [7], and the window is left=1 to right=2. The max is 7, min is7. So allowed.
+
+So this seems correct. Therefore, the code will handle cases where the element being removed from the window is the current min or max. 
+
+But the code in the previous approach would do that. 
+
+So in code:
+
+for each right:
+
+   add nums[right] to max_deque and min_deque (reducing from the end as necessary)
+
+   while max_deque[0] - min_deque[0] > 2:
+
+       if nums[left] == max_deque[0], then remove from max_deque
+
+       if nums[left] == min_deque[0], then remove from min_deque
+
+       left +=1
+
+But here's a problem. Suppose the max_deque has multiple elements, and the current max is the first element. But the element at nums[left] is the same as that, but there's another element with same value in the deque. 
+
+For example, suppose the deque is [5,5], and the current window is [5,5]. Then, if we move left forward, and the element being removed is 5 (the one at left=0), then the code would check if nums[left] (5) is equal to max_deque[0] (5), and remove it. Then the max deque becomes [5], which is correct. 
+
+But suppose the window is [5,5], and we have left=0. The code would check if nums[left] is equal to max deque front (5), yes, and remove it. Then the new max deque is [5], which is correct. 
+
+So even if there are multiple elements with the same value, the code works by checking if the current nums[left] matches the front of the deque. 
+
+But what if the element that is removed (nums[left]) is not the front of the deque? For example, the deque is [5,5], and the window is [left=0, left+1=1]. Then, when left moves to 0, nums[left] is 5. The code checks if it's equal to the deque's front (5) and removes it. But the deque's front is the first 5. So after removing, the deque is [5], which is correct.
+
+But suppose the deque is [5,5], and the window is from left=0 to right=2. But the element at left is 5, and the deque has [5,5, ...] (but how? Because when you add elements, the deque is maintained in order).
+
+So the code would correctly check the front of the deque.
+
+So the approach seems valid.
+
+Now, let's code this. But we need to make sure that the deques are maintained properly. 
+
+But in Python, we can use deque from collections.
+
+But wait, what if the deque is empty? Well, during the loop, when we add elements to the deques, so they should never be empty. Because for each right, we add nums[right] to the deques. So for example, for the first element, the deques are non-empty. So during the while loop, when we check the front of the deque, it's safe.
+
+But during the process, when we remove elements from deque, it's possible that after removing, the deque becomes empty. However, that can't happen because the window is valid once the left and right are within the same bounds, and the deaphs are maintained properly.
+
+But in code, we need to handle the case where after removing from the deque, it's possible that the deque is empty? No, because the window is [left, right], and since the code is processing for each right, and adding the element to the deque, the window has at least one element. So the deques can't be empty during the while loop.
+
+So the code can proceed.
+
+Now, testing the first example:
+
+nums = [5,4,2,4]
+
+Let's simulate:
+
+Initialize left=0, total=0, max_deque and min_deque are empty.
+
+For right=0 (5):
+
+Add to max_deque: deque is [5]
+
+Add to min_deque: deque (after adding 5) is [5]
+
+Check difference: 5-5=0. So no loop. total +=0-0+1=1. total=1.
+
+For right=1 (4):
+
+max_deque: compare with 4. Since 4 <5, append. So deque [5,4].
+
+min_deque: compare with 4. 4 <5, so remove 5, append 4. deque [4].
+
+max - min = 5-4=1 <=2. total += (1-0+1)=2. total=3.
+
+For right=2 (2):
+
+max_deque: 2 <4, append. deque [5,4,2].
+
+min_deque: 2 <4, remove 4, append 2. deque [2].
+
+Now, max_deque[0] is 5, min_deque[0] is 2. 5-2=3>2. So enter the loop.
+
+Check nums[left] (left=0, 5) against max_deque[0] (5). They are equal. So remove from max_deque. Now, max_deque is [4,2].
+
+Check nums[left] (5) against min_deque[0] (2). Not equal. So left +=1 → left=1.
+
+Now, check again the max and min: max_deque[0] is4, min_deque[0] is2. 4-2=2. So loop stops.
+
+Add (2-1+1)=2 → total becomes 3+2=5.
+
+For right=3 (4):
+
+Add to max_deque: current elements are [4,2]. The new element is 4. Compare with 2 (last element). 4>2 → pop 2. Then compare with 4. 4 is not >4, so append. deque is [4,4].
+
+Add to min_deque: current elements are [2]. The new element is 4. 4>2, so append. deque is [2,4].
+
+Check difference: 4-2=2 → allowed. Add (3-1+1) =3. total becomes 5+3=8. Correct.
+
+So code works for first example.
+
+Now check the second example: nums = [1,2,3]. Expected output is 6.
+
+Simulate:
+
+left=0, total=0.
+
+right=0 (1):
+
+max_deque [1], min_deque [1]. difference 0. add 1. total=1.
+
+right=1 (2):
+
+max_deque: 2>1 → pop 1, append 2. deque [2].
+
+min_deque: 2>1 → append. deque [1,2]. 
+
+current max is 2, min 1. 2-1=1. allowed. add 2 → total 3.
+
+right=2 (3):
+
+max_deque: 3>2 → pop 2, append 3. deque [3].
+
+min_deque: 3>3 (wait, no. min_deque is [1,2], adding 3. since 3 is larger than 2, we append. deque [1,2,3]. 
+
+max is 3, min is 1 → 3-1=2 → allowed. add 3. total 3+3=6. Which is correct.
+
+Yes. So code works here.
+
+Another test case: nums = [3, 1, 5, 4]. Let's see. What's the valid subarrays?
+
+Let me think. For each possible subarray:
+
+Size 1: 4 → valid.
+
+Size 2: [3,1] → difference 2 (valid). [1,5] → difference 4 (invalid). [5,4] → difference 1 (valid). So 3 valid.
+
+Size 3: [3,1,5] has max 5, min 1 → difference 4 → invalid. [1,5,4] → max 5, min 1 → difference 4 → invalid. So none.
+
+Size 4: same as above, invalid. So total is 4+3=7?
+
+Wait wait, perhaps I need to check all possibilities.
+
+Let me list all valid subarrays:
+
+[3] → valid.
+
+[1] → valid.
+
+[5] → valid.
+
+[4] → valid.
+
+[3,1] → max 3, min 1 → 2 → valid.
+
+[1,5] → 5-1=4>2 → invalid.
+
+[5,4] → 1 → valid.
+
+[3,1] is valid. Wait what about [3,1,5]? No, max 5, min 1 → 4>2. invalid.
+
+[1,5,4] → max 5, min 1 → 4>2.
+
+[3,1,5,4] → same.
+
+But also, what about [3,1,5] → no, and [3,1,5,4] invalid. What about other subarrays:
+
+[3,1,5] invalid. What about [1,5,4] invalid. 
+
+What about [3,1,5,4] is invalid. So for size 2:
+
+[3,1], [1,5] (invalid), [5,4]. So two valid? Or [3,1] and [5,4], but what about [1,5] is invalid. So size 2 has 2 valid subarrays. So total would be 4 (size1) + 2 (size2) + 0 (size3) +0 (size4) =6?
+
+Wait but what about subarray [5,4], and other possible subarrays?
+
+Wait, what about [itis, 1,5,4? No. Let me think again.
+
+Original array is [3, 1, 5,4]. 
+
+Possible subarrays:
+
+Size 1: 4.
+
+Size 1: 4 possible.
+
+Size 2:
+
+[3,1] → ok.
+
+[1,5] → 5-1=4>2: invalid.
+
+[5,4] → 1 → ok.
+
+So two valid.
+
+Size 3:
+
+[3,1,5] → 5-1=4>2 invalid.
+
+[1,5,4] → 5-1=4>2 invalid.
+
+Size 2: also there's [3,1], [1,5], [5,4].
+
+Size 3: no.
+
+What about [3,1,5,4] → invalid.
+
+So size 2 has 2 valid.
+
+Size 3: 0.
+
+Then what about subarrays of size 3 that are valid? For example, [1,5,4]? Max 5, min 1. 4>2. invalid. 
+
+What about [3,1,5] → same.
+
+So total valid subarrays is 4 + 2 = 6? Or what about other subarrays?
+
+Wait, what about subarrays of size 2:
+
+[3,1] (valid), [3,1,5,4] → no. Also, any other subarrays?
+
+Wait, [1,5] is invalid, [5,4] is valid. Also, what about [3,1,5,4] → no. So size 2 has two valid. 
+
+What about subarrays of size 3? Are there any?
+
+What about [5,4, ...]? No. 
+
+So total valid is 4+2=6. But according to the code's calculation. Let's simulate.
+
+Let's process the code steps.
+
+left=0, total=0.
+
+right=0 (3):
+
+max_deque [3], min_deque [3]. difference 0. add 1 → total=1.
+
+right=1 (1):
+
+max_deque: 1 <3 → append → [3,1].
+
+min_deque: 1 <3, remove 3, append 1 → [1].
+
+current max 3, min 1. 3-1=2 → ok. add 2 → total 3.
+
+right=2 (5):
+
+max_deque: 5>1 → pop 1 and 3? Let me recheck the steps:
+
+Add to max_deque: current elements [3,1]. The new element is 5.
+
+Loop while nums[right] > deque[-1]. 
+
+First, deque[-1] is 1. 5>1 → pop. Now deque is [3]. 5>3 → pop. deque is empty. Append 5. So max_deque is [5].
+
+min_deque: current deque is [1]. new element is5. since 5>1 → append. deque [1,5]. 
+
+current max is5, min is1. difference 4>2 → enter while loop.
+
+Check nums[left] (left=0, value 3) against max_deque[0] (5) and min_deque[0] (1). 
+
+nums[left] is 3. So not equal to 5 or 1. So left is incremented to 1.
+
+Now check again max and min: max is 5, min is1 → difference 4. again enter loop again.
+
+Check nums[left=1] (1) against max (5) and min (1). So it is equal to min. So remove from min_deque. min_deque becomes [5]. Now, max is5, min is5. difference 0. loop stops.
+
+total += 2-1+1 = 2 → total=3+2=5.
+
+right=3 (4):
+
+Add to max_deque: current deque is [5]. 4 <5 → append. deque [5,4].
+
+add to min_deque: current deque is [5]. 4<5 → pop 5, append4. deque [4].
+
+current max is5, min is4. 5-4=1 → allowed. add (3-1+1)=3 → total 5+3=8? Wait, but according to the earlier expected analysis, it should be 6. What's wrong here?
+
+Hmm, that's a problem. Because according for the code, the total would be 8 but according to the manual count, it's 6. So there's a mistake.
+
+Let me think again. Let me re-simulate.
+
+Let me go through each step again for nums = [3,1,5,4].
+
+Processing right=0:
+
+left=0, total=1.
+
+right=1 (1):
+
+max deque is [3,1], min deque [1]. max - min is 3-1=2. allowed. add (1-0+1) =2. total is 3.
+
+right=2 (5):
+
+Process adding 5 to max_deque:
+
+current max_deque is [3,1], right=2's value is 5. 
+
+While 5>1 → pop 1 → deque [3]. 5>3 → pop 3 → deque empty. append 5. max deque is [5].
+
+adding to min deque: current deque [1]. 5 is larger than 1 → append. min deque [1,5].
+
+now check max - min → 5-1=4>2 → enter while loop.
+
+current left is 0. nums[left] is 3. Check if equals max (5) or min (1). No. So increment left to 1. Now, check again: max is 5, min is1 → difference 4>2. again enter loop.
+
+nums[left] is nums[1] =1. which equals min_deque[0] (1). So remove from min deque → min deque is [5]. Now, check difference between max(5) and min(5) → 0. loop stops. 
+
+so current window is left=1 (index1) to right=2 (index2). the subarrays ending here are [1,5], and [5]. but according to the code, the count is right-left +1 = 2-1+1 = 2. So total was 3 + 2 =5.
+
+Now for right=3 (4):
+
+Add 4 to max_deque. current max deque is [5]. 4 <5 → append. deque is [5,4].
+
+Add to min deque. current min deque is [5]. 4 <5 → pop 5, append 4 → deque [4].
+
+current max is 5, min is4. difference 1 → allowed. add right-left+1 =3-1+1=3 → total becomes 5+3=8.
+
+But according to manual analysis, the valid subarrays are:
+
+size 1: 4.
+
+size 2 other than [3,1], [5,4], and [3,1,5,4]?
+
+Wait, what's the actual valid subarrays?
+
+Let me list them:
+
+All subarrays of size 1: 4.
+
+Subarrays of size 2:
+
+[3,1] → valid.
+
+[1,5] → invalid (difference 4).
+
+[5,4] → valid (difference 1).
+
+[3,1,5,4] → no, but individual subarrays of size 2:
+
+Wait for right=3, when the window is left=1 to right=3. So the subarrays are [1,5,4] (size3), [5,4] (size2), [4] (size1). 
+
+But according to the code, for right=3, adding 3 (right-left+1 =3). So what is the total for right=3?
+
+The code says that the valid subarrays ending at right=3 are [1,5,4], [5,4], [4]. But what's their validity?
+
+[1,5,4] → max is5, min is1 → difference 4>2 → invalid. So why is the code counting it as valid?
+
+Ah! This is a problem. Because the code is allowing the window from left=1 (value1) to right=3 (value4). The max in this window is 5 (from index2), the min is1 (from index1). So 5-1=4>2. So the code would have entered the while loop again?
+
+But according to the code steps, during the processing of right=3, after adding the element, it checks if the current max - min is <=2. But according to the code, during the processing of right=3, the current max is 5 (from the deque) and current min is4. Because the min deque after adding 4 is [4]?
+
+Wait, during the processing for right=3 (value4):
+
+Adding to min deque: previous min deque was [5] (from previous steps). When adding 4, since 4 is less than 5, we remove 5 from the min deque and append 4. So min deque is [4]. 
+
+But the current window is [left=3, right=3]? No, no. The window is [left=1, right=3]. The elements in the window are [1,5,4]. 
+
+But the min deque for this window should have min 1. How come the code's min deque is [4]?
+
+Ah, there's a mistake in the code logic. Oh no! Because during the processing for right=2, after moving left to 1, the window is [1,5]. Then for right=3, adding 4, the min deque is maintained as follows:
+
+Let me retrace the steps for right=3.
+
+At right=2, after processing, the window is [1,5], left=1. So the min deque is [5] (since during the processing of right=2, the min deque for the window was [5] initially after removing 1. 
+
+Wait, during right=2 processing, after adding 5 to the min_deque, the min_deque was [1,5], but then during the while loop, the code removed the 1 (the min_deque's front was 1, which was nums[left=0] (3?) No, I think I have to re-trace all steps again. Let me re-simulate the entire process.
+
+Let me start again for nums = [3,1,5,4].
+
+Initialize left=0, total=0.
+
+max_deque and min_deque empty.
+
+Processing right=0 (value3):
+
+- Add to max_deque: [3]
+
+- Add to min_deque: [3]
+
+Check max - min: 0. So add 1 → total=1.
+
+Processing right=1 (value1):
+
+- For max_deque: 1 <3 → append → deque [3,1]
+
+- For min_deque: 1 <3 → pop 3, append 1 → deque [1]
+
+Check max - min is 3-1=2 → allowed. Add 2 → total=3.
+
+Processing right=2 (value5):
+
+- Add to max_deque:
+
+   while 5>1 (last element of deque is 1), pop it → deque becomes [3]. Now 5>3 → pop → deque empty. append 5. deque [5]
+
+- Add to min_deque:
+
+   while 5>1 → no. So append 5 → deque [1,5]
+
+Now check max (5) - min (1) =4>2. Enter while loop.
+
+nums[left] is nums[0] =3. 
+
+Check if equals max_deque[0] (5) → no. Check if equals min_deque[0] (1) → no. So increment left to 1.
+
+Now check max and min again. max is 5, min is 1. Still 4>2. Enter loop again.
+
+nums[left] is nums[1] =1. It equals min_deque[0] (1). So remove from min_deque → now min_deque is [5]. Now, check max (5) - min (5) =0 → allowed. So left is now 2. 
+
+So after this processing, the window is from left=2 to right=2. 
+
+Now, code adds right - left +1 =2-2+1=1. So total becomes 3+1=4.
+
+Wait, wait! Because during the processing of right=2, after the loop, the code adds right-left+1 =2 - 1 (left was 1?) Wait, after processing the loop, left is now 2. 
+
+Wait during the processing of right=2, the code starts with left=0, and after the loop, left is 2. So the code adds 2-2 +1 =1 to the total, making it 3 (from previous steps) plus 1 → total is 4?
+
+Wait earlier steps had:
+
+After processing right=1, total is 3. Then during right=3, processing right=2:
+
+Initially, after adding the element and checking the loop, we entered the loop twice. After first increment left to 1, then again, after removing the min_deque, left is incremented to 2. So for right=2, after all processing, the code adds right - left +1 = 2-2+1=1. So total becomes 3+1=4.
+
+Then for right=3 (value4):
+
+Processing:
+
+Add to max_deque: current deque is [5]. new value is4. 4 <5 → append. deque [5,4]. 
+
+Add to min_deque: current deque is [5]. new value4 <5 → pop 5. deque is empty. append 4 → deque [4].
+
+Check max (5) - min (4) =1 <=2 → allowed. So add right-left+1 =3-2+1=2 → total becomes 4+2=6.
+
+Which matches the manual calculation. 
+
+So why did my previous simulation have an error? Because I think I had a mistake in the previous simulation steps. The code for right=2 adds 1 to total, making it 3+1=4. Then for right=3 adds 2 → total 6. 
+
+So the code would correctly calculate 6. So why was I getting 8 before? Because I had made a mistake in the simulation. 
+
+So the code is correct. Therefore, the approach is valid. 
+
+Now, the code's steps for right=2:
+
+After the while loop, left is 2. So the current window is from left=2 to right=2. Which is [5]. Then, adding 1 to the total.

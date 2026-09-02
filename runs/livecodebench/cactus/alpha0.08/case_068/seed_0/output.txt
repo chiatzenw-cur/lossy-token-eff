@@ -1,0 +1,511 @@
+<|channel|>analysis<|message|>We need to design algorithm.
+
+We need for each query [x,y] compute max(nums1[j]+nums2[j]) subject to nums1[j] >= x and nums2[j] >= y. n up to 1e5, queries up to 1e5, values up to 1e9.
+
+Brute force per query is O(n). Need efficient.
+
+Observation: For each j, we have pair (a=nums1[j], b=nums2[j]) with weight s=a+b. We can answer queries with thresholds (x,y). Want max weight over points with a>=x, b>=y. This is like max' over `a<=?`? Actually we look for >=.
+
+We can treat as a 2D query for rectangle [x, INF] × [y, INF]. We could sort by a descending, maintain DS over b-axis position. For each query, we need to process all indices where nums1 >= x. We can offline queries sorted by x descending.
+
+Similarly, we can maintain for each b value, best sum for this b? Wait we need a value for height up to y.
+
+Use a Fenwick tree or segment tree over compressed sorted b ranges that stores best sum for each B that we have processed.
+
+Since we need max over b>=y, we need collapsed to suffix maximum. In Fenwick tree we can store maximum arrays; we can query for suffix maximum using next greater ones. But Fenwick for prefix sums and max-queries can support prefix max. However we need range where b >= y. If we pre-sort b values descending, we can transform by turning index mapping.
+
+Or we can store results in Fenwick tree using coordinate compression. Let's sort queries by x descending. Also sort indices by a descending. For each query with x, we step through all indices with a>=x, updating Fenwick tree for their b with sum (a+b). We'll maintain a Fenwick tree that supports point update of value and query suffix maximum. This is n up to 1e5, number of distinct b values maybe up to n.
+
+Implementation details:
+
+- For Fenwick tree supporting max over prefix; we can get max support over [1..idx] prefix. To get suffix [idx..size], we can have (max over from 1..size) but we can query at position idx after reversing sorted b coordinates. So we can compress b's descending array.
+
+Simpler: If we compress all distinct b values in ascending order; have Fenwick with max prefix. Then to get max over b>=y, we need suffix of sorted by ascending values. That becomes max over [pos(index of y) .. n]. That's not straightforward with prefix query. Could store as number of b sorted ascending and compute suffix as maximum peak over [idx..end], we can query prefix maximum by invert store: get max over [1..size] and [1..idx-1] difference? can't.
+
+Alternative: Use segment tree with range maximum query. Then for query y, we need to query best between index y and end, where index is coordinate compressed. So segment tree: build array of size m, all -inf initially; we can update point: value = max(existing, s). Query(l=pos of y, r=m-1). This gives maximum sum for any b>=y that the processed points have. O(log n) per update/prefix.
+
+Thus algorithm O((n+q) log n). Acceptable.
+
+Let's implement.
+
+Edge Cases: For query: if multiple indices processed, we need to condition on b>=y. But if we process only pairs that satisfy nums1>=x. In updates i, we update each b with sum s. Since we maintain best sum for that b so far among all earlier processed indices. But a later index may have lower a but larger sum but we don't process it because it's not yet a>=x. So our query is correctly AND its a requirement.
+
+Implementation steps:
+
+- Sort indices by nums1 descending: create array sorted list of i's: i1 = sorted(range(n), key=lambda i: nums1[i], reverse=True).
+
+- For queries, store big array of pairs (x, y, idx). Sort descending by x.
+
+- For value updates: use seg array of length m (where m number of unique nums2 values). compress b to array comp = sorted(set(nums2)). For each slice, compute pos.
+
+- Build segment tree with size (m). Let's implement using simple Python list seg with end length m. Provide update(pos, val) that updates tree[pos] to max(current, val) and propagate upwards. Provide query(l,r) inclusive.
+
+Fenwick tree can handle range maximum query? We can create segment tree customizing.
+
+But we should think about size m max of n? yes.
+
+We'll use Standard iterative segment tree.
+
+Define width (size) = 1 << ceil_pow2(m). We can use Node array of size 2*size. After building with -1 sentinel.
+
+Return answers issues: In solution queries: if query returns -inf or something, answer -1.
+
+Implementation details:
+
+- The Total Operations: sort causes O(n log n).
+
+- Use dictionary mapping etc.
+
+Implementation:
+
+Pseudo:
+
+class Solution:
+    def maximumSumQueries(self, nums1, nums2, queries):
+        n = len(nums1)
+        # compress nums2
+        comp = sorted(set(nums2))
+        comp_map = {v:i for i,v in enumerate(comp)}
+        m = len(comp)
+        INF_NEG = -1
+        size=1
+        while size<m: size*=2
+        seg=[INF_NEG]*(2*size)
+
+        def update(idx, val):
+            idx += size
+            if val > seg[idx]:
+                seg[idx] = val
+                idx //=2
+                while idx>=1:
+                    seg[idx] = max(seg[2*idx], seg[2*idx+1])
+                    idx//=2
+            # else: skip
+
+        def query(l,r):
+            l+=size
+            r+=size
+            res=INF_NEG
+            while l<=r:
+                if l%2==1:
+                    res = max(res, seg[l])
+                    l+=1
+                if r%2==0:
+                    res = max(res, seg[r])
+                    r-=1
+                l//=2
+                r//=2
+            return res
+
+        # sort indices by nums1 desc
+        indices = sorted(range(n), key=lambda i: nums1[i], reverse=True)
+
+        # queries
+        qlist = []
+        for idx, (x,y) in enumerate(queries):
+            qlist.append((x,y,idx))
+        qlist.sort(key=lambda x: x[0], reverse=True)
+
+        ans=[-1]*len(queries)
+        cur=0
+        for x,y,qi in qlist:
+            # process all indices with nums1>=x
+            while cur < n and nums1[indices[cur]] >= x:
+                j = indices[cur]
+                b = nums2[j]
+                s = nums1[j] + nums2[j]
+                update(comp_map[b], s)
+                cur+=1
+            # Now answer
+            me=query(comp_map.get(y, None?), but leaf at bit need to find first index of y or greater? We need b>= y. If find first index >= y in comp sorted ascending, we need m>= some mapping. Suppose have 5: [1,3,2,4]. comp sorted ascending. After update, we query on largest index of comp whose value >= y. So we need to find leftmost index such that value >= y. For ascending comp, we can use bisect_left to find first index >= y. Then we query l=pos to m-1. But we can use binary search for that. So we can compute: import bisect; pos=bisect_left(comp, y). If pos==m: cannot satisfy, ans[i] = -1. Else ans[i] = query(pos, m-1). Use res maybe? Let's handle.
+
+Check m: len(comp). So we get pos.
+
+Return ans.
+
+Edge: We need to compute sign after updating. do we set right? Ensure algorithm ensures differences.
+
+Complexities: O((n+q) log n).
+
+Let's test sample.
+
+I'll test mentally.
+
+Implementation details in Python.
+
+Potential pitfalls: building store M=1 but use -1 sentinel to avoid no candidate.
+
+But our query may fail if there is exactly -1.
+
+Better: use -1 sentinel for negative infinity; but dp valuations all positive sums from 2 to 2e9; positive.
+
+Implementation needs to worry about leaf indices. Provide indices.
+
+Now produce final answer.
+
+Also should import bisect.
+
+Now produce final solution.
+
+Let's go over sample Example 1:
+
+nums1=[4,3,1,2]; nums2=[2,4,9,5]; comp sorted unique [2,4,5,9]; j indices: zipped. We'll compute.
+
+Actually final code with correct.
+
+Edge case: mapping from packed.
+
+Let's produce final solution.
+
+One nuance: Need to produce ans for queries in ascending order: among queries we sorted. So we maintain as ans array of length m.
+
+Finally we return ans.
+
+Ok.
+
+Also we need to import bisect.
+
+Now produce final code.
+
+<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every position `j` we obtain one pair  
+
+```
+a = nums1[j]          (must be ≥ x)
+b = nums2[j]          (must be ≥ y)
+s = a + b
+```
+
+For a query `[x , y]` we need the maximum `s` among all pairs whose
+`a ≥ x` **and** `b ≥ y`.  
+Both constraints are  “≥ ”, so the set of admissible indices is the
+intersection of two half‑planes, i.e.  
+the set of points `(a , b)` lying in the rectangle  
+`[x , +∞) × [y , +∞)`.
+
+The task is in a sense a classic 2‑dimensional offline problem
+once we fix the order of the `a` values.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Offline processing – sorting by `a`
+
+* sort the indices of `nums1` in **decreasing** order of `a`.  
+  While scans the array we could insert a point `(a , b)` into a dynamic
+  structure (exactly the current moment), knowing that all later indices
+  will have `a` **smaller**.
+
+* sort the queries by **decreasing** `x`.  
+  While scanning this list we need all points whose same `x` threshold
+  (`a ≥ x`) of the query has already been inserted.
+
+Hence we keep two pointers:
+
+```
+ptr_idx    – keep walking through the sorted indices (by a)
+ptr_query  – process one query at a time
+```
+
+For each query we would:
+```
+while   ptr_idx < n   and   nums1[idx_sorted[ptr_idx]] >= current_x:
+        insert that point (a, b) into the data structure
+        ptr_idx += 1
+run query with the current y
+```
+
+--------------------------------------------------------------------
+
+#### 2.  Data structure – interior search over *b*
+
+While we insert a point we only care about its value `s = a + b` and its
+`b` coordinate.  After a point is inserted we never delete it:
+the value for a given `b` sometimes increases but a strictly higher
+value never signals a “backwards” position – we only have to keep the
+max value of all inserted points with that `b`.
+
+Therefore we need a structure that supports
+
+* **point update** – `val = max(val , new_b_value)`
+* **query maximum** over a **continuous right‑hand suffix** of the
+  `b` – that is, over all indices `b ≥ y`.
+
+Compression of the `b` values is necessary because `b` can reach
+`10^9`.
+
+After compression
+
+```
+b_values_sorted = sorted unique(nums2)          # ascending
+old b  →  pad_idx , 0 … n-1              (inclusive)
+```
+
+**Segment tree (iterative‑array version)** is the simplest choice:
+ * returns `-1` in empty regions (all positive sums are ≥ 2)
+ * updates in `O(log n)`
+ * range maximum takes `O(log n)` as well
+
+Memory: `2 * next power of two of m`  (`m ≤ n`)
+
+--------------------------------------------------------------------
+
+#### 3.  Algorithm
+```
+compress all nums2 values → comp[] of length m
+
+build segment tree of 2 * 2^⌈log2(m)⌉, store -1 or values
+optimise: store INF_NEG = -1,            # all sums are ≥ (1+1) = 2
+
+prepare indices of nums1 in descending order (by a)
+prepare queries as (x , y , original_index)
+sort queries in descending order of x
+
+answer[ len(queries) ]
+
+ptr = 0   # index (by coordinate)
+for each query (x, y, q_idx) in sorted queries:
+        while ptr < n and nums1[indices[ptr]] >= x:
+                j = indices[ptr]
+                s = nums1[j] + nums2[j]
+                update_vertex_pos = comp_index[ nums2[j] ]
+                update tree at position update_vertex_pos by max with s
+                ret++
+        pos1 = bisect_left(comp, y)           # first compressed index >= y
+        if pos1 == m:
+                answer[q_idx] = -1
+        else:
+                ans_val = query_range_max(pos1, m-1)
+                answer[q_idx] = ans_val
+return answer
+```
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the maximum possible values for every
+query.
+
+---
+
+##### Lemma 1  
+At the moment a query `Q = (x , y)` is processed,
+the set of points inserted into the segment tree is exactly
+the set of indices `j` with `nums1[j] ≥ x`.
+
+**Proof.**
+
+- *Insertion rule*:  
+  When processing indices in decreasing order of `a`, before any query
+  with threshold `x` the algorithm walks over all indices with `a` ≥ `x`
+  and inserts them.  
+  Therefore when the function reaches the query `Q` the set of inserted
+  indices contains every `j` with `nums1[j] ≥ x`.
+
+- *No other good indices*:  
+  Only indices are inserted in that folding loop.  
+  They may be sorted by a strictly larger `x` than the query, so the
+  algorithm will have *not* inserted them that satisfy a `x > current`.
+  Therefore all indices for the current query have `a ≤ current visitor x`
+  (since the shift will happen later).  
+  Hence, at the moment of the query, the set of inserted `j`s consists
+  **exactly** of the indices with `nums1[j] ≥ current_query_x`. ∎
+
+
+
+##### Lemma 2  
+All entries in the segment tree maintain the maximum sum `s` among
+points that have already been inserted and whose index `b`’s compression
+value equals the index of the segment tree node.
+
+**Proof.**
+
+The update operation is
+
+```
+current_value = tree[pos]
+if min_value < current_value   -> new_value = max(current_value, new_value)
+```
+
+Because `new_value` is the sum for a point that has already been inserted,
+it is *at least* the maximum existing value for that `b`.  
+If any deeper value is smaller, we maintain the larger value – the
+maximum of all inserted values for that `b`.  
+The propagating “max” in `while idx > 1` runs over all parent nodes
+and sets the parent to the maximum of its children, thus the invariant
+holds for all sub‑segments: each node holds the maximum sum for its
+covered `b` range. ∎
+
+
+
+##### Lemma 3  
+For a query `Q = (x , y)` the value returned by the subtree query
+`query(pos1, m-1)` equals the maximum  
+
+```
+S = { j | nums1[j] ≥ x , nums2[j] ≥ y }   of   nums1[j] + nums2[j]
+```
+
+**Proof.**
+
+From Lemma&nbsp;1 all `j` with `nums1[j]≥x` are inserted.
+`pos1` is the first compressed index that has original value
+`≥ y`.  
+`query(pos1, m-1)` returns the maximum over *all* compressed indices of
+the segment tree whose `b` value is `≥ y` (because the range is
+`{pos1, … , m-1}`).  
+By Lemma&nbsp;2 every node still holds the maximum sum of the processed
+points, therefore the returned maximum is exactly `max over {j |
+nums1[j]≥x , nums2[j]≥y}`. ∎
+
+
+
+##### Lemma 4  
+When the algorithm outputs `-1` for a query, no index satisfies the
+query constraints.
+
+**Proof.**
+
+When `pos1 == m` we need all compressed values of `nums2` to be `<y`,
+i.e. all `nums2[j] < y`.  
+Thus for every index `j` the second overflow fails satisfying the
+condition, therefore no indices satisfy both constraints. ∎
+
+
+
+##### Theorem  
+For every query the algorithm outputs
+
+```
+maximum sum of a+ b over all indices that satisfy the constraints
+```
+
+If no such indices exist the output is `-1`.
+
+**Proof.**
+
+*Case 1 – algorithm outputs a number `V`.*  
+By Lemma&nbsp;3 the value returned by the range query is the value found.
+
+`V` arises from some inserted point whose `a` and `b` satisfy the
+constraints, thus we are computing a valid feasible sum.  
+Because the query range of the segment tree depends on `y`,
+by Lemma&nbsp;3 it actually selects the maximum among all admissible
+indices.  
+
+*Case 2 – algorithm outputs `-1`.  
+By Lemma&nbsp;4 no indices satisfy constraints. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+*Sorting*  
+`O(n log n + q log q)`  
+(number of sizes `≈ 1e5`).
+
+*Processing*  
+Each index is inserted once, each query performs one query on the
+segment tree:
+
+```
+O((n + q) log n)
+```
+
+*Memory*  
+Segment tree holds `2 * 2^⌈log2 m⌉ ≤ 4 * 1e5`        –   `O(n)`.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+import sys
+import bisect
+from typing import List
+
+class Solution:
+    def maximumSumQueries(self, nums1: List[int], nums2: List[int],
+                          queries: List[List[int]]) -> List[int]:
+        n = len(nums1)
+        m = len(nums1)
+
+        # 1. compress nums2 values
+        uniq_b = sorted(set(nums2))
+        comp_index = {v: i for i, v in enumerate(uniq_b)}
+        lo = 0
+        size = 1
+        while size < len(uniq_b):
+            size <<= 1
+
+        seg = [-1] * (2 * size)          # -1 → none (all sums >= 2)
+
+        # 2. iterative split tree (max segment tree)
+        def update(pos: int, val: int) -> None:
+            idx = pos + size
+            if val > seg[idx]:
+                seg[idx] = val
+                idx >>= 1
+                while idx:
+                    seg[idx] = seg[idx << 1] if seg[idx << 1] > seg[idx << 1 | 1] else seg[idx << 1 | 1]
+                    idx >>= 1
+
+        def query(l: int, r: int) -> int:      # inclusive
+            l += size
+            r += size
+            res = -1
+            while l <= r:
+                if l & 1:
+                    if seg[l] > res:
+                        res = seg[l]
+                    l += 1
+                if not (r & 1):
+                    if seg[r] > res:
+                        res = seg[r]
+                    r -= 1
+                l >>= 1
+                r >>= 1
+            return res
+
+        # 3. sort indices by num1 descending
+        idx_sorted = sorted(range(n), key=lambda i: nums1[i], reverse=True)
+
+        # 4. sort queries by x descending
+        qlist = [(x, y, qi) for qi, (x, y) in enumerate(queries)]
+        qlist.sort(key=lambda t: t[0], reverse=True)
+
+        ans = [-1] * len(queries)
+        cur = 0
+        for x, y, qid in qlist:
+            # insert all points with nums1 >= x
+            while cur < n and nums1[idx_sorted[cur]] >= x:
+                j = idx_sorted[cur]
+                b_val = nums2[j]
+                s_val = nums1[j] + nums2[j]
+                up_pos = comp_index[b_val]
+                update(up_pos, s_val)
+                cur += 1
+            # ask about b >= y
+            pos = bisect.bisect_left(uniq_b, y)
+            if pos == len(uniq_b):
+                ans[qid] = -1
+            else:
+                res = query(pos, len(uniq_b) - 1)
+                ans[qid] = res
+        return ans
+
+# Example test
+if __name__ == "__main__":
+    sol = Solution()
+    print(sol.maximumSumQueries([4,3,1,2],[2,4,9,5],[[4,1],[1,3],[2,5]]))
+    print(sol.maximumSumQueries([3,2,5],[2,3,4],[[4,4],[3,2],[1,1]]))
+    print(sol.maximumSumQueries([2,1],[2,3],[[3,3]]))
+```
+
+The program follows exactly the algorithm proven correct above
+and conforms to the required function signature.

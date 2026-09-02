@@ -1,0 +1,207 @@
+<|channel|>analysis<|message|>We need to count the number of subarrays where all pairwise differences ≤ 2. Equivalent: maximum - minimum ≤ 2. So we need to count continuous subarrays where max - min ≤ 2. Classic problem: count subarrays with bounded difference. Use sliding window with two deques: one for min, one for max. Keep left pointer l, iterate r. While max - min > 2, move l forward, popping deques accordingly. For each r, number of subarrays ending at r is (r - l + 1). Sum over r. Complexity O(n). Edge cases: n up to 1e5.
+
+Implement in Python.
+
+Let's craft solution in class Solution. Should import List from typing.
+
+Return int.
+
+Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a subarray `nums[l … r]` all pairwise differences are at most `2`  
+iff
+
+```
+max(nums[l … r]) – min(nums[l … r]) ≤ 2
+```
+
+Hence we only have to count the subarrays whose maximum and minimum
+differ by at most `2`.
+
+--------------------------------------------------------------------
+
+#### Sliding window
+
+We keep a window `[left … right]` that always satisfies the condition
+above.  
+When we extend the window by moving `right` one step to the right, we
+must possibly shrink it from the left to restore the condition.
+
+To obtain the maximum and minimum of the current window in *O(1)* time
+we maintain two monotone deques:
+
+* `maxDeque` – indices of elements in decreasing order of value  
+  (the front is the current maximum)
+* `minDeque` – indices of elements in increasing order of value  
+  (the front is the current minimum)
+
+While extending the window with new element `nums[right]`
+
+```
+- pop from back of maxDeque while nums[right] > nums[back]
+- pop from back of minDeque while nums[right] < nums[back]
+- push right into both deques
+```
+
+Now the fronts of the deques are the current maximum and minimum.
+If `max - min > 2` we shrink the window from the left:
+
+```
+while max - min > 2:
+    if maxDeque.front == left: pop front
+    if minDeque.front == left: pop front
+    left += 1
+```
+
+After the loop the window `[left … right]` satisfies the condition.
+All subarrays ending at `right` that lie inside this window are continuous,
+and there are exactly `right - left + 1` of them.  
+We add this number to the answer and continue with the next `right`.
+
+The total time complexity is `O(n)` (each index is pushed and popped
+once from each deque) and the memory usage is `O(n)` for the deques.
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the number of all continuous
+subarrays.
+
+---
+
+##### Lemma 1  
+At any time during the algorithm, `maxDeque` contains indices of the
+current window in decreasing order of their values, and its front
+points to the index of the maximum element of the window.
+
+**Proof.**
+
+*Initialization.*  
+Before the first iteration both deques are empty, trivially true.
+
+*Maintenance.*  
+Assume the invariant holds before processing `right`.  
+When inserting `right` we remove all indices whose value is smaller than
+`nums[right]`; these indices can never become the maximum again because
+`right` is to their right and larger.  
+Thus the deque remains decreasing and the front points to the maximum.  
+When the window is shrunk from the left, we also remove the front if it
+equals the old left index.  
+Therefore the invariant is preserved. ∎
+
+
+
+##### Lemma 2  
+At any time during the algorithm, `minDeque` contains indices of the
+current window in increasing order of their values, and its front
+points to the index of the minimum element of the window.
+
+*Proof.*  
+Symmetric to Lemma&nbsp;1, using the opposite comparison when inserting
+`right`. ∎
+
+
+
+##### Lemma 3  
+After the inner `while` loop ends, the current window `[left … right]`
+satisfies `max - min ≤ 2`.
+
+**Proof.**  
+Before the loop the invariant of Lemma&nbsp;1 and Lemma&nbsp;2 holds,
+so `max = nums[maxDeque.front]` and `min = nums[minDeque.front]`.  
+The loop condition is exactly `max - min > 2`.  
+While the loop runs we increase `left` until the condition becomes
+false.  
+When the loop terminates, the condition is false, hence
+`max - min ≤ 2`. ∎
+
+
+
+##### Lemma 4  
+For each `right`, the algorithm adds exactly the number of continuous
+subarrays that end at index `right`.
+
+**Proof.**  
+After the inner loop, by Lemma&nbsp;3 the window `[left … right]` is
+continuous.  
+Any subarray ending at `right` and starting at an index `k`
+with `left ≤ k ≤ right` is a subarray of this window, hence continuous.
+Conversely, every continuous subarray ending at `right` must be fully
+contained in the current window, otherwise it would extend beyond `left`
+and violate the maximality of the window enforced by the algorithm
+(thus `max - min > 2` would hold).  
+Therefore the number of such subarrays is exactly
+`right - left + 1`, which the algorithm adds. ∎
+
+
+
+##### Theorem  
+The algorithm returns the total number of continuous subarrays of
+`nums`.
+
+**Proof.**  
+By Lemma&nbsp;4, for each `right` the algorithm correctly counts all
+continuous subarrays ending at `right`.  
+Summing over all `right` (from `0` to `n-1`) counts every continuous
+subarray exactly once, because each subarray has a unique right end.
+Thus the final sum equals the total number of continuous subarrays. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+*Time* : Each index is pushed into and popped from each deque at most
+once → `O(n)`  
+*Memory* : Two deques of size at most `n` → `O(n)`  
+
+--------------------------------------------------------------------
+
+#### Reference Implementation (Python 3)
+
+```python
+from typing import List
+from collections import deque
+
+class Solution:
+    def continuousSubarrays(self, nums: List[int]) -> int:
+        """
+        Counts the number of subarrays where the difference between
+        the maximum and minimum element is at most 2.
+        """
+        n = len(nums)
+        max_deque = deque()  # decreasing values
+        min_deque = deque()  # increasing values
+        left = 0
+        ans = 0
+
+        for right, val in enumerate(nums):
+            # maintain max deque
+            while max_deque and nums[max_deque[-1]] < val:
+                max_deque.pop()
+            max_deque.append(right)
+
+            # maintain min deque
+            while min_deque and nums[min_deque[-1]] > val:
+                min_deque.pop()
+            min_deque.append(right)
+
+            # shrink window if condition violated
+            while nums[max_deque[0]] - nums[min_deque[0]] > 2:
+                # move left past the front indices if they are at 'left'
+                if max_deque[0] == left:
+                    max_deque.popleft()
+                if min_deque[0] == left:
+                    min_deque.popleft()
+                left += 1
+
+            # all subarrays ending at right and starting
+            # between left and right are valid
+            ans += right - left + 1
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above.

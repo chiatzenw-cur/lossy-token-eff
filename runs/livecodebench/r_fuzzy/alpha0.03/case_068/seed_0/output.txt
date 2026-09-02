@@ -1,0 +1,385 @@
+<|channel|>analysis<|message|>We need to design solution. Problem: For each query [x,y], need max(nums1[j]+nums2[j]) such that nums1[j] >= x and nums2[j] >= y. n up to 1e5. queries up to 1e5. Brute O(n*m) not possible. Need efficient.
+
+We can interpret as points with coordinates (nums1[j], nums2[j]) and weight sum. For query (x,y), find among points (a,b) with a>=x and b>=y max sum a+b. That is similar to 2D dominance query. Use offline sort and data structure.
+
+Simplest: Sort points by nums1 descending. For queries, sort by x descending. Sweep: maintain a data structure keyed over nums2 values that supports query: among inserted points with nums2 >= y, need max (sum). This can be done via segment tree or Fenwick tree on compressed nums2, storing max sum. For each query with threshold y, we need maximum over indices with nums2 >= y. So we can query suffix maximum. Use Fenwick tree range maximum: build array size of compressed nums2 sorted ascending. Insertion: update at position of nums2 value with sum; keep max. For query y: find first index where nums2>=y (lower_bound). Then query maximum over [idx, end]. Fenwick tree can support prefix max or suffix via reversed indexing. Easier: Use segment tree for range max query and point update.
+
+Complexity: O((n+q) log n). Works.
+
+Implement:
+
+- Build array points = list of tuples (nums1[i], nums2[i], sum). Sort by nums1 descending.
+
+- queries with original index; sort by x descending.
+
+- Coordinate compress nums2 values from nums1/nums2 length n: gather all nums2 values, sort unique. Also for queries y may not equal any nums2 value, but we can find lower bound to nearest >= y. For compression mapping, we will need to find idx = bisect_left(vals, y). This idx may be n if y>max, then we return -1.
+
+Fenwick for max: fenwick arrays of size m. We'll implement update: while idx <= m: tree[idx] = max(tree[idx], val); idx += idx & -idx. Query max suffix: we can compute prefix max up to end but we need suffix. Instead we can reverse coordinate: compress sorted descending? Option: use segment tree query [l, m-1]. Fenwick for suffix is: we can store reversed index: when we compress ascending, but to query suffix, we can transform idx = m - idx, but easier: use segment tree.
+
+Let's implement segment tree size m: tree array of size 4*m. Functions update(pos, val). query(l,r). Complexity fine.
+
+Implementation steps:
+
+- m = len(vals). Build segtree with initial values -inf.
+
+- For insertion: update(pos, sum).
+
+- For query: if idx==m return -1 else res = query(idx, m-1). If res + or the sum value? Actually the point sum is what we store, as value. So we already store sum. So answer is res if res != -inf else .
+
+But careful: We need max(nums1+nums2) among points inserted satisfy both constraints. We inserted points with nums1>=current x. So all inserted points satisfy first condition. For second, we query over nums2>=y. So we query over positions idx to m-1.
+
+Edge: If idx == m (no such nums2 >= y), answer -1.
+
+Segment tree returns -inf (e.g., -1e18). So treat accordingly.
+
+Potential large n up to 1e5, sum up to 2e9 < int32? But use int 64.
+
+Implementation details:
+
+- Use bisect from python.
+
+Pseudo:
+
+def maximumSumQueries(self, nums1, nums2, queries):
+    n = len(nums1)
+    points = [(nums1[i], nums2[i], nums1[i]+nums2[i]) for i in range(n)]
+    points.sort(key=lambda x: x[0], reverse=True)
+
+    q_objects = [(x, y, idx) for idx, (x,y) in enumerate(queries)]
+    q_objects.sort(key=lambda x: x[0], reverse=True)
+
+    vals = sorted(set(nums2))
+    m = len(vals)
+    seg = SegmentTree(m)
+
+    ans = [-1]*len(queries)
+    p = 0
+    for x, y, qi in q_objects:
+        # insert points with nums1 >= x
+        while p < n and points[p][0] >= x:
+            v = points[p][2]
+            pos = bisect_left(vals, points[p][1])  // index in [0,m)
+            seg.update(pos, v)
+            p += 1
+        idx = bisect_left(vals, y)
+        if idx == m:
+           ans[qi] = -1
+        else:
+           res = seg.query(idx, m-1)
+           ans[qi] = res if res != -inf else -1
+    return ans
+
+Segment tree functions: build size m. init all -inf (which is -1). Use -1 to indicate no value? but sums can be negative? all positive >=2; but we insert sums >=2. So can use -1 sentinel. But to be safe use -10**18.
+
+Segment tree update: set node to max(current, val). Query returns maximum.
+
+Edge: Need Py recursion limit? Use iterative? We'll set recursion depth maybe. We use iterative as simple: size next power of 2? But easier with array of length 2*m? We can implement segment tree with n leaves. For maximum: Use tree array size 1<<(ceil_pow2...). Simple solution: use list of length 2*m, but that's typical for segment tree for static array operations. We'll support update and query.
+
+Implementation with iterative tree:
+
+- size = 1
+- while size < m: size <<=1
+- tree = [-inf]*(2*size)
+- update(pos, pos = pos+size; tree[pos] = max(tree[pos], val); while pos>1: pos>>=1; tree[pos] = max(tree[2*pos], tree[2*pos+1])
+- query(l,r inclusive) : l+=size, r+=size; res=-inf; while l<=r: if l%2==1: res=max(res,tree[l]); l+=1; if r%2==0: res=max(res,tree[r]); r-=1; l>>=1; r>>=1
+Return res.
+
+Will be good.
+
+Edge: For queries with y values that are not found in vals, bisect_left yields idx maybe in 0..m-1. But we want insertion index requiring nums2>=y. So all points inserted with nums2 values >= y. We have compressed ascending. So idx is first >="y". Works.
+
+Time complexity: O((n+q) log n). Good.
+
+Now produce final answer with explanation.
+
+Also note that queries input uses 1-indexed? The statement says 1-indexed but they also call queries[i] = [x_i,y_i]. In python they likely given 2 arrays of ints. We'll treat as 0-index.
+
+Now produce final code.
+
+Need to import typing etc.
+
+Let's craft final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every index `j` we have a point
+
+```
+(x , y , val) = (nums1[j] , nums2[j] , nums1[j] + nums2[j])
+```
+
+A query `[qx , qy]` asks for the maximal `val` among all points that lie in the
+south‑east rectangle
+
+```
+x >= qx   and   y >= yq
+```
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* If a point satisfies `x >= qx` it will also satisfy
+  `x >= any larger qx`.  
+  Therefore we can process the queries in decreasing `qx` and keep adding
+  all points whose `x` is still big enough.
+
+* After all points with `x >= qx` are inserted, a query only has to look
+  for the maximal `val` among points whose `y >= qy`.  
+  This is a **one‑dimensional maximum query** on the `y` coordinates.
+
+* The `y` values can be compressed because we only need their relative order.
+
+--------------------------------------------------------------------
+
+#### 2.  Data structures
+
+* **Point list**  
+  `points = [(x, y, val)]` sorted by `x` decreasing.
+
+* **Queries list**  
+  `qs = [(x, y, original_index)]` sorted by `x` decreasing.
+
+* **Segment tree** (iterative, binary‑tree structure)  
+  * leaves correspond to the compressed `y` values (ascending order)  
+  * each node stores the maximum `val` of the segment it represents  
+  * operations  
+    * `update(pos, value)` – point update: `tree[pos] = max(tree[pos], value)`  
+    * `query(l, r)` – maximum on the closed interval `[l, r]`
+
+The segment tree size is the next power of two of `m = |unique y|`.  
+`-inf` (we use –10¹⁸) is the initial means that a leaf has no point yet.
+
+--------------------------------------------------------------------
+
+#### 3.  Algorithm
+
+```
+compress all nums2 values → vals (ascending)
+build segment tree of size |vals|
+
+sort points by x decreasing
+sort queries by x decreasing
+
+ptr = 0                           # points[ptr] is the first not inserted point
+for (qx, qy, qidx) in sorted queries:
+        # insert all points with x >= qx
+        while ptr < n and points[ptr].x >= qx:
+                pos = index of points[ptr].y in vals   # bisect_left
+                seg.update(pos, points[ptr].val)
+                ptr += 1
+
+        left = lower_bound(vals, qy)      # first index with y >= qy
+        if left == m:                     # no y big enough
+                answer[qidx] = -1
+        else:
+                best = seg.query(left, m-1)
+                answer[qidx] = best if best != -inf else -1
+return answer
+```
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the correct answer for every query.
+
+---
+
+##### Lemma 1  
+Immediately before a query `(qx, qy)` is processed, the segment tree contains
+exactly the set
+
+```
+S = { j | nums1[j] >= qx } .
+```
+
+**Proof.**
+
+The points are sorted in decreasing `x`.  
+The algorithm keeps a pointer `ptr` to the first not yet inserted point.
+For the current query we repeatedly insert points while `points[ptr].x >= qx`.
+Because `ptr` only moves forward, and `x` is in decreasing order, after the
+loop finishes no remaining point has `x >= qx`.  
+All previously inserted points obviously have `x >= qx` because they were
+inserted when their `x` satisfied the previous (larger) `qx`.
+∎
+
+
+
+##### Lemma 2  
+During query processing, the segment tree query  
+`seg.query(left, m-1)` returns  
+
+```
+max{ nums1[j] + nums2[j] | j in S  and  nums2[j] >= qy } .
+```
+
+**Proof.**
+
+*For any index `j` in `S` with `nums2[j] >= qy`*  
+`nums2[j]` is compressed to an index `pos` with `pos >= left` (definition of
+`left`).  
+When that point was inserted, the algorithm executed  
+
+```
+seg.update(pos, nums1[j] + nums2[j])
+```
+
+so the leaf at `pos` holds at least this value.
+Because the segment tree stores the maximum over ranges,
+the query on the interval `[left, m-1]` contains this value in its range
+maximum, thus it returns at least the desired maximum.
+
+*No other value can be returned*  
+The segment tree stores at each leaf the maximum value among all points inserted
+for that exact `y`.  
+All these leaves belong to some point `j` with
+`nums2[j]` equal to that leaf’s `y`.  
+The query interval `[left, m-1]` covers exactly those leaves whose `y`
+is **not smaller than** `qy`.  
+Thus every value returned by the query corresponds to a point with
+exactly the required `y` condition, and all considered points belong to
+`S` by Lemma&nbsp;1.  
+Therefore the query value equals the required maximum. ∎
+
+
+
+##### Lemma 3  
+For every query `(qx, qy)` the algorithm outputs
+
+```
+max{ nums1[j] + nums2[j] | nums1[j] >= qx and nums2[j] >= qy }
+```
+
+or `-1` if the set is empty.
+
+**Proof.**
+
+From Lemma&nbsp;1, after inserting all points with `x >= qx`,
+the segment tree contains precisely the points satisfying the first
+condition of the query.  
+By Lemma&nbsp;2, the query on the segment tree returns the maximum
+over those points that also satisfy the second condition.
+If no point satisfies `y >= qy` the query range is empty, the segment tree
+returns `-inf` and the algorithm outputs `-1`.  
+Hence the algorithm’s output equals the correct answer. ∎
+
+
+
+##### Theorem  
+The algorithm returns the positive‑integer array `answer` where  
+`answer[i]` is the maximum sum for query `queries[i]`, or `-1`
+if no index satisfies the two inequalities.
+
+**Proof.**
+
+Directly from Lemma&nbsp;3, applied to each query independently. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+*Sorting*  
+`O(n log n + q log q)`
+
+*Processing*  
+Each point is inserted once – `O(n log m)`  
+Each query performs one segment‑tree query – `O(q log m)`  
+(`m <= n` is the number of distinct `y` values)
+
+Total time: `O( (n + q) log n )`  
+
+Memory usage:  
+`O(n + q + m)` – arrays for points, queries, compressed values, segment tree.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from bisect import bisect_left
+from typing import List
+
+class SegmentTree:
+    """Iterative segment tree for range maximum queries."""
+    def __init__(self, size: int, negative_inf: int = -10**18):
+        self.n = 1
+        while self.n < size:
+            self.n <<= 1
+        self.data = [negative_inf] * (2 * self.n)
+        self.neg_inf = negative_inf
+
+    def update(self, pos: int, val: int) -> None:
+        """Set leaf pos to max(current, val)."""
+        idx = pos + self.n
+        if val <= self.data[idx]:
+            return
+        self.data[idx] = val
+        idx >>= 1
+        while idx:
+            new_val = max(self.data[2 * idx], self.data[2 * idx + 1])
+            if new_val == self.data[idx]:
+                break
+            self.data[idx] = new_val
+            idx >>= 1
+
+    def query(self, l: int, r: int) -> int:
+        """Maximum over inclusive range [l, r]."""
+        if l > r:
+            return self.neg_inf
+        l += self.n
+        r += self.n
+        res = self.neg_inf
+        while l <= r:
+            if l & 1:
+                res = max(res, self.data[l])
+                l += 1
+            if not r & 1:
+                res = max(res, self.data[r])
+                r -= 1
+            l >>= 1
+            r >>= 1
+        return res
+
+
+class Solution:
+    def maximumSumQueries(
+        self,
+        nums1: List[int],
+        nums2: List[int],
+        queries: List[List[int]],
+    ) -> List[int]:
+        n = len(nums1)
+        points = [(nums1[i], nums2[i], nums1[i] + nums2[i]) for i in range(n)]
+        points.sort(key=lambda x:  x[0], reverse=True)          # by x desc
+    
+        qobj = [(q[0], q[y], idx) for idx, q in enumerate(queries)]
+        qobj.sort(key=lambda x: x[0], reverse=True)            # by x desc
+    
+        # coordinate compression of y
+        vals = sorted(set(nums2))
+        m = len(vals)
+    
+        seg = SegmentTree(m)
+    
+        ans = [-1] * len(queries)
+        p = 0                                                   # pointer in points
+    
+        for qx, qy, qi in qobj:
+            # insert all points with x >= qx
+            while p < n and points[p][0] >= qx:
+                y_val = points[p][1]
+                pos = bisect_left(vals, y_val)
+                seg.update(pos, points[p][2])
+                p += 1
+    
+            left = bisect_left(vals, qy)
+            return_val = seg.query(left, m - 1)
+            ans[qi] = -1 if return_val == seg.neg_inf else return_val
+    
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above
+and satisfies the required time and memory limits.

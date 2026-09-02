@@ -1,0 +1,442 @@
+<|channel|>analysis<|message|>We need sum of max^2 * min over all non-empty subsets of an array n up to 1e5. Brute force impossible.
+
+Observation: For any subset S, power depends only on its max and min. Other elements irrelevant. We can sum over pairs (max, min). But need to consider number of subsets with given max and min values.
+
+We can sort array ascending. Let a sorted array a[0..n-1] increasing with indices. For any pair of indices i <= j, where i is min index and j is max index. How many subsets have min = a[i] and max = a[j] given that both are included? For subsets between indices [i,j] inclusive, but we can choose any elements between i and j arbitrarily. If index i < j, min picks i, max picks j. Any other elements between i and j could be selected (including possibly duplicates equal values). But if there are duplicates equal to a[i] or a[j]? Sorting ensures all equal values are adjacent. For min value equal to a[i], we require that there's at least one element equal to min (a[i]) and that none smaller. Since sorted ascending, left elements < i have smaller values. So any subset that contains i as the smallest index will have min a[i] if all elements less than i are excluded. But if there are duplicate values equal to a[i] at indices > i, then we might also take those. So our counting based on sorted indices accounts for all possibilities.
+
+Similarly for max with j.
+
+But consider duplicate values: Suppose a[i] == a[i+1] but i could be min even if we also include i+1, but min remains a[i]. But the earlier counting as min refers to the smallest index in the subset. If we include multiple equal values, the "min" index is the first occurrence but value same. So we count subsets by min index i and max index j. As long as we include those indices i and j. Other elements between i and j may be any subset (including maybe duplicates). But could there be indices < i that equal a[i]? No, because it's sorted; earlier indices have <= a[i], but if equal, i would not be the smallest index. But sorted ascending ensures duplicates are consecutive; the first occurrence at index i of that value. If we exclude earlier indices, meaning we don't include any indices < i because they are strictly smaller values. So indeed the minimal index is i. So correct.
+
+Thus number of subsets where min index is i and max index is j is 2^{(j-i-1)}. Because we can choose any subset of elements between i and j (excluding both). For i==j, subsets with only that element, count 1.
+
+Thus total sum = sum_{i=0..n-1} sum_{j=i..n-1} (a[j]^2 * a[i] * 2^{j-i-1}) modulo M. Actually for j==i, exponent -1? Need count1. We can set 2^{j-i-1} with exponent -1? Wrong. For j==i, number of subsets is 1: choose element i. That could treat as 2^{0} with exponent 0. If we use formula with exp = j-i, maybe we can adjust.
+
+Let's use number of subsets between i and j inclusive (excluding endpoints) count = 2^{j-i-1} for j>i else 1 (j==i). That is also 2^{max(0, j-i-1)}? Actually j-i-1 can be -1 when j==i; 2^{-1} not defined. So handle separately.
+
+So sum = Σ_{i} a[i] * [ Σ_{j==i} a[j]^2 + Σ_{j>i} a[j]^2 * 2^{j-i-1} ].
+
+Simplify: For each i, we need contributions from all j >= i. Could compute using prefix sums of powers weighted by powers of 2.
+
+However n up to 1e5, O(n^2) not possible; we need efficient O(n log n) or O(n).
+
+We can precompute powers of 2 up to n. Let pow2[k] = 2^k mod M.
+
+We need for each i, sum_{j=i}^{n-1} a[j]^2 * 2^{j-i-1}. Let's denote i fixed, let shift = j-i-1. Define term = a[j]^2 * 2^{j-i-1}.
+
+Consider indexing from i. We may precompute suffix sums weighted by powers of 2. Let's define for each position p, we want S[p] = sum_{j=p}^{n-1} a[j]^2 * 2^{j-p}. Then the expression with shift j-i-1 is a[j]^2 * 2^{j-i-1} = a[j]^2 * 2^{j-i} * 2^{-1} = (a[j]^2 * 2^{j-(i+1)}) * 2^{-1}. So we can compute R[i+1] = sum_{j=i+1}^{n-1} a[j]^2 * 2^{j-(i+1)}. Then the contribution for j>i is R[i+1] * 2^{-1}. But we need mod M, so invert 2 mod M.
+
+Alternatively we can compute sum_{j=i}^{n-1} a[j]^2 * 2^{j-i} (shift j-i). Then for j==i we get a[i]^2 * 2^0 = a[i]^2. That matches j==i. For j>i we have a[j]^2 * 2^{j-i}. We need multiply by 2^{-1} to get desired factor j-i-1. So contribution for j>=i is 2^{-1} * (sum_{j=i}^{n-1} a[j]^2 * 2^{j-i}) except for j=i? Wait j=i uses factor 2^0 so 2^{-1}? Let's analyze: We want for j=i term a[i]^2 * 1. But using formula 2^{-1} * a[i]^2 * 2^0 = a[i]^2/2, not correct. So our approach must separate j=i.
+
+Simpler: Compute contributions for j>i and add j==i separately. Implementation: For each i, we iterate j>i but cannot be too slow. We could accumulate suffix sums gradually.
+
+We can iterate i from n-1 down to 0, maintaining suffix sum of a[j]^2 * 2^{j-i}. But we can update as we move i. Let's think.
+
+Let suffix[i] = sum_{j=i}^{n-1} a[j]^2 * 2^{j-i}. This can be computed recursively:
+
+When i = n-1, suffix[n-1] = a[n-1]^2 * 2^0 = a[n-1]^2.
+
+For i < n-1, suffix[i] = a[i]^2 * 2^0 + sum_{j=i+1}^{n-1} a[j]^2 * 2^{j-i}.
+
+We can relate suffix[i] to suffix[i+1]:
+
+We note that for j>=i+1, 2^{j-i} = 2 * 2^{j-(i+1)}. So sum_{j=i+1}^{n-1} a[j]^2 * 2^{j-i} = 2 * sum_{j=i+1}^{n-1} a[j]^2 * 2^{j-(i+1)} = 2 * suffix[i+1].
+
+Thus suffix[i] = a[i]^2 + 2 * suffix[i+1] modulo M.
+
+Great. So we can compute suffix array quickly.
+
+Now for each i, we need contribution: a[i] * ( contrib_j_ge_i ), where contrib_j_ge_i = a[i]^2 + sum_{j=i+1}^{n-1} a[j]^2 * 2^{j-i-1}. None? Wait j=i term we already have: a[i]^2. For j>i, we need a[j]^2 * 2^{j-i-1}. Which equals (1/2)* a[j]^2 * 2^{j-i}. So sum_{j=i+1}^{n-1} a[j]^2 * 2^{j-i} * inv2.
+
+Thus total contribution for i is a[i] * (a[i]^2 + inv2 * (suffix[i+1] - a[i+1]^2? Wait suffix[i+1] includes j>=i+1). Let's compute suffix[i+1] as defined above: suffix[i+1] = a[i+1]^2 + 2 * suffix[i+2]. But we can just use suffix[i+1] representing sum_{j=i+1}^{n-1} a[j]^2 * 2^{j-(i+1)}. Then for needed term j-i-1 it matches exactly: a[j]^2 * 2^{j-i-1} = a[j]^2 * 2^{j-(i+1)}. Because j-i-1 = j-(i+1). So it's exactly suffix[i+1].
+
+Thus contribution for i is:
+
+- For j==i: a[i]^2.
+- For j>i: sum_{j=i+1}^{n-1} a[j]^2 * 2^{j-i-1} = suffix[i+1].
+
+Thus total inner sum for i is a[i]^2 + suffix[i+1].
+
+Wait double-check: suffix[i+1] defined as sum_{j=i+1}^{n-1} a[j]^2 * 2^{j-(i+1)}. But that's exactly term. Good.
+
+So total contribution for group sums with min index i is a[i] * (a[i]^2 + suffix[i+1]).
+
+Now sum over i.
+
+Edge cases: For i= n-1, suffix[n] = 0 (we can treat). So contribution = a[n-1] * a[n-1]^2.
+
+Thus algorithm:
+
+- Sort nums ascending.
+- precompute suffix array: suffix[n] = 0; for i from n-1 down to 0:
+
+    suffix[i] = (a[i]**2 + 2 * suffix[i+1]) % mod. Because a[i]^2 + 2 * suffix[i+1] matches a[i]^2 + 2 * sum_{j=i+1} a[j]^2 * 2^{j-(i+1)} = a[i]^2 + sum_{j=i+1}a[j]^2 * 2^{j-i} ?
+
+Wait earlier we derived suffix[i] = a[i]^2 + 2 * suffix[i+1]. This formula gives suffix[i] = sum_{j=i}^{n-1} a[j]^2 * 2^{j-i} indeed.
+
+Ok good.
+
+Now compute final answer: ans=0; for i in 0..n-1: ans += a[i] * (a[i]**2 + suffix[i+1]) % mod. Must mod after multiplication.
+
+Complexities: O(n log n) to sort, O(n) loops.
+
+Check with example.
+
+Let's test manually. Example 1: nums [2,1,4]. Sorted: [1,2,4] (but order matters? Wait sorting changes indices grouping but value set same. Is it allowed? Subsets independent of order. So we can sort. Let's test.
+
+Sorted a = [1,2,4]. n=3
+
+Compute suffix: suffix[3] = 0
+
+i=2: suffix[2] = a[2]^2 + 2*suffix[3] = 4^2=16
+
+i=1: suffix[1] = 2^2 + 2*suffix[2] = 4 + 32 = 36
+
+i=0: suffix[0] = 1^2 + 2*suffix[1] = 1 + 72 = 73
+
+Now compute ans:
+
+i=0: a[0]=1; a[0]^2=1; suffix[1]=36; inner=1+36=37; ans+=1*37=37
+
+i=1: a[1]=2; a[1]^2=4; suffix[2]=16; inner=4+16=20; ans+=2*20=40 => total 77
+
+i=2: a[2]=4; a[2]^2=16; suffix[3]=0; inner=16+0=16; ans+=4*16=64 => total 141
+
+Matches example.
+
+Second example: [1,1,1], sorted same.
+
+Compute suffix:
+
+suffix[3]=0
+
+i=2: suffix[2]=1^2+0=1
+
+i=1: suffix[1]=1 + 2*1=3
+
+i=0: suffix[0]=1 + 2*3=7
+
+ans:
+
+i=0: a=1 inner=1+3=4? Wait: suffix[1]=3. inner=1+3=4. ans+=1*4=4
+
+i=1: a=1 inner=1+1=2 ans+=1*2=2 => total 6
+
+i=2: a=1 inner=1+0=1 ans+=1*1=1 => total 7. matches.
+
+Great!
+
+Thus algorithm correct.
+
+Now more reasoning: We used sorting ascending. Are there any issues with duplicate values? Because min index i chosen earlier in sorted order ensures min value is a[i] and no smaller index included. Works.
+
+Proof: In subset, let min value v_min and max value v_max. Suppose duplicates of v_min exist at indices lower than min index? we handle because we exclude smaller indices. So min index is first occurrence of v_min among selected.
+
+Because sorted ascending, the leftmost index of v_min must be the smallest index included in that subset. So mapping to indices correct.
+
+So final algorithm stands.
+
+Edge Cases: n=1, suffix[1] = 0; ans = a[0] * a[0]^2.
+
+Large values: Use modulo mod = 10**9+7. a[i]^2 modulo mod; we need to compute a[i] * (a[i]^2 + suffix[i+1]) % mod.
+
+Compute a[i] * a[i]^2 % mod yields a[i]^3 mod M maybe large, but we use powmod.
+
+Implementation details: Use pow(a[i], 2, mod) for a[i]^2.
+
+Alternatively compute a[i]*a[i] % mod and again multiply.
+
+But careful: a[i] can be up to 1e9, product up to 1e18. Python int handle.
+
+Time complexity: O(n log n). Memory O(n). Acceptable.
+
+We should also consider N up to 1e5. Sorting O(n log n) fine.
+
+Now we implement complete solution: Class Solution with method sumOfPower(self, nums: List[int]) -> int. The method will sort, compute suffix and answer.
+
+Return ans % MOD.
+
+Testing produce example outputs.
+
+Edge Cases: Large mod exponent and power of 2 large; we don't need pow2 precomputation because we compute suffix using recurrence involving multiplication by 2 mod mod. So no big square, just multiply by 2 each step.
+
+But we need to compute a[i]^2 mod M. Use pow(a[i], 2, mod) or (a[i]*a[i]) % mod.
+
+Let's implement.
+
+Potential issue: a[i] ** 2 could overflow integers? In Python big int fine. But mod anyway.
+
+We can precompute modded values:
+
+- arr = sorted(nums)
+- mod = 10**9+7
+- n = len(arr)
+- suffix = [0] * (n+1)
+- For i from n-1 downto 0:
+          val = arr[i] % mod
+          val2 = (val * val) % mod
+          suffix[i] = (val2 + 2 * suffix[i+1]) % mod
+- ans = 0
+- For i in range(n):
+          val = arr[i] % mod
+          val2 = (val * val) % mod
+          inner = (val2 + suffix[i+1]) % mod
+          ans = (ans + val * inner) % mod
+- return ans
+
+Check example: yes.
+
+Complexities deep.
+
+Potential pitfalls: The recursion formula ensures suffix[i] uses modulo correctly.
+
+Now produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every non‑empty subset `S` of `nums`
+
+```
+power(S) = ( max(S) )² · min(S)
+```
+
+`nums` can contain up to `10^5` elements, therefore we can not enumerate all
+subsets.  
+The key observation is that **the power of a subset depends only on its
+maximum and minimum values** – all other elements are irrelevant.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.   Sorted array
+
+Let
+
+```
+a[0] ≤ a[1] ≤ … ≤ a[n‑1]          (n = len(nums))
+```
+
+be `nums` sorted increasingly.  
+In a sorted array the **smallest index** of a subset is exactly the first
+index that appears in the subset, because all preceding indices hold
+smaller values.
+
+Therefore for a subset
+
+```
+min = a[i]   (i is the smallest index in the subset)  
+max = a[j]   (j is the largest index in the subset, j ≥ i)
+```
+
+All other indices of the subset lie between `i` and `j` (inclusive) and may
+be taken arbitrarily.  
+The number of such subsets is
+
+```
+count(i,j) = 2^( j-i-1 )          (j > i)
+count(i,i) = 1
+```
+
+The power contributed by all subsets with this fixed pair `(i , j)` is
+
+```
+a[j]² · a[i] · count(i,j)
+```
+
+--------------------------------------------------------------------
+
+#### 2.   Summation over every `i`
+
+For a fixed `i`
+
+```
+total(i) = Σ_{j=i}^{n-1} a[j]² · a[i] · count(i,j)
+```
+
+Split the sum into two parts
+
+```
+j = i           →  a[i]² · a[i]
+j > i           →  a[i] · Σ_{j=i+1}^{n-1} a[j]² · 2^(j-i-1)
+```
+
+Define
+
+```
+suffix[i] = Σ_{j=i}^{n-1} a[j]² · 2^(j-i)       (mod M)
+```
+
+where `M = 10^9 + 7`.  
+Then
+
+```
+Σ_{j=i+1}^{n-1} a[j]² · 2^(j-i-1)  =  suffix[i+1]
+```
+
+So
+
+```
+total(i) = a[i] · ( a[i]² + suffix[i+1] )
+```
+
+--------------------------------------------------------------------
+
+#### 3.   Computing `suffix` in O(n)
+
+Starting from the right side of the array:
+
+```
+suffix[n] = 0
+for i = n-1 … 0:
+        suffix[i] = a[i]² + 2 * suffix[i+1]   (mod M)
+```
+
+Explanation:
+
+```
+suffix[i] = a[i]²                            # term j = i
+           + Σ_{j=i+1}^{n-1} a[j]² · 2^(j-i)
+           = a[i]² + 2 * Σ_{j=i+1}^{n-1} a[j]² · 2^(j-(i+1))
+           = a[i]² + 2 * suffix[i+1]
+```
+
+--------------------------------------------------------------------
+
+#### 4.   Final algorithm
+
+```
+sort nums → a
+compute suffix array
+ans = 0
+for i = 0 … n-1:
+        val  = a[i] % M
+        val2 = val * val % M
+        inner = (val2 + suffix[i+1]) % M
+        ans = (ans + val * inner) % M
+return ans
+```
+
+--------------------------------------------------------------------
+
+#### 5.   Correctness Proof  
+
+We prove that the algorithm returns the sum of the powers of all non‑empty
+subsets modulo `M`.
+
+---
+
+##### Lemma 1  
+For every subset `S` of `nums` let  
+`i = min index of S` and `j = max index of S` in the sorted array `a`.  
+The number of subsets with this pair `(i , j)` equals `count(i,j)` defined
+above.
+
+**Proof.**
+
+All chosen indices of `S` are within `[i , j]` (inclusive).  
+Indices `< i` cannot be chosen, otherwise the minimum would be smaller.
+Indices `> j` cannot be chosen because that would make the maximum larger.
+For the inner positions `i+1 … j-1` each index can be either taken or
+not taken independently, giving `2^(j-i-1)` possibilities.
+For `j=i` the only subset is `{i}` itself, thus `count(i,i)=1`. ∎
+
+
+
+##### Lemma 2  
+For every `i (0 ≤ i < n)` the sum of powers of all subsets whose minimum is
+`a[i]` equals
+
+```
+a[i] · ( a[i]² + suffix[i+1] )
+```
+
+**Proof.**
+
+From Lemma&nbsp;1 the subsets with minimum `a[i]` are exactly the pairs
+`(i , j)` with `j ≥ i`.  
+Their total power is
+
+```
+Σ_{j=i}^{n-1} a[j]² · a[i] · count(i,j)
+  = a[i] · [ a[i]²·count(i,i)
+           + Σ_{j=i+1}^{n-1} a[j]² · 2^(j-i-1) ]
+  = a[i] · ( a[i]² + suffix[i+1] )
+```
+
+because `count(i,i)=1` and, by definition of `suffix`,
+`suffix[i+1] = Σ_{j=i+1}^{n-1} a[j]² · 2^{j-i-1}`. ∎
+
+
+
+##### Lemma 3  
+The algorithm’s final value `ans` equals the sum of the powers of all
+non‑empty subsets of `nums`.
+
+**Proof.**
+
+The algorithm iterates over all `i` and adds the value from Lemma&nbsp;2
+to `ans`.  
+Every subset has a unique minimum index `i` in the sorted array,
+hence is counted exactly once, and its power contributes exactly
+the term used in that iteration.  
+Therefore `ans` is the desired sum. ∎
+
+
+
+##### Theorem  
+`sumOfPower` returns the sum of the powers of all non‑empty subsets of the
+input array, modulo `10^9+7`.
+
+**Proof.**
+
+By Lemma&nbsp;3 the algorithm’s computed value is exactly the required
+sum.  
+All operations are performed modulo `M`, so the returned value is the sum
+modulo `M`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.   Complexity Analysis
+
+```
+sorting:   O(n log n)
+suffix & sum computation:  O(n)
+memory:   O(n)   (for the suffix array)
+```
+
+With `n ≤ 10^5`, the program easily satisfies all limits.
+
+--------------------------------------------------------------------
+
+#### 7.   Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def sumOfPower(self, nums: List[int]) -> int:
+        MOD = 10**9 + 7
+
+        a = sorted(nums)          # sorted ascending
+        n = len(a)
+
+        # suffix[i] = Σ_{j=i}^{n-1} a[j]^2 * 2^(j-i)   (mod MOD)
+        suffix = [0] * (n + 1)    # suffix[n] = 0
+        for i in range(n - 1, -1, -1):
+            val = a[i] % MOD
+            val2 = (val * val) % MOD
+            suffix[i] = (val2 + 2 * suffix[i + 1]) % MOD
+
+        ans = 0
+        for i in range(n):
+            val = a[i] % MOD
+            val2 = (val * val) % MOD
+            inner = (val2 + suffix[i + 1]) % MOD
+            ans = (ans + val * inner) % MOD
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

@@ -1,0 +1,371 @@
+<|channel|>analysis<|message|>We need sum over all non-empty subsets (groups) of max^2 * min. We need efficient. n up to 1e5, values large.
+
+We need to compute contributions. Observed that for each subset, its max and min determined. Think using sorted array. Let sorted ascending: a[0..n-1] increasing. For a subset, max is some a[j], min is some a[i] with <= j. So subsets determined by picking min and max and choosing any elements between, but elements outside between indices cannot be chosen? For min and max indices i <= j. Elements that can be chosen are those with index between i and j (inclusive) because any element outside would affect min or max. So within subarray a[i..j], we choose any non-empty subset that includes both endpoints? Wait if subset chooses extras but could skip some inside. As long as min= a[i], max = a[j], subset must include a[i] and a[j] and can include any subset of elements between i and j. The number of such subsets is 2^(j-i-1). Because elements between: indices i+1..j-1. Each either selected or not. So contribution for pair (i, j) with i <= j: a[j]^2 * a[i] * 2^(j-i-1). For i=j, exponent 2^(0-1)?? Actually j-i-1=-1 -> define as 2^0? But with i=j, we have singleton subset includes both same element; number of subsets =1. So treat exponent as 2^0. For j-i-1 = -1? We need handle separately: if i=j, contribution = a[i]^3.
+
+Thus sum = Σ_i a[i]^3 + Σ_{i<j of a[j]^2 * a[i] * 2^(j-i-1)}.
+
+We need efficient compute Σ_{i<j} a[i]*a[j]^2*2^{j-i-1}.
+
+Since n up to 1e5, O(n^2) not.
+
+Observation: treat fixed j, sum over i<j of a[i] * 2^{j-i-1} = something like prefix sum weighted by powers of two. Because a[j]^2 multiplies sum over i.
+
+Let j fixed. Define S_j = Σ_{i=0}^{ j-1} a[i] * 2^{j-i-1}. We can compute iteratively: We can maintain P = Σ_{i=0}^{k} a[i] * 2^{k-i}. Wait need base.
+
+Let’s compute using recurrence: For j starting from 0 up. For j=0, S_0 = 0 (since no i<0). For j>=1: S_j = 2 * S_{j-1} + a[j-1] * 2^0? Let's derive. S_{j} = Σ_{i=0}^{j-1} a[i] * 2^{j-i-1}.
+
+Take S_{j-1} = Σ_{i=0}^{j-2} a[i] * 2^{j-1-i-1} = Σ_{i=0}^{j-2} a[i] * 2^{j-i-2}.
+
+Multiply both sides by 2: 2*S_{j-1} = Σ_{i=0}^{j-2} a[i] * 2^{j-i-1}. Add term for i=j-1: a[j-1] * 2^{0} = a[j-1]. So S_j = 2*S_{j-1} + a[j-1]. Good.
+
+Thus we can compute S_j incrementally. Then contribution for each j: a[j]^2 * S_j.
+
+But careful: we defined S_j uses exponent j-i-1. For i=j-1 term exponent 0 gives coefficient 1. In recurrence, we added a[j-1] indeed.
+
+Check j with i=j-1: contribution a[j-1] * 2^{0}. yes.
+
+Thus algorithm:
+
+1. Sort nums ascending.
+2. Mod M=1e9+7.
+3. pow2 not needed separately.
+
+Compute res=0. Maintain S=0 initially.
+
+For j from 0 to n-1:
+- res += nums[j]^3 mod M (for singleton).
+- If j>0:
+     res += nums[j]^2 %M * S %M
+- Update S: S = (2*S + nums[j]) %M
+
+But wait recurrence uses S_{j+1}? Let's test: When j increments, we first use S_j for current k? Actually we want S_j before inclusion of value j? For j, we need sum over i<j. So we should compute contribution with current S (which represents S_j). Starting with S=0 for j=0. For j=0, singleton only. After processing j, we need to update S to S_{j+1} for update of next j+1. That means after processing j, compute new S = 2*S + nums[j]. Good.
+
+Test small: nums=[2,1,4] sorted => [1,2,4]
+Compute:
+
+j0: a=1: res+=1*1*1=1? Actually a^3=1 -> res=1. S=0 -> no pair. Update S=2*0+1=1.
+
+j1: a=2: res+=8 -> res=9. pair: res += a^2 * S = 4*1=4 => res=13. Update S=2*1+2=4.
+
+j2: a=4: res+=64 => res=77. pair: a^2 * S = 16*4=64 => res=141. Update S=2*4+4=12. After loop done. Matches example (141). Good.
+
+Edge case all 1s: sorted [1,1,1], same process:
+
+j0: res 1, S=1
+j1: res +=1, pair 1*1=1 => total 3, S=2*1+1=3
+j2: res+=1, pair 1*3=3 => total 7, correct.
+
+So algorithm O(n log n) sorting + O(n).
+
+Need mod: we must mod each intermediate: a^2 and a^3 may overflow 64-bit as a up to 1e9 -> cube up to 1e27 > 2^63. So compute modulo. Use pow modulo via pow(a,2,MOD). In Python big ints fine but mod for efficiency.
+
+Implementation details:
+
+- Input as List[int].
+- Sort 'a'.
+- MOD as 10**9+7.
+- Init res = 0, S = 0.
+- Loop for val in a:
+   val_mod = val % MOD
+   val_sq = val_mod * val_mod % MOD
+   val_cu = val_sq * val_mod % MOD
+   res = (res + val_cu) % MOD
+   if S != 0: res = (res + val_sq * S) % MOD
+   S = (2 * S + val_mod) % MOD
+
+Return res.
+
+Check: for j>0 S may be 0 earlier but multiply anyway okay.
+
+Return int.
+
+Complexities: O(n log n) time, O(1) extra memory.
+
+Potential pitfalls: integer overflow not a concern in Python but mod will keep small. Implementation correct.
+
+We can also double-check for large n: 1e5 fine.
+
+Now produce final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every non‑empty subset `S` of the heroes
+
+```
+power(S) = ( max(S) )² · min(S)
+```
+
+`nums` has length up to `10⁵`, therefore enumerating all subsets is impossible.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+Sort the array
+
+```
+a[0] ≤ a[1] ≤ … ≤ a[n‑1]
+```
+
+For a subset `S`
+
+* the smallest element of `S` is some `a[i]`
+* the largest element of `S` is some `a[j]`   ( `i ≤ j` )
+* all chosen elements must lie inside the interval `[i , j]`, otherwise
+  the min or the max would change.
+
+So a subset whose minimum is `a[i]` and maximum is `a[j]`
+
+* **must** contain both `a[i]` and `a[j]`
+* each element between them (indexes `i+1 … j-1`) can be chosen or not
+  independently.
+
+Number of such subsets
+
+```
+2^( j-i-1 )          ( 2^0 = 1  for i = j )
+```
+
+Therefore the whole answer is
+
+```
+∑ i                     a[i]³                        (singletons)
++ ∑ i<j   a[j]² · a[i] · 2^(j-i-1)          (groups with two different extremes)
+```
+
+--------------------------------------------------------------------
+
+#### 2.  Efficient evaluation of the double sum
+
+For a fixed `j` the inner sum depends only on `j`
+
+```
+S(j) = ∑_{i=0}^{j-1} a[i] · 2^(j-i-1)
+```
+
+The contribution of index `j`:
+
+```
+a[j]² · S(j)
+```
+
+So we need to compute `S(j)` for all `j` fast.
+
+--------------------------------------------------------------------
+
+##### 2.1  Recurrence for `S(j)`
+
+```
+S(j) = a[0]·2^(s-1)+ a[1]·2^(s-2) + … + a[j-2]·2^1 + a[j-1]·2^0
+```
+
+Move from `S(j)` to `S(j+1)` :
+
+```
+S(j+1) = a[0]·2^s + a[1]·2^(s-1) + … + a[j-2]·2^2 + a[j-1]·2^1 + a[j]·2^0
+        = 2·S(j)   +   a[j]
+```
+
+Thus we can maintain the current value of `S` while iterating once over
+the sorted array.
+
+--------------------------------------------------------------------
+
+#### 3.  Algorithm
+```
+sort(nums)
+MOD = 1_000_000_007
+S = 0                          # current S(j)
+answer = 0
+
+for value in sorted array:
+    v  = value % MOD
+    v2 = v * v          % MOD
+    v3 = v2 * v         % MOD
+
+    answer += v2 * S                     (contribution of all groups ending here)
+    answer %= MOD
+
+    answer += v3                          (singleton group)
+    answer %= MOD
+
+    S = (2 * S + v) % MOD                # prepare S for the next index
+
+return answer
+```
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns
+`sum_{non‑empty subsets S} power(S)` modulo `10⁹+7`.
+
+---
+
+##### Lemma 1  
+For every pair of indices `i < j` the number of subsets whose minimum is
+`a[i]` and maximum is `a[j]` equals `2^(j-i-1)`.
+
+**Proof.**
+
+A subset satisfying the min and max conditions must
+
+* contain `a[i]` and `a[j]`;
+* may contain or omit each element of the interval `(i , j)` independently.
+
+There are `j-i-1` interior indices, each with two choices,
+hence `2^(j-i-1)` different subsets. ∎
+
+
+
+##### Lemma 2  
+Let `S(j)` be defined as above.  
+For every `j ≥ 0`
+
+```
+S(j+1) = 2·S(j) + a[j]
+```
+
+**Proof.**
+
+`S(j)` consists of terms
+`a[0]·2^(j-1) , a[1]·2^(j-2) , … , a[j-2]·2^1 , a[j-1]·2^0`.
+
+Multiplying this sum by `2` yields
+
+```
+2·S(j) = a[0]·2^j , a[1]·2^(j-1) , … , a[j-2]·2^2 , a[j-1]·2^1
+```
+
+Adding `a[j]·2^0` gives exactly the terms of `S(j+1)`. ∎
+
+
+
+##### Lemma 3  
+During the loop iteration for index `j` the variable `S`
+holds the value `S(j)`.
+
+**Proof.**
+
+*Initialization:* Before the first iteration (`j = 0`) we set
+`S = 0`.  
+`S(0)` is an empty sum, thus `S = S(0)`.
+
+*Induction step:*  
+Assume before processing index `j` we have `S = S(j)`.  
+After the body of the loop we execute
+
+```
+S ← (2·S + a[j]) mod MOD
+```
+
+By Lemma&nbsp;2, without modulo this equals `S(j+1)`.  
+Taking modulo preserves equality in the finite field,
+so after the update `S = S(j+1)`. ∎
+
+
+
+##### Lemma 4  
+During the iteration for index `j` the algorithm adds
+`a[j]² · S(j)` to `answer`.
+
+**Proof.**
+
+At the start of the loop `S = S(j)` by Lemma&nbsp;3 (the
+`S` used in the update corresponds to the previous index).
+The algorithm adds
+
+```
+a[j]² · S        (mod MOD)    // before updating S
+```
+
+which is exactly
+`a[j]² · S(j)`. ∎
+
+
+
+##### Lemma 5  
+During the iteration for index `j` the algorithm adds
+`a[j]³` to `answer`.
+
+**Proof.**
+
+Directly the line
+
+```
+answer += v3    (v3 = a[j]³ mod MOD)
+```
+
+adds the singleton group power. ∎
+
+
+
+##### Theorem  
+After the loop finishes, `answer` equals
+
+\[
+\sum_{\emptyset \ne S \subseteq \{0,\dots,n-1\}}
+  (\max_{k\in S} a[k])^{2}\; \min_{i\in S} a[i]
+\pmod{(10^{9}+7)}
+\]
+
+**Proof.**
+
+The total sum can be split into
+
+1. **Singletons** – handled by Lemma&nbsp;5, each added exactly once.
+2. **Groups with distinct min and max** – each pair `i<j` contributes
+   `a[j]² · a[i] · 2^{j-i-1}` (Lemma&nbsp;1).  
+   The term for a fixed `j` is  
+   `a[j]²` multiplied by the sum `S(j)` of all `a[i]·2^{j-i-1}` for `i<j`.  
+   By Lemma&nbsp;4 the algorithm adds exactly `a j`²·S(j)` in the
+   corresponding iteration.
+   Thus all such groups are accounted for exactly once.
+
+No other subsets exist, and each class is added exactly once.
+Taking modulo keeps the result in the required field.
+∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+*Sorting:* `O(n log n)`  
+*Loop:* `O(n)` time, `O(1)` additional space.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def sumOfPower(self, nums: List[int]) -> int:
+        MOD = 10 ** 9 + 7
+        nums.sort()                     # ascending
+
+        S = 0        # current S(j)
+        ans = 0
+
+        for val in nums:
+            v = val % MOD
+            v2 = v * v % MOD
+            v3 = v2 * v % MOD
+
+            # groups that end at current index (j)
+            ans = (ans + v2 * S) % MOD
+
+            # singleton group
+            ans = (ans + v3) % MOD
+
+            # update S for the next index
+            S = (2 * S + v) % MOD
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above.

@@ -1,0 +1,265 @@
+<|channel|>analysis<|message|>We need minimal length after removing substrings AB or CD repeatedly. The operations can reduce letters from 2 to 0? We remove a substring AB or CD. This reduces length by 2. But string concatenation may produce new opportunities. Equivalent to repeatedly removing any adjacent pair AB or CD. This is similar to evaluating string reduction via stack: if we process letters, we can remove as soon as we see a pair that matches AB or CD. But we can choose order; we want minimal length final.
+
+Observation: This is like eliminating all possible pairs of adjacent characters where first is A and second is B; or first is C and second is D. There's no other pair. Because operations are local but may have cascading effect.
+
+We need to find minimal length possible. Equivalent to computing length of reduced string with these rules. But because reduction can produce new pairs, the final length is independent of the order? Are different orders yield same minimal length? For typical reduction of deleting adjacent pairs that are in specific mismatched pairs (i.e., XOR etc.), it is independent. For example, you can use stack approach: iterate chars; if stack top and current char form AB or CD we pop; else push. That yields minimal length.
+
+However need to confirm: Are there cases where order matters? Let's test: Suppose string "ABCD". If we remove AB first => remaining "CD" -> remove => length 0. If we remove CD first => yields "AB" -> remove => length 0. All good. Another test: "ACBD": no reductions possible? But we remove? None. order doesn't matter.
+
+Let’s reason: For reduction rules of removing specific adjacent pairs that are not overlapping, typically it leads to a unique irreducible string: the stack algorithm yields minimal length. The reasoning: The operation reduces the string by deleting any substring that's a substring of length 2 that matches AB or CD, and you can choose any positions. This is like performing a rewriting system that's confluent? Could have branching? But we think final length is unique minimal because the operation Y is non-commutative but final state after any sequence of reductions yields a string that cannot contain AB or CD. But whether there could be multiple minimal strings of same length? Possibly trails.
+
+We need compute minimal length. Equivalent to elimination process: Use stack algorithm to maximize deletions.
+
+Proof: Suppose we want to reduce the string as much as possible. Each deletion removes an AB or CD pair, merging left and right parts. This is equivalent to performing cancellation of adjacent pairs similar to removing adjacent pairs in the string. It's like a rewriting system that's confluent because any overlapping reductions eventually produce same outcome as iterative stack removal. The standard algorithm: For each char, if stack top is 'A' and char 'B', pop. Else if stack top is 'C' and char 'D', pop. Else push. So final length is stack size. Complexity O(n). Since n <= 100, trivial.
+
+Edge cases: Overlapping pairs? For example "ABCD" - stack first A -> push. B -> top 'A' forms AB -> pop. Now top empty. C -> push. D -> top 'C' forms CD -> pop. stack empty. Good.
+
+Now produce code accordingly.
+
+But we might need to ensure max length 100.
+
+Return stack size.
+
+Ok.
+
+Testing examples:
+
+Example1: s="ABFCACDB". Let's simulate:
+
+Stack: A (push)
+B -> pop A. stack empty.
+F -> push
+C -> push
+A -> push
+C? Wait char sequence: "ABFCACDB" positions: A B F C A C D B. Actually more precisely: after AB removal, we push F, C, A, C, D, B. Let's run stack:
+
+- A: stack ['A']
+- B: pop => []
+- F: push => ['F']
+- C: push => ['F','C']
+- A: push => ['F','C','A']
+- C: push? top 'A', char 'C', no pair; push => ['F','C','A','C']
+- D: top 'C' forms CD -> pop => ['F','C','A']? Wait top after pop: original top 'C', popped, stack becomes ['F','C','A']? no, we popped 'C', leaving ['F','C','A']? Actually top 'C', second 'A', etc. But stack was ['F','C','A','C']; top is 'C', pop; stack now ['F','C','A'].
+- B: top 'A' no pair. push => ['F','C','A','B'].
+
+Size 4. But expected minimal 2. Did we miss further elimination? Let's continue: After finishing string, we look at adjacent inside stack: interior did not have AB or CD? But we only removed when reading; but 'A','B' at top removed? Wait we processed B, stack top 'A', but rule AB triggers pop? Wait we popped earlier when B occurs. At final B, top 'A', AB. But we didn't pop because we didn't check at final? Actually algorithm: For each character, if top of stack and current char matches AB or CD, pop. Wait: For char 'B': stack top 'A' -> matches AB -> pop. Yes we popped.
+
+But final B at end: top 'A', AB -> pop. Let's process: before pushing B, stack ['F','C','A']; B -> top 'A', match AB -> pop, stack becomes ['F','C']; result length 2. Good.
+
+So algorithm yields 2. Good.
+
+Example2: "ACBBD". Steps: A push; C push; B top 'C' does not match AB or CD; push B; B top 'B' no; push B; D top 'B' no; push D. No pops. length 5. Good.
+
+Therefore algorithm works.
+
+But is there any case where we might reduce more using different order? Let's test "ACCD" maybe? Steps:
+
+- A push
+- C push
+- C push
+- D top 'C' -> CD, pop, stack ['A','C'] remains 'C', D? no, stack after removing 'C' left; after D processed we popped it. After processing all, maybe leftover 'A','C'? No AB or CD remaining.
+
+Try alternate removal: If we remove CD first -> 'AC' cannot reduce, length 2. So minimal 2. Works.
+
+Thus algorithm seems fine.
+
+Implementation: use list as stack.
+
+Edge cases: None.
+
+Complexities: O(n).
+
+Let's produce final code.
+
+But we might also think about dynamic programming for more general? But not needed.
+
+Let's write solution function minLength.
+
+Also we must define class Solution.
+
+Let's include docstring.
+
+Let's output.
+
+<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every operation you can delete *exactly* a substring `"AB"` or `"CD"`.  
+After one deletion the two parts around the removed substring are concatenated,
+so new occurrences of those two substrings may appear.
+
+The task is to find the smallest possible length of the string after any
+sequence of such deletions.
+
+
+
+--------------------------------------------------------------------
+
+#### Observation
+
+While scanning the string from left to right it is never beneficial to **save**
+a deletion for later – as soon as a possible pair is found we can delete it
+and it will never be needed again.
+
+For a pair to be deletable the two characters must be adjacent, so the
+process is local.  
+If the letters on the left of the current position are already fixed, the
+only interference possible from the future is from the *right* side.
+Therefore a greedy simulation works:
+
+- keep a stack – it represents the part of the string that we have already
+  processed and that cannot be reduced further.
+- while reading the next character `c`:
+  * if the stack top is `'A'` and `c == 'B'`, pop `'A'` (delete `"AB"`).
+  * else if the stack top is `'C'` and `c == 'D'`, pop `'C'` (delete `"CD"`).
+  * otherwise, push `c` onto the stack.
+
+When the whole string is processed, the stack contains a string that does
+not contain `"AB"` or `"CD"`.  
+Because we deleted a pair whenever it appeared, no further deletion is
+possible – the stack is an irreducible remainder.  
+It is well known that for such local rewriting rules the resulting string
+is *unique* (the rewriting system is confluent), so the stack length is
+the minimal possible length.
+
+--------------------------------------------------------------------
+
+#### Algorithm
+```
+stack = empty
+for each character ch in s:
+    if stack is not empty and stack.top == 'A' and ch == 'B':
+        stack.pop()                     # delete "AB"
+    else if stack is not empty and stack.top == 'C' and ch == 'D':
+        stack.pop()                     # delete "CD"
+    else:
+        stack.push(ch)
+return length of stack
+```
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the minimal attainable length.
+
+---
+
+##### Lemma 1  
+During the algorithm, after processing the first `i` characters of `s`,
+the stack contains exactly the prefix of the current string that is
+*irreducible* (cannot be shortened further by removing `"AB"` or `"CD"`).
+
+**Proof.**
+
+*Initialization (`i = 0`)*:  
+The stack is empty, which is trivially irreducible.
+
+*Induction step.*  
+Assume the lemma holds after processing the first `i-1` characters.  
+Consider the `i`‑th character `c`.
+
+- If `c` together with the top of the stack forms `"AB"` (top `'A'`),  
+  deleting this pair gives a shorter string than any other operation on
+  this prefix, because the pair must be removed before any later
+  characters can reach it.  The algorithm pops `'A'`, leaving exactly the
+  maximal irreducible prefix of the first `i` characters.
+
+- The same reasoning applies to `"CD"` (top `'C'`).
+
+- If none of the two possibilities holds, the new character cannot be
+  removed by any operation that only looks at the processed part, hence
+  it must stay.  The algorithm pushes `c`; the stack stays the
+  irreducible prefix of the first `i` characters.
+
+Thus the lemma is preserved. ∎
+
+
+
+##### Lemma 2  
+When the algorithm terminates, the stack contains a string that has no
+substrings `"AB"` or `"CD"`.
+
+**Proof.**
+
+If such a substring existed inside the stack, then its last
+character would have been processed while the previous one was already
+in the stack.  
+The algorithm would have detected the pair and removed it, contradicting
+the fact that the pair remains in the stack. ∎
+
+
+
+##### Lemma 3  
+No sequence of deletions can produce a string shorter than the stack
+returned by the algorithm.
+
+**Proof.**
+
+Assume there existed a shorter final string `T`.  
+Consider the earliest position where `T` differs from the stack
+`S`.  
+Let the `i`‑th character of `T` be the same as the `i`‑th character of `S`
+for all positions `< i`.  
+At position `i` the characters differ, thus `T` is missing a character
+that is present in `S`.  
+This missing character must have been removed by some deletion that
+gives a shorter string.  
+But all deletions in the algorithm are performed *as soon as possible*
+(Lemma&nbsp;1).  
+Therefore no deletion can remove more characters than those already
+removed by the algorithm – impossible. ∎
+
+
+
+##### Theorem  
+The algorithm returns the minimum possible length of a string obtainable
+from `s` by repeatedly deleting `"AB"` or `"CD"`.
+
+**Proof.**
+
+By Lemma&nbsp;2 the returned string `S` has no removable substrings,
+so it is a valid final string.  
+By Lemma&nbsp;3 no other sequence of deletions can produce a shorter
+string.  
+Therefore the length of `S` is minimal. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+Let `n = len(s)` (at most 100).  
+Each character is pushed at most once and popped at most once.
+All operations are `O(1)`.  
+Time complexity: `O(n)`  
+Space complexity: `O(n)` for the stack.
+
+
+
+--------------------------------------------------------------------
+
+#### Reference Implementation  (Python 3)
+
+```python
+class Solution:
+    def minLength(self, s: str) -> int:
+        """
+        Returns the minimal possible length of the string after
+        repeatedly removing substrings "AB" or "CD".
+        """
+        stack = []  # use list as a stack
+        for ch in s:
+            if stack:
+                top = stack[-1]
+                if top == 'A' and ch == 'B':
+                    stack.pop()          # delete "AB"
+                    continue
+                if top == 'C' and ch == 'D':
+                    stack.pop()          # delete "CD"
+                    continue
+            stack.append(ch)
+        return len(stack)
+```
+
+The function follows exactly the algorithm proven correct above.

@@ -1,0 +1,421 @@
+<|channel|>analysis<|message|>We need to count stepping numbers in inclusive [low, high]. ranges up to 10^100, i.e., up to 100 digits. Brute force impossible. Need DP over digits, using digit DP counting stepping numbers that satisfy property. Since stepping number property depends on adjacent digits, we need to maintain previous digit value as state for DP. For digit DP with carry let's treat number as string. We'll transform to array of digits.
+
+Define dp[pos][prev_digit][tight][started] maybe how many ways to build prefix. pos from 0 to n-1 (most significant). Want to count numbers <= bound (high). For each position we decide next digit d.
+
+Condition: If started==0 (meaning still leading zeros - but we disallow leading zeros; but before started we can choose 0). However we must avoid leading zero numbers, but we can treat them as not counted until we meet first non-zero. But leading zeros can be used for positions before first digit. For example for counting numbers <= high, we might have numbers with less digits; they are allowed but must be positive integers 1.. high. There is no leading zeros allowed, but we use special started flag. If started==0, we can choose zero for next digit and keep started=0, after which we may not count; once started==1 we pick 1..9.
+
+We must enforce stepping constraint: When started==1, last digit prev. We only need to check adjacency for digits after first. For first digit (started==1 with prev=none), no restriction. For next digits, we require abs(d - prev) ==1. So we need prev digit stored (0-9). For started==0 state we could store prev as -1.
+
+Thus DP state: dp[pos][prev_digit (0-9+1 for none maybe 10?)][tight][started]. But start may be inferable from prev: if started==0, prev_digit = 10 maybe sentinel. But easier: include flag started.
+
+Dimension: pos up to 100. prev 11 values. tight 2; started 2. So 100*11*2*2 ~ 4400 states, fine.
+
+Alternatively can use memoization.
+
+Implementation detail: we need count of numbers <= bound. Use recursion with memoization.
+
+Procedure count(bound_str):
+
+Define digits = list(map(int, bound_str)). n= len.
+
+def dfs(pos, prev, started, tight):
+- if pos==n: count only if started==1? Since zero not allowed. so return 1 if started else 0.
+- limit = digits[pos] if tight else 9
+- res=0
+- For d in range(0, limit+1):
+    new_tight = tight and d==limit
+    if not started:
+        if d==0:
+            # still leading zero
+            res += dfs(pos+1, prev, False, new_tight)
+        else:
+            # start number
+            res += dfs(pos+1, d, True, new_tight)
+    else:
+        # started==True
+        if abs(d - prev) == 1:
+            res += dfs(pos+1, d, True, new_tight)
+- res modulo mod.
+
+Return res.
+
+Wait we must ensure no leading zeros across entire number, but we counted numbers >=1 with first digit non-zero. Good.
+
+Complexities: 100*10*2*2*10 loops? fine.
+
+Need to compute count(high)-count(low-1) modulo mod. Need subtraction mod.
+
+But low is string. We need count of stepping numbers <= high - count <= low-1.
+
+Compute low_minus_one by subtracting 1 from low. Since low >= 1. low-1 may be zero; but we should handle that. So compute low_minus_one string. For low "1" it's "0". Since we defined counting only positive numbers, low-1=0 will return 0. Our count(0) will return 0 because started==0 at pos==n: returns 0. Works.
+
+Implement subtract_one function: takes string s, returns string of s-1. Use big integer? Python big int no issue; we could do int(s)-1 then str, but may overflow due to 100-digit which is fine; Python can handle arbitrary. But we may want to avoid big int? but typical string but okay. The constraints: high < 10^100, which fits in Python int. But we can use int operations. We'll convert to Python int for subtraction. But maybe limit to high 10^100; Python can handle big ints. So low_minus_one = str(int(low)-1). That may be simpler.
+
+Edge: if low== "0"?? but constraints say low>=1 anyway. Good.
+
+Return (count(high)-count(low_minus_one)+mod)%mod.
+
+Check example: low=1 high=11. Count up to 11 yields 10? Let's test mentally: stepping numbers <= 11: 1-9,10,11? Wait 11: digits 1,1 difference 0 not 1, so not stepping. So 10 stepping numbers. count(high)=10. count(0)=0. Good.
+
+Example2: low=90 high=101. Count <=101. stepping numbers <=101: 1-9 (9) plus 10? yes, 10 diff 0-1 abs=1; 12? diff 1; 21,23,32,34,43,45,54,56,65,67,76,78,87,89,98,101? let's list stepping numbers <=101? Maybe we just rely on DP. Should compute count(high)=? Then count(low-1)=count(89). The difference should be 2.
+
+Implementation details: Use lru_cache for memo.
+
+Consider variable types: prev up to 10 sentinel. We'll use prev parameter index 0-9; when started==0 we can set prev=-1. However we can't key -1 in lru_cache default? use -1. We'll use prev as int -1..9. But to keep dimension small we can use prev+1? but we can just use -1. Use caching with tuple keys.
+
+Implementation 'dfs(pos, prev, started, tight)'. We'll use digits list.
+
+Memoization for states: pos, prev, started, tight.
+
+Also note that variable 'tight' reduces recursion more; but we can embed in keys.
+
+Edge-case: When started==0 and we try to keep leading zeros, we might skip the digit d if equal 0. When started==0, we don't need to check adjacency; if d==0 then still started==0. But if low bound is 1.. high maybe includes zeros? For counting numbers <= high, we treat leading zeros to fill earlier positions; dp ensures that numbers with fewer digits are counted. For example number 1 will be represented as '01' for 2-digit range, but our DP will produce a path: pos0 choose 0, started=0; pos1 choose 1, started=1; after pos2 finished pos==n. Works.
+
+But we must also ensure that 'gap' when started==True and d==0 but previous digit is 1? example: number 10, digits '1','0': pos0 pick 1, started=1; pos1 pick 0, started=1, adjacency diff=1. Good.
+
+Edge for transitions: When started==True and d==0: allowed as long as abs(0-prev) ==1. Good.
+
+Now test for small numbers: high= "0" should produce count=0. Our function: digits=[0]; pos=0: limit=0, loops d=0; since not started, d==0 -> dfs(1,prev,False,True); pos==n: started==False => 0. So count(0)=0.
+
+Hence fine.
+
+Now we need to compute modulo 1e9+7. Use mod variable.
+
+Potential stack recursion depth: n up to 100 fine.
+
+Let's write function count_leq(string bound). Use lru_cache.
+
+Implementation:
+
+from functools import lru_cache
+
+def count_leq(bound):
+    digits = list(map(int, bound))
+    n=len(digits)
+    @lru_cache(None)
+    def dfs(pos, prev, started, tight):
+        if pos==n:
+            return 1 if started else 0
+        limit = digits[pos] if tight else 9
+        res=0
+        for d in range(limit+1):
+            new_tight = tight and d==limit
+            if not started:
+                if d==0:
+                    res += dfs(pos+1, -1, False, new_tight)
+                else:
+                    res += dfs(pos+1, d, True, new_tight)
+            else:
+                if abs(d - prev) == 1:
+                    res += dfs(pos+1, d, True, new_tight)
+        return res % mod
+    return dfs(0, -1, False, True) % mod
+
+Then answer = (count_leq(high)-count_leq(str(int(low)-1))+mod)%mod
+
+Edge: low "1" -> int(low)-1=0 -> str(0). Provided count_leq('0') returns 0.
+
+All good.
+
+But we need to handle high should be inclusive. fine.
+
+Now we need to ensure high < 10^100 (string of up to 100 digits). int conversion fine.
+
+Time complexity: O(n * 10 * 2 * 2 * 10) ~ 4000, as discussed.
+
+Let's produce final solution code.
+
+Test simple:
+
+low="1", high="11" => answer 10.
+
+Let's test with mental:
+
+count_leq("11"):
+
+- DP enumeration? For 1-digit numbers <=1? Wait high=11, length 2 digits. Counting numbers <=11. The algorithm counts all numbers of length <=2 with property.
+
+Numbers <=11: single-digit: 1-9: 9. numbers 10-11: 10 stepping? yes. 11 not stepping. So 10. ok.
+
+Now low-1=0. So difference 10-0=10.
+
+Better to test example2: low=90 high=101. Counting <=101:
+
+We can attempt manual result: Will compute difference later high difference low-1.
+
+But we trust.
+
+Edge: high maybe 100-digit, with many digits.
+
+Ok.
+
+Potential bug: In DFS, when started==True, we require d between 0-9 inclusive. In adjacency check but we didn't include that d cannot be negative? fine.
+
+We need memo key: prev values -1 to 9. lru_cache works fine.
+
+We also have to mod each addition but we compute res mod at end.
+
+Edge: large recursion may exceed recursion depth? pos up to 100, recursion depth 100. Python default recursion limit 1000, fine.
+
+Now produce final code.
+
+Also we must refer to mod constant: 1000000007.
+
+Ok.
+
+Let's craft final response with reasoning summary and code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every integer `x` we want to know whether `x` is a *stepping number*:
+
+```
+x is a stepping number ⇔ for every pair of adjacent digits ai , ai+1
+                          |ai – ai+1| = 1
+```
+
+The interval `[low , high]` can contain up to `10^100` different integers,  
+so a brute force enumeration is impossible.
+
+--------------------------------------------------------------------
+
+#### 1.  Digit DP
+
+We count how many stepping numbers are `≤ bound` (inclusive).  
+Then the answer for the requested interval is
+
+```
+count(≤ high) – count(≤ low – 1)   (mod 10^9+7)
+```
+
+The difference is taken modulo the prime `MOD = 1 000 000 007`.
+
+--------------------------------------------------------------------
+
+#### 2.  State description
+
+While processing the decimal digits from the most significant one to the
+least significant one we keep the following information
+
+|variable|meaning|
+|--------|-------|
+|`pos` |current position in the string (0 … n‑1)|
+|`prev`|digit placed at the previous position (`-1` if no digit yet)|
+|`started`|have we already placed a non‑zero digit? (`0/1`)*|
+|`tight`|are all previous digits equal to the prefix of the bound? (`0/1`)*|
+
+* `started` is needed to ignore leading zeros:  
+  numbers shorter than the bound are represented by leading zeros, but
+  they are *not* counted as `0`.  
+  Once the first non‑zero digit is chosen `started` becomes `1` and the
+  stepping property can now be checked.
+
+The DP recursion uses memoisation (`lru_cache`), so each state is visited
+only once.
+
+--------------------------------------------------------------------
+
+#### 3.  Transition
+
+Let `limit = (tight? digit[pos] : 9)` – the maximum digit we are allowed to
+place at the current position.
+
+For every digit `d` in `0 … limit` we decide the new state.
+
+```
+new_tight = tight && (d == limit)
+
+if started == 0:           # still leading zeros
+    if d == 0:
+        # keep leading zeros
+        go to state (pos+1, prev=-1, started=0, new_tight)
+    else:
+        # first non‑zero digit
+        go to state (pos+1, prev=d, started=1, new_tight)
+else:                      # a number has already started
+    if |d - prev| == 1:   # stepping condition
+        go to state (pos+1, prev=d, started=1, new_tight)
+```
+
+When we reach the end of the string (`pos == n`),
+
+```
+return 1   if started == 1   (a valid positive number)
+return 0   otherwise         (only leading zeros were used)
+```
+
+All results are accumulated modulo `MOD`.
+
+--------------------------------------------------------------------
+
+#### 4.  Computing `low – 1`
+
+`low` is at least `1`, so `low – 1` is always non‑negative.
+Python’s arbitrary length integers allow us to simply write
+
+```python
+low_minus_one = str(int(low) - 1)
+```
+
+(`int(low)` can be a 100‑digit number – Python handles it without problems.)
+
+--------------------------------------------------------------------
+
+#### 5.  Correctness Proof  
+
+We prove that the algorithm returns the number of stepping numbers in
+`[low, high]`.
+
+---
+
+##### Lemma 1  
+`count_leq(bound)` (the memoised DP) equals the number of positive
+stepping numbers that do not exceed `bound`.
+
+**Proof.**
+
+We prove by induction on `pos`, the current index in the bound string.
+
+*Base (`pos == n`)*  
+If `started==0` no non‑zero digit has been placed, meaning the prefix
+consists only of leading zeros.  
+This represents the number `0`, which is *not* a positive integer, so the
+count is `0`.  
+If `started==1`, a valid positive integer was constructed
+(`prev` holds its last digit, but the subsequent digits are irrelevant),
+hence the count is `1`.  
+The DP returns exactly this value.
+
+*Inductive step*  
+Assume the lemma holds for all positions `> pos`.  
+Consider any state `(pos, prev, started, tight)`.  
+All admissible continuations correspond to the choice of `d` described
+by the transition rules:
+
+* The digit `d` must not exceed `limit` – this guarantees the resulting
+  number never exceeds `bound`.
+* If `started == 0` and `d == 0` we continue with leading zeros, which
+  does not change the set of numbers represented.
+* If `started == 0` and `d > 0`, we start a new number – the first digit
+  is unrestricted and the number becomes positive.
+* If `started == 1`, we must satisfy `|d - prev| = 1`.
+  This is precisely the definition of a stepping number.
+  The recursive call handles the rest of the digits.
+
+Because the recurrence enumerates **all** possibilities and
+**no** invalid continuation is ever counted, the sum of all recursive
+calls equals the number of valid numbers for the remaining suffix.  
+Thus, by induction, the claim holds for `pos`. ∎
+
+
+
+##### Lemma 2  
+`count_leq(high) – count_leq(low-1)` (taken modulo `MOD`) equals the
+number of stepping numbers in the interval `[low, high]`.
+
+**Proof.**
+
+Let `S(x)` be the set of stepping numbers `≤ x`.  
+By Lemma&nbsp;1 the algorithm returns `|S(x)|` for any `x`.
+
+The set of stepping numbers inside `[low, high]` equals  
+`S(high) \ S(low-1)` – all numbers not larger than `high` but larger than
+`low-1`.  
+Hence
+
+```
+|S(high) \ S(low-1)| = |S(high)| – |S(low-1)|
+```
+
+where the subtraction is performed modulo `MOD`.
+Thus the algorithm returns the correct count. ∎
+
+
+
+##### Theorem  
+`Solution.countSteppingNumbers(low, high)` returns the number of
+stepping numbers in the inclusive range `[low, high]` modulo
+`10^9+7`.
+
+**Proof.**
+
+By Lemma&nbsp;2 the algorithm outputs exactly the desired count
+(modulo `MOD`).  
+All operations inside the DP are performed modulo `MOD`, so the final
+value is that count modulo `MOD`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Complexity Analysis
+
+Let `n = len(high)` (≤ 100).  
+Number of DP states:
+
+```
+pos   : 0 … n        (n+1)
+prev  : -1 or 0 … 9   (11 options)
+started : 0 / 1      (2)
+tight   : 0 / 1      (2)
+```
+
+Total ≤ **(n+1) · 11 · 2 · 2 ≈ 4,400** states.
+
+For each state we iterate over at most 10 digits.  
+Thus the overall running time is `O(n · 10 · 11 · 2 · 2) ≈ 44,000`
+operations – easily fast for the limits.  
+Memory consumption is `O(number of states)` – a few kilobytes.
+
+--------------------------------------------------------------------
+
+#### 7.  Reference Implementation  (Python 3)
+
+```python
+from functools import lru_cache
+
+MOD = 10 ** 9 + 7
+
+class Solution:
+    def countSteppingNumbers(self, low: str, high: str) -> int:
+        """
+        Count stepping numbers inside [low, high].
+        """
+        def count_leq(bound: str) -> int:
+            """Return number of positive stepping numbers <= bound."""
+            digits = list(map(int, bound))
+            n = len(digits)
+
+            @lru_cache(maxsize=None)
+            def dfs(pos: int, prev: int, started: int, tight: int) -> int:
+                if pos == n:
+                    return 1 if started else 0
+
+                limit = digits[pos] if tight else 9
+                res = 0
+                for d in range(limit + 1):
+                    new_tight = tight and d == limit
+                    if not started:
+                        if d == 0:
+                            # still leading zero
+                            res += dfs(pos + 1, -1, 0, new_tight)
+                        else:
+                            # first non‑zero digit
+                            res += dfs(pos + 1, d, 1, new_tight)
+                    else:
+                        if abs(d - prev) == 1:
+                            res += dfs(pos + 1, d, 1, new_tight)
+                return res % MOD
+
+            return dfs(0, -1, 0, 1)
+
+        # Count ≤ high
+        cnt_high = count_leq(high)
+
+        # Count ≤ low-1  (low ≥ 1)
+        low_minus_one = str(int(low) - 1)
+        cnt_low_minus_one = count_leq(low_minus_one)
+
+        return (cnt_high - cnt_low_minus_one) % MOD
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required function signature.

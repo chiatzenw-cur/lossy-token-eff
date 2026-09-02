@@ -1,0 +1,495 @@
+<|channel|>analysis<|message|>We need sum over all subsets of [max^2 * min] . For all non-empty subsets. We have array up to 1e5.
+
+We need combinatorial formula. Usually for similar problems (subsets with max and min) we can sort array. Then consider each element as potential maximum/min combinations. Because max^2*min = max * max * min. Approach: sort 0..n-1 ascending. For i as maximum index (value a[i]), and j as minimum index (value a[j]), with j<=i. Count subsets where a[i] is maximum, a[j] is minimum, and all other selected elements are between indices j..i. For each pair (j,i), number of subsets where these are chosen as min and max is 2^(i-j-1) times ways to choose other elements in between (since we must include j and i, other indices between j+1 and i-1 can be selected or not). Also we may include elements outside [j,i] but cannot, because if we include elements smaller than a[j] or larger than a[i] they'd break min or max. So indices outside [j,i] cannot be in subset. So subsets are restricted to contiguous subsequence [j,i] containing those extremes. Wait indices after sorting: not original order of heroes, but no order requirement for group. So we can choose any subset of indices. The min and max are values, but positions irrelevant. Every subset that has min a[j], max a[i] will have all other chosen elements between these values; but there may be other elements equal to a[j] or a[i]. Since duplicates matter.
+
+After sorting ascending, for any subset non-empty, the indices of min and max correspond to minimum and maximum values. Suppose some indices equal to min or max duplicates. Suppose array sorted with duplicates.
+
+We need to compute sum over all subsets. A common trick: For each element considered as max, we compute contribution of max^2 times something like sum over min times number of subsets where this element is max. We can do two-phase: For each i as maximum, we consider all j <= i as minimum. For each pair (j,i), contribution a[i]^2 * a[j] * 2^(i-j-1). We sum over all pairs. Complexity naive O(n^2). Need improvement. Observing we can precompute prefix sums of a[j] * 2^-j? Wait.
+
+Let sorted values ascending b[0..n-1].
+
+We want sum_{0<=j<=i<n} b[i]^2 * b[j] * 2^(i-j-1) . The exponent: number of elements between j and i exclusive: (i-j-1). So factor 2^(i-j-1). So we can factor b[i]^2 * 2^(i) times sum over j <= i of b[j] * 2^(-j-1). But exponents mod 1e9+7: powmod 2^{i-j-1} = pow2[i] * inv_pow2[j+1], where pow2[k] = 2^k % mod, inv_pow2[k] = pow2^{-k} mod mod. We can precompute pow2 and invpow2.
+
+Thus contribution for i is b[i]^2 * pow2[i] * (sum_{j=0..i} b[j] * invpow2[j+1] ) /? Wait check: 2^{i-j-1} = pow2[i] * invpow2[j+1]. Because pow2[i] / 2^{j+1}. Since pow2[i-j-1] = 2^{i-j-1}.
+
+Let's compute: 2^{i-j-1} = pow2[i] * invpow2[j+1] mod.
+
+Hence contribution: sum_{i} (b[i]^2 * pow2[i] * X_i) where X_i = sum_{j=0..i} b[j] * invpow2[j+1] mod.
+
+So compute prefix sums S[j] = sum_{t=0..j} b[t] * invpow2[t+1] mod. Then X_i = S[i]. Then total = sum_{i=0..n-1} b[i]^2 % mod * pow2[i] % mod * S[i] % mod.
+
+Let's test with example. Let's implement quick python test.<|end|><|start|>assistant<|channel|>analysis<|message|>Let's test mentally quickly.
+
+nums=[2,1,4]; sorted b=[1,2,4].
+
+Compute pow2: [1,2,4,8...?]. mod large.
+
+invpow2: precompute modular inverses of 2, etc.
+
+Compute S:
+
+t=0: b[0]=1, invpow2[1]=inv2 (0.5 mod). S[0]=1*inv2.
+
+t=1: b[1]=2, invpow2[2] = inv4. 2*inv4 = inv2. So S[1] = inv2 + 1*inv2 = 2*inv2 = 1.
+
+t=2: b[2]=4, invpow2[3] = inv8. 4*inv8 = inv2. S[2] = 1 + inv2 = 1 + 0.5 = 1.5 mod. Which as fractions.
+
+Now compute contributions:
+
+i0: b0^2=1, pow2[0]=1, S0=inv2=0.5 => 0.5.
+
+i1: b1^2=4, pow2[1]=2, S1=1 => 4*2*1=8.
+
+i2: b2^2=16, pow2[2]=4, S2=1.5 => 16*4*1.5=96.
+
+Sum = 0.5+8+96 = 104.5? But expected 141. So our formula wrong? Wait because we missed factor 2^{i-j-1} but j can equal i => exponent -1? If j=i, i-j-1 = -1. But we defined pair only when j <= i; For j=i, we need subsets where min=max same element (subset of a single element). For subset size 1, we have no elements between, but exponent is 0. But our formula gives 2^{i-i-1}=2^{-1}. Should be 1. So formula incorrect for j=i. So we must handle j=i separately? Actually the exponent 2^{i-j-1} for i=j: 2^{-1} not correct. In our derivation, number of subsets where j and i selected and other indices between them optional: there are no between if j=i, so number of subsets is 1. So formula should be 2^{i-j-1} with exponent i-j-1 only when i>j; when i=j exponent 0.
+
+Thus we can't use uniform formula. We need separate handling for j=i: contribution = b[i]^3.
+
+Alternatively we can adjust formula: For j<i, use exponent. For j=i, exponent 0. So add b[i]^3.
+
+We can incorporate by writing sum_{i} b[i]^3 + sum_{i} b[i]^2 * sum_{j<i} b[j] * 2^{i-j-1}.
+
+So compute for i: pow2[i] * S_inc[i] where S_inc[i] = sum_{j=0}^{i-1} b[j] * invpow2[j+1]. Note j+1 up to i. We'll compute prefix excluding current.
+
+Implementation: maintain prefix sum P; initially 0. For each i from 0 to n-1:
+- add contribution from single element: (b[i]^3)%mod.
+- add contribution from earlier j: b[i]^2 * P %mod. Because P = sum_{j=0}^{i-1} b[j] * 2^{-(j+1)}? Wait need to multiply by 2^{i}. To compute b[i]^2 * 2^{i} * sum_{j<i} b[j] * 2^{-(j+1)} = b[i]^2 * pow2[i] * SumHelper.
+
+Thus we maintain cumulative sum S = sum_{j=0}^{i-1} b[j] * invpow2[j+1]. Then contribution_2 = b[i]^2 %mod * pow2[i] %mod * S %mod.
+
+Then update S += b[i] * invpow2[i+1] for next.
+
+Check with example:
+
+b=[1,2,4]
+pow2: 1,2,4
+invpow2: inv2=0.5, inv4=0.25, inv8=0.125.
+
+Compute:
+
+i=0: b=1
+- single: 1^3=1
+- plus: b^2 * pow2[0]=1*1=1 * S(=0)=0
+sum=1
+Update S=0 + 1*invpow2[1]=0+0.5=0.5
+
+i=1: b=2
+- single: 8
+- plus: b^2=4 * pow2[1]=2 => 8 * S=0.5 => 4
+sum+=4 => total 1+8+4=13? Wait mistake compute: 8 + 4 =12? Let's compute: single 8, plus 4, total 12. plus previous 1 ->13? but result 1+12=13.
+Add to total so far 13.
+Update S += 2*invpow2[2]=2*0.25=0.5 => S=1.0
+
+i=2: b=4
+- single: 64
+- plus: b^2=16 * pow2[2]=4 =>64 * S=1.0 =>64
+total add 64+64=128
+Running total: 13+128=141. Good! Works.
+
+Thus algorithm O(n log n) for sorting + O(n). Complexity fine.
+
+Proof: S = sum_{j<i} b[j] * 2^{-(j+1)} mod. At step i, contribution for subsets where i is max, j is min (<i) is b[i]^2 * 2^{i-j-1} * b[j] = b[i]^2 * pow2[i] * invpow2[j+1] * b[j]. Summed over j< i gives b[i]^2 * pow2[i] * S. Additionally single-element subsets (j=i) contribute b[i]^3.
+
+Need modular inverse of 2 mod 1e9+7; compute once. Use powmod(2, mod-2).
+
+Edge case duplicates: sorting handles duplicates fine; but our derivation uses indices j < i if equal values non necessarily smaller due to duplicates but okay.
+
+Proof: uniq? For duplicates, min value may equal max value if all equal; our formula includes j < i but duplicates min can equal max? When b[j]==b[i] but j<i. In subset where all elements equal, min and max are equal to that value. But we counted contributions with j<i where max index > min index but values equal. Do we double count subsets where min=max but chosen indices distinct? A subset of size>1 where all elements equal: min=max equal same value. For such subset, our formula would treat min index j <= i. But min may be any one of the elements, max any maybe same or later. Actually for equal values, our sorted array will have indices; we are implicitly assuming min is first index in subset? Let's think. For subset of equal elements, e.g., [x,x] of indices j<k. Then min and max values same x. In our counting, we consider pair (j,k) with j < k. This subset would be counted once with min index j, max index k (distinct). But we also might consider other ordering? For subset {x,x} there are 2! choosing min and max same value but we need to count each subset once. For each subset, there is a unique min index (the smallest index among chosen indices) and max index (the largest index among chosen indices). So each subset with equal values will have min index = first chosen index, max index = last chosen index. So counting by pair (j,i) where j min index and i max index corresponds one-to-one. Good.
+
+Also single-element subsets are counted once as j=i. So formula stands.
+
+Let's implement.
+
+Edge conditions: mod=10**9+7.
+
+Compute pow2 = [1] * (n+1), for k from1..n: pow2[k] = pow2[k-1]*2 % mod.
+
+Compute inv2 = pow(2, mod-2, mod). compute invpow2 list same length. invpow2[0] ??? We need invpow2[j+1] for j=0..n-1, so up to n. Set invpow2[0] =1 maybe unused. Then for k from1..n: invpow2[k] = invpow2[k-1] * inv2 % mod.
+
+Now algorithm:
+
+total = 0
+S = 0
+for i in range(n):
+    x = b[i]
+    # singleton
+    total = (total + pow(x,3,mod)) % mod
+    # contribute from earlier minima
+    contrib = (x*x %mod) * pow2[i] %mod * S %mod
+    total = (total + contrib) %mod
+    S = (S + x * invpow2[i+1]) %mod
+
+Return total.
+
+Complexities: pow(x,3) mod. Use pow(x, 3, mod). Actually x^3 could overflow python int? but within Python large okay.
+
+Let's produce final code. Also need to import typing List.
+
+Check for n=1: S=0, i=0: add x^3. correct. For duplicates etc.
+
+Double-check example3: [1,1,1] sorted same.
+
+Compute algorithm:
+
+b=[1,1,1], pow2 [1,2,4].
+
+invpow2: 1, inv2, inv4, inv8.
+
+S0=0.
+
+i0: single 1, total=1; contrib=0; S +=1*invpow2[1]=0.5
+
+i1: single 1, total=2; contrib: x^2=1*pow2[1]=2 * S=0.5 =>1 ; total=3; S +=1*invpow2[2]=0.25 => S=0.75
+
+i2: single 1 => total=4; contrib: pow2[2]=4*1=4 * S=0.75=>3; total=7. Works.
+
+Thus answer 7.
+
+Large n up to 1e5, pow2 up to 1e5 maybe need pow2 array length n+1. Good.
+
+We need to multiply by x^2 early but note x up to 1e9 may overflow not but mod.
+
+Edge: Use pow(x, 3, mod) to get remainder quickly.
+
+Now produce explanation.
+
+<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every non empty subset `S` of indices
+
+```
+max(S) = maximum value in S
+min(S) = minimum value in S
+power(S) = max(S)^2 · min(S)
+```
+
+The task is to compute the sum of `power(S)` over all `2^N – 1` non empty subsets,
+`N = len(nums)`  
+and return the answer modulo  
+
+```
+MOD = 10^9 + 7
+```
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* Order of heroes in the array does **not** matter – only the multiset of
+  values is relevant.
+* After sorting the array increasingly
+
+```
+b[0] ≤ b[1] ≤ … ≤ b[N-1]
+```
+
+any subset has
+
+* the **minimum** at some index `j`
+* the **maximum** at some index `i` with `j ≤ i`
+
+and all other chosen indices lie in the interval `(j , i)`  
+(because if an index outside this interval were chosen it would create
+a smaller minimum or a larger maximum).
+
+For fixed `j < i`
+
+```
+#ways to complete the subset = 2^(i-j-1)        (each middle element may be chosen or not)
+```
+
+The contribution of all subsets that use `j` as the minimum and `i`
+as the maximum is
+
+```
+b[i]^2 · b[j] · 2^(i-j-1)
+```
+
+For `j == i` (a singleton subset)
+the number of possibilities is exactly `1`, so its contribution is
+
+```
+b[i]^3
+```
+
+--------------------------------------------------------------------
+
+#### 2.  Reformulation
+
+Let
+
+```
+pow2[k]   = 2^k  (mod MOD)          0 ≤ k ≤ N
+inv2      = 2^(MOD-2) (mod MOD)    // modular inverse of 2
+invpow2[k] = 2^(-k) (mod MOD)      // (inv2)^k
+```
+
+Notice
+
+```
+2^(i-j-1) = 2^i · 2^-(j+1)          (mod MOD)
+         = pow2[i] · invpow2[j+1]
+```
+
+Therefore
+
+```
+contribution(j < i) = b[i]^2 · pow2[i] · b[j] · invpow2[j+1]
+```
+
+For fixed `i` sum over all `j < i`:
+
+```
+Σ_{j<i} b[j] · invpow2[j+1]           (independent of i)
+```
+
+So if we know the prefix sums
+
+```
+pre[i] = Σ_{j=0}^{i-1} b[j] · invpow2[j+1]      (pre[0] = 0)
+```
+
+the total contribution of the pairs `j < i` is
+
+```
+b[i]^2 · pow2[i] · pre[i]
+```
+
+Finally the whole answer is
+
+```
+answer = Σ_{i=0}^{N-1} ( b[i]^3 + b[i]^2 · pow2[i] · pre[i] )   (mod MOD)
+```
+
+--------------------------------------------------------------------
+
+#### 3.  Algorithm
+```
+sort nums -> b
+pre = 0
+answer = 0
+
+pre_pow2[0] = 1
+for k = 1 … N        // powers of 2
+    pre_pow2[k] = pre_pow2[k-1] * 2 % MOD
+
+invPow2[0] = 1
+for k = 1 … N
+    invPow2[k] = invPow2[k-1] * inv2 % MOD
+
+for i = 0 … N-1
+    x = b[i]
+    // singleton subsets --------------------------------------------
+    answer += x^3
+    answer %= MOD
+
+    // subsets where i is the maximum and j < i is the minimum --------
+    answer += (x*x % MOD) * pre_pow2[i] % MOD * pre % MOD
+    answer %= MOD
+
+    // update prefix sum for the next iteration ----------------------
+    pre += x * invPow2[i+1] % MOD
+    pre %= MOD
+
+return answer % MOD
+```
+
+All operations are performed modulo `MOD`.
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the correct sum of powers.
+
+---
+
+##### Lemma 1  
+For every pair of indices `j < i` the sum of powers of all subsets
+whose smallest element is `b[j]` and largest element is `b[i]`
+equals  
+
+`b[i]^2 · b[j] · 2^(i-j-1)`.
+
+**Proof.**
+
+*All subsets that satisfy the condition*  
+must contain the two fixed indices `j` and `i`.  
+Every index `t` with `j < t < i` may be chosen or not, independently.
+Thus there are `2^(i-j-1)` different subsets.
+Each of them has the same maximum `b[i]` and minimum `b[j]`, hence the
+same power value `b[i]^2 · b[j]`.  
+Multiplying the power of a single subset by the number of subsets gives
+the claimed sum. ∎
+
+
+
+##### Lemma 2  
+During the execution of the algorithm after the `i`‑th loop iteration
+(the iteration with `b[i]`) the variable `pre` equals  
+
+`Σ_{j=0}^{i} b[j] · 2^-(j+1)`  (mod `MOD`).
+
+**Proof by induction over `i`.**
+
+*Base (`i = 0`)*  
+Before the first iteration `pre = 0`.  
+After the first iteration we execute
+
+```
+pre = pre + b[0] * invPow2[1]   (invPow2[1] = 2^-1)
+```
+hence `pre = b[0] · 2^-1` – the formula holds for `i = 0`.
+
+*Induction step*  
+Assume the formula true after iteration `i-1`.  
+At the beginning of iteration `i` we have
+
+```
+pre = Σ_{j=0}^{i-1} b[j] · 2^-(j+1)
+```
+
+During the iteration we perform
+
+```
+pre += b[i] * invPow2[i+1]  (invPow2[i+1] = 2^-(i+1))
+```
+
+Therefore after the update
+
+```
+pre = Σ_{j=0}^{i} b[j] · 2^-(j+1)
+```
+which is exactly the desired form. ∎
+
+
+
+##### Lemma 3  
+After processing index `i` the value added to `answer` by the algorithm
+equals the total power of *all* subsets that have
+
+* maximum equal to `b[i]`, and
+* minimum equal to some `b[j]` with `j ≤ i`.
+
+**Proof.**
+
+The algorithm adds two terms:
+
+1. `b[i]^3` – accounts for all singleton subsets `{b[i]}`.  
+   There is exactly one such subset, its power is `b[i]^3`.
+
+2. `b[i]^2 · pow2[i] · pre` where, by Lemma&nbsp;2,
+   `pre = Σ_{j=0}^{i-1} b[j] · 2^-(j+1)`.  
+   Substituting gives
+
+```
+b[i]^2 · Σ_{j=0}^{i-1} b[j] · 2^i · 2^-(j+1)
+       = Σ_{j=0}^{i-1} b[i]^2 · b[j] · 2^(i-j-1)
+```
+
+By Lemma&nbsp;1 the summand is exactly the combined power of all subsets
+with minimum `b[j]` and maximum `b[i]`.  
+Summing over all `j < i` therefore gives the power of all non‑singleton
+subsets whose maximum equals `b[i]` and minimum is somewhere to the
+left.  
+Adding the singleton case completes the proof. ∎
+
+
+
+##### Lemma 4  
+During the whole execution every non‑empty subset of indices is counted
+exactly once.
+
+**Proof.**
+
+Take any non‑empty subset `T` of indices.
+
+* Let `i` be the index of the maximum value of `T` in the sorted array.
+* Let `j` be the index of the minimum value of `T` (the leftmost element
+  after sorting).
+
+Because the array is sorted, we have `j ≤ i`.
+
+During loop iteration `i` the algorithm adds
+exactly the power of all subsets with maximum `b[i]` and
+minimum at some `b[j']` with `j' ≤ i`.  
+Among these subsets, the subset `T` has minimum index `j`.  
+By Lemma&nbsp;3 all such subsets are counted in the iteration `i`
+(and nowhere else), hence `T` is counted exactly once. ∎
+
+
+
+##### Theorem  
+The algorithm returns  
+
+```
+Σ_{non empty subsets S}  (max(S)^2 · min(S))   (mod 10^9+7)
+```
+
+**Proof.**
+
+By Lemma&nbsp;4 every non‑empty subset contributes to the sum exactly
+once.  
+By Lemma&nbsp;3 the contribution added by the algorithm for the subset
+is exactly its power.  
+Therefore the final value of `answer` equals the required sum
+(modulo `MOD`). ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+*Sorting* : `O(N log N)`  
+*Main loop* : `O(N)`  
+*Memory*: arrays of size `N+1` → `O(N)`
+
+With `N ≤ 10^5` this easily satisfies the limits.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def sumOfPower(self, nums: List[int]) -> int:
+        MOD = 10 ** 9 + 7
+        n = len(nums)
+        b = sorted(nums)
+
+        # powers of two
+        pow2 = [1] * (n + 1)
+        for i in range(1, n + 1):
+            pow2[i] = (pow2[i - 1] << 1) % MOD
+
+        inv2 = pow(2, MOD - 2, MOD)                # modular inverse of 2
+        invpow2 = [1] * (n + 1)                    # invpow2[k] = 2^-k
+        for i in range(1, n + 1):
+            invpow2[i] = invpow2[i - 1] * inv2 % MOD
+
+        pre = 0          # prefix sum Σ b[j] * 2^-(j+1)
+        ans = 0
+
+        for i in range(n):
+            x = b[i]
+            # singleton subsets
+            ans += pow(x, 3, MOD)
+            ans %= MOD
+
+            # subsets with max=x and min at a previous element
+            contrib = (x * x % MOD) * pow2[i] % MOD
+            contrib = contrib * pre % MOD
+            ans = (ans + contrib) % MOD
+
+            # update prefix for the next iteration
+            pre = (pre + x * invpow2[i + 1]) % MOD
+
+        return ans % MOD
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required function signature.

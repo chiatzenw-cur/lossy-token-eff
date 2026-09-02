@@ -1,0 +1,413 @@
+<|channel|>analysis<|message|>We need to count subarrays where count of elements where nums[i] % modulo == k equals k modulo modulo. Let’s define b[i] = 1 if nums[i] % modulo == k else 0. Then cnt is sum of b over subarray. Condition: cnt % modulo == k. But modulo can be large up to 1e9, but subarray length at most 1e5, cnt <= n(n?) Actually cnt <= n. So cnt < modulo. For cnt < modulo, cnt % modulo == cnt. So the condition reduces to cnt == k. But modulo could be <= n; but some cnt can be >= modulo? n <= 1e5; modulo can be up to 1e9, so modulo bigger than n, so cnt < modulo always, except if modulo <= n. But modulo up to 1e9. In sample 1, modulo=2, k=1, cnt from 0 to 3. If modulo <= n, cnt could be >= modulo; but condition is cnt % modulo == k, not cnt == k. So we need general case: cnt mod modulo == k. cnt can be at most ceil(n) but modulo maybe small.
+
+But we can transform problem: Let prefix sum P[i] = sum of b[0..i-1] (0-indexed). For subarray l..r we have cnt = P[r+1] - P[l]. Condition: (P[r+1] - P[l]) % modulo == k. Equivalent to (P[r+1] - P[l]) mod modulo == k. Solve for pairs (l,x) where x = P[r+1] mod modulo. Need to count subarrays quick.
+
+Define prefix mod modulo. Let S[i] = P[i] mod modulo for i=0..n. We need pairs (i,j) with i<j such that (S[j] - S[i]) mod modulo == k. Equivalent to S[i] == (S[j] - k) mod modulo. So for each j, we need number of i<j where S[i] == (S[j] - k) mod modulo. Classic counting with prefix freq dictionary.
+
+We can iterate j from 0 to n, maintain freq of S[i] seen so far. Initially freq of S[0] = 1. For j from 1..n, compute S[j], count += freq[(S[j] - k) mod modulo]. Then increment freq[S[j]].
+
+Edge case: modulo can be up to 1e9 -> using dictionary of int keys fine.
+
+Complexities: O(n). Need to compute S[i] mod modulo; but modulo might be 1e9, but P[i] can be large up to n=1e5. So using Python's % mod is fine. A further optimization: b[i] is 0 or 1, so P[i] increments at most 1 each step. So S[i] = (S[i-1] + b[i-1]) % modulo.
+
+Also note that modulo may be 1: then k must be 0. In that case, S[i] always 0, condition: (S[j]-S[i])%1==0 always true if k==0. So all subarrays counted: n*(n+1)/2. Our algorithm works because modulo=1. (S[j]-k) mod 1 = 0, freq[0] counts all previous prefixes. Start freq[0]=1; for each j, we add freq[0] which is j (since S always 0). So sum of 0..n-1? Let's test: j=1, add 1 => 1; freq[0] becomes 2; j=2, add 2 => 3; j=3, add3 =>6; etc. That matches n*(n+1)/2.
+
+Ok.
+
+Edge: k<modulo, but we need to compute (S[j]+modulo - k)%modulo or (S[j] - k) % modulo. In Python negative % returns positive, but we can adjust.
+
+Implementation details: In loops, maintain freq dictionary: freq = defaultdict(int). freq[0]=1.
+
+For each j from 1 to n:
+
+- b = 1 if nums[j-1] % modulo == k else 0
+
+- S_j = (S_j + b) % modulo
+
+- need_key = (S_j - k) % modulo
+
+- count += freq[need_key]
+
+- freq[S_j] += 1
+
+Return count.
+
+But confirm that we use S_j as prefix sum mod modulo by cumulative. Implementation ensures S_j is the current prefix sum mod modulo.
+
+But we need to compute S_j as 'current prefix sum modulo'.
+
+Let's write code:
+
+count = 0
+freq = defaultdict(int)
+mod = modulo
+k = k
+S = 0
+freq[0] = 1
+
+for j in range(len(nums)):
+    if nums[j] % mod == k:
+        S = (S + 1) % mod
+    else:
+        S = S % mod
+    need = (S - k) % mod
+    count += freq[need]
+    freq[S] += 1
+
+Return count.
+
+But we must consider when mod==0? Not allowed in constraints: 1 <= modulo >= 1.
+
+But computing S % mod when mod==1? That's fine, we keep S as int.
+
+But we have to compute int S_j each iteration: S = (S + b) % mod. That is fine.
+
+Now test with examples:
+
+Example1: nums=[3,2,4], modulo=2,k=1
+
+- freq[0]=1
+
+- S=0
+j=0: nums[0]%2=1==k -> b=1 -> S=1%2=1
+need=(1-1)%2=0 => count+=freq[0]=1 -> count=1
+freq[1]++ => freq[1]=1
+
+j=1: nums[1]%2=0 != k -> b=0 -> S=1%2=1
+need=(1-1)%2=0 => count+=freq[0]=1 -> count=2
+freq[1]++ => freq[1]=2
+
+j=2: nums[2]%2=0 -> b=0 -> S=1%2=1
+need=(1-1)%2=0 => count+=freq[0]=1 -> count=3
+freq[1]++ => freq[1]=3
+
+Return 3. Works.
+
+Example2: nums=[3,1,9,6], modulo=3, k=0
+
+- freq[0]=1
+
+S=0
+j=0: 3%3=0==k -> b=1 -> S=(0+1)%3=1
+need=(1-0)%3=1 => count+=freq[1]=0 -> 0
+freq[1]++ => 1
+
+j=1: nums[1]=1%3=1!=0 -> b=0 -> S=1%3=1
+need=(1-0)%3=1 => count+=freq[1]=1 -> 1
+freq[1]++ => 2
+
+j=2: 9%3=0==k -> b=1 -> S=(1+1)%3=2
+need=(2-0)%3=2 -> count+=freq[2]=0 -> 1
+freq[2]++ => 1
+
+j=3: 6%3=0==k -> b=1 -> S=(2+1)%3=0
+need=(0-0)%3=0 -> count+=freq[0]=1 -> 2
+freq[0]++ => freq[0]=2
+
+Result 2 matches.
+
+Edge: Example where modulo=0? No.
+
+Edge: large mod like 1e9 and n <=1e5, no overflow.
+
+Potential issue: In Python, negative modulo: (S - k) % mod works fine.
+
+Memory: freq dictionary holds at most mod unique values <= n+1, but mod may be large and we'll not have many distinct values due to small p changes. Since S_to increments of 1 for each step, so S will be at most n+1 distinct distinct values <= n, so freq size <= O(n). Good.
+
+But also we only need to compute need; we could store freq of all encountered prefix values.
+
+Implementation details: use Counter or dict.
+
+Complexities: O(n). Works.
+
+Check corner case: modulo=1? Works.
+
+Edge: K may be 0 or small.
+
+Edge: k could be 0 if modulo>0.
+
+Double-check: We need count of subarrays where cnt%modulo == k. Equivalent to prefix difference mod modulo = k. Our transformation uses P difference mod modulo. Which uses prefix sums of b (which are zeros or ones). So yes.
+
+But we need to be careful about modulo being 0? Not allowed.
+
+Now summary.
+
+Let's propose code:
+
+from collections import defaultdict
+from typing import List
+
+class Solution:
+    def countInterestingSubarrays(self, nums: List[int], modulo: int, k: int) -> int:
+        freq = defaultdict(int)
+        S = 0
+        freq[0] = 1
+        count = 0
+        mod = modulo
+        for j in range(len(nums)):
+            if nums[j] % mod == k:
+                S = (S + 1) % mod
+            else:
+                # S stays same
+                S = S % mod
+            need = (S - k) % mod
+            count += freq[need]
+            freq[S] += 1
+        return count
+
+But there is small nuance: S always 0..mod-1. Compute S = (S + 1) % mod if matches else keep S; but we do S = S % mod anyway; but no change. That's fine.
+
+Test with more cases: trivial case: nums=[1], modulo=2, k=0. b=0 -> S=0 ; need=(0-0)%2=0; count+=1 ; freq[0] becomes 2 -> count 1. That's correct: subarray [1] has cnt=0 -> 0%2==0. So yes.
+
+Test with arr 1, b=1 -> S=1 mod 2 -> need=(1-0)%2=1; freq[1]=0 => total 0. Subarray [1] has cnt=1 -> 1%2==1 not equal k=0.
+
+Now test with modulo=2, k=1, arr [1]. b=1; S=1; need=0; freq[0]=1 => count=1. Works.
+
+Edge: modulo huge 1e9, only few matches -> S remains 0 most of time. Works.
+
+Check for correctness: The sum is integer; might exceed Python int? n <= 1e5, subarray count <= n*(n+1)/2 <= 5e9, fits.
+
+Now optimization: We might not need to do S = S % mod every iteration, if we increment and mod only when > mod. But fine.
+
+Edge: Suppose mod = 1e9. S starts 0. S + 1 < mod, so S stays 0 or 1 etc. Good.
+
+Better to compute need = (S - k) % mod, but we used modulo; that may be heavy but fine.
+
+Edge: if mod=1? (S - k)%1 becomes 0.
+
+Hence final code.
+
+May also handle k >= modulo? But constraint says k < modulo.
+
+Let's produce final answer with explanation.
+
+Include imports: typing.List, collections.defaultdict.
+
+Now produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every element `x` of `nums` we consider
+
+```
+b[i] = 1   if nums[i] % modulo == k
+b[i] = 0   otherwise
+```
+
+For a subarray `l … r`
+
+```
+cnt = Σ b[i]         (l ≤ i ≤ r)
+```
+
+The subarray is *interesting* iff
+
+```
+cnt % modulo == k                     (1)
+```
+
+--------------------------------------------------------------------
+
+#### 1.   Prefix re‑formulation
+
+Let
+
+```
+P[i] = Σ b[0 … i-1]          (prefix sum, P[0] = 0)
+S[i] = P[i] % modulo         (prefix sum taken modulo)
+```
+
+For a subarray `l … r`
+
+```
+cnt    = P[r+1] - P[l]
+cnt % modulo = (S[r+1] - S[l]) % modulo
+```
+
+The condition (1) becomes
+
+```
+(S[r+1] - S[l]) % modulo == k
+⇔     S[l] == (S[r+1] - k) mod modulo
+```
+
+So for every `j = r+1` we only have to look at how many earlier
+prefixes `S[i]` (`i < j`) have the value
+
+```
+S[i] = (S[j] - k) mod modulo
+```
+
+--------------------------------------------------------------------
+
+#### 2.   Counting while scanning once
+
+While scanning the array from left to right we keep a dictionary of
+how many times each prefix value has appeared.
+
+```
+freq[ s ]  = occurrences of prefix value s among S[0 … current]
+```
+
+Initial state
+
+```
+freq[0] = 1          (S[0] = 0)
+current_prefix = 0
+answer = 0
+```
+
+For each element `nums[j]`
+
+```
+# update prefix
+if nums[j] % modulo == k :      # b[j] == 1
+        current_prefix = (current_prefix + 1) % modulo
+else :
+        current_prefix = current_prefix % modulo
+
+# subarrays ending at j
+need = (current_prefix - k) % modulo
+answer += freq[need]
+
+# remember this prefix for future
+freq[current_prefix] += 1
+```
+
+The loop runs `n` times, each with O(1) work → **O(n)** time,  
+`freq` holds at most `n+1` entries → **O(n)** memory.
+
+--------------------------------------------------------------------
+
+#### 3.   Correctness Proof  
+
+We prove that the algorithm returns exactly the number of interesting
+subarrays.
+
+---
+
+##### Lemma 1  
+For every `j (0 ≤ j ≤ n)` the variable `current_prefix` equals `S[j]`
+(the prefix sum modulo `modulo` of the first `j` elements).
+
+**Proof.**
+
+By construction `current_prefix` starts from `0 = S[0]`.  
+Assume it holds for index `j`.  
+For element `nums[j]` we compute
+
+```
+b[j] = 1  ⇔ nums[j] % modulo == k
+current_prefix = (current_prefix + b[j]) % modulo
+```
+
+So after the update
+
+```
+current_prefix = (S[j] + b[j]) % modulo = S[j+1]
+```
+
+Thus the invariant holds for `j+1`. ∎
+
+
+
+##### Lemma 2  
+During the iteration for index `j` (0‑based) the value added to
+`answer` equals the number of subarrays ending at `j`
+whose `cnt` satisfies condition (1).
+
+**Proof.**
+
+At the beginning of the iteration `freq` contains exactly the values
+`S[i]` for all `i < j`.  
+By Lemma&nbsp;1 `current_prefix = S[j+1]`.
+
+A subarray ends at `j` iff it starts at some `l ≤ j`.  
+Its `cnt` satisfies (1) exactly when
+
+```
+S[l] == (S[j+1] - k) mod modulo
+```
+
+The dictionary entry `freq[need]`, with `need = (S[j+1]-k) mod modulo`,
+stores the number of indices `l` with `S[l] = need`.  
+Adding this value to `answer` counts **all** interesting subarrays
+ending at `j`. ∎
+
+
+
+##### Lemma 3  
+After processing all indices, `answer` equals the total number of
+interesting subarrays of `nums`.
+
+**Proof.**
+
+Every non‑empty subarray has a unique right end `j`.  
+By Lemma&nbsp;2 the iteration for `j` adds exactly the number of
+interesting subarrays ending at `j` to `answer`.  
+Summing over all `j` thus counts all interesting subarrays once,
+decreasing none. ∎
+
+
+
+##### Theorem  
+`countInterestingSubarrays` returns the number of interesting subarrays
+of `nums`.
+
+**Proof.**
+
+Directly from Lemma&nbsp;3. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.   Complexity Analysis
+
+For an array of length `n`
+
+```
+Time   :   O(n)
+Memory :   O(n)          (dictionary of at most n+1 keys)
+```
+
+The answer can be as large as `n(n+1)/2`, which fits into Python's
+arbitrary types and into 64‑bit signed integers for n ≤ 10⁵.
+
+--------------------------------------------------------------------
+
+#### 5.   Reference Implementation  (Python 3)
+
+```python
+from typing import List
+from collections import defaultdict
+
+class Solution:
+    def countInterestingSubarrays(self, nums: List[int], modulo: int, k: int) -> int:
+        """
+        Returns the number of subarrays that are interesting.
+        """
+        freq = defaultdict(int)
+        freq[0] = 1                # prefix sum modulo modulo for empty prefix
+        prefix = 0
+        ans = 0
+        mod = modulo
+
+        for j, val in enumerate(nums):
+            # update prefix: +1 if this element contributes to cnt
+            if val % mod == k:
+                prefix = (prefix + 1) % mod
+            else:
+                # prefix stays the same (modulus is unchanged)
+                prefix = prefix % mod
+
+            # subarrays ending at j that satisfy condition
+            need = (prefix - k) % mod
+            ans += freq[need]
+
+            # remember this prefix for future subarrays
+            freq[prefix] += 1
+
+        return ans
+```
+
+The implementation follows exactly the algorithm proven correct
+above.

@@ -1,0 +1,662 @@
+<|channel|>analysis<|message|>We need to determine maximum length of concatenated string using available strings: "AA", "BB", "AB" where we can choose any subset and order in any order, with restriction that resulting string cannot contain "AAA" or "BBB". Equivalent to constraint on runs of consecutive identical characters: cannot have run of same length >=3? More precisely, "AAA" disallows 3 consecutive A's. So runs of A's length at most 2. Similarly runs of B's order at most 2. Also we can mix AB strings. We can think about constructing string by concatenation of components: "AA" gives 2 consecutive A's, "BB" gives 2 consecutive B's, "AB" gives AB (ending with B). But note the string "AB" is two chars. There is no substring "BA" available? The AB contributes to end with B, start with A. So no "BA" string.
+
+We can select arbitrary numbers a = chosen "AA", b = chosen "BB", c = chosen "AB". For each arrangement we need to avoid AAA or BBB. We can treat each component as a block of length 2. We want to arrange them to maximize length > given counts.
+
+Observation: We can choose maybe all strings if feasible. But there may be constraints where it's impossible to arrange all. For small counts maybe all arranged. Determine maximum length given counts.
+
+Observation: If we have in our string, we can have a run of A repeating via adjacent "AA" blocks perhaps separated by "AB" or "BA"? But we don't have "BA". So adjacency of blocks matters.
+
+Let's analyze what adjacent block combinations produce runs.
+
+Blocks:
+
+- "AA": start A, end A.
+
+- "BB": start B, end B.
+
+- "AB": start A, end B.
+
+We cannot have B->A adjacency via "BA" since not available. So we can have sequences:
+
+- "AA" followed by "AA" -> start A, end A; the concatenation results in "AAAA" -> contains "AAA" inside. So cannot place two "AA" consecutively without something else in between. Similarly "BB" followed by "BB" -> "BBBB" -> bad.
+
+But we can intersperse with AB to avoid runs.
+
+Consider pattern with AB blocks: AB starts A, ends B. So if you place AB after "AA", concatenation: "AA" ends with A, "AB" starts with A -> "AAAA"? Actually "AA" + "AB" = "aaab" but no spaces: "AAAB" -> "AAA" occurs because we have A,A (from first) + A (from second) = "AAA". So we cannot place AB immediately after AA. Similarly "BB" before AB: "BB" ends with B, B start with A? Wait AB starts with A, so "BB" + "AB" = "BBAB" -> "AB" part starts with A. Check for "BBB": we have "BB" ends, and next char 'A', so no triple B. So okay.
+
+Similarly, when placing AB before AA: "AB" ends with B, "AA" starts with A -> "BAB" -> no "AAA". There's no "AA" after AB? Let's check: "AB" ends B, "AA" starts with A, so no run of As.
+
+Ok.
+
+We also consider "AB" after "AB": "ABAB": segments: "AB" + "AB" -> B -> A? Wait "AB": end B, next "AB" start A, so we have "BA" substring? No problem. Does that produce "AAA" or "BBB"? No. So AB repeated many times is okay.
+
+Similarly we can place "BB" after "AB": "ABAB" -> "AB" ends B, "BB" starts B, so we have "BB" overlapping with 'B' from previous? Actually we need to examine full string. "AB" + "BB" = "ABB B"? Wait "ABAB" = "ABAB"? No. Let's write: "AB" + "BB" = "ABBB". This contains "BBB" substring? "ABBB" has B,B,B starting at position 2: "BBB". So yes, cannot place "BB" before "AB"?? Let's analyze properly: "AB" ends with B, "BB" starts with B. So concatenation: AB BB = "ABBB". This contains "BBB" substring "BBB". So cannot place "BB" immediately after "AB". Similarly, "AA" after "BB": "BB" ends B, "AA" starts A no issue. "AA" after "AA" obviously bad. "BB" after "BB" bad. "AA" after "AB": we saw okay. "AB" after "AA": bad. "AB" after "BB": bad. But "AB" after "AB": okay.
+
+Also "BB" after "AB": we saw bad. "AB" after "BB": okay.
+
+So adjacency matrix of allowed transitions.
+
+Now we need to find arrangement of blocks maximizing length under constraints.
+
+Because each block length 2, but we can also choose to take fewer than available to avoid conflicts.
+
+We can think of dynamic programming for counting.
+
+States: we have counts of remaining AA, BB, AB. We need to produce string length (maximum). The decision: choose next block type that does not violate constraints relative to previous block type.
+
+But all blocks start and end with same letter (except AB). This can be represented as token type: 'AA', 'BB', 'AB', with condition that transitions are allowed only if resulting string doesn't contain AAA or BBB.
+
+We can do DP over counts with last block type maybe or last character? The constraint only cares about last two characters. Actually it forbids triples of same letter. Therefore, to decide next block, we only need to know last two characters of current string. Because each block might affect last two characters unwinding.
+
+But we can keep simpler: track last block type (since each block length 2). But we need to know for transitions if there's risk due to concatenation of block boundaries.
+
+Consider if we have last block type t, and we want to add block B. The new string will have at most 4 chars new? But we only need to ensure no triple same letter across boundary. That's determined by last two chars of current string and first two of new block. Since each block is 2 chars; but we only need to know maybe last two chars and first two of new block. But we can precompute adjacency matrix for each pair of block types if we ensure current string ends with some pattern that doesn't cause triple when concatenating.
+
+However, complications: Suppose end of current string length 1? But we always start with empty. After first block, we know last two letters down to from that block. So we can just track last two letters, maybe.
+
+But we might model simply: For each previous block type t and next block type t', we first check if the concatenation of current last char of t and first char of t' produce a triple when combined with first char of t' previous? Wait triple arises when we have pattern of same char across boundary. Example: last block 'AA', next block 'AB'. Last two of 'AA' are 'AA', last char 'A', first char of 'AB' is 'A', then we get 'AAA' across boundary. So forbidden.
+
+Similarly 'BB' -> 'AB' allowed? 'BB' ends B, 'AB' starts A, so no triple. 'AB' -> 'BB': 'AB' ends B, 'BB' starts B, so we have BB then B => BBB? Actually we have AB ends B, followed by BB starts B: So pattern 'B' 'B' 'B' -> BBB. So forbidden.
+
+'AB' -> 'AB': AB ends B, AB starts A, no triple.
+
+Also 'BB' -> 'AA': ends B, next starts A, no triple.
+
+'A' -> 'AA': ends with A as last char of previous string; but if previous string ends with ...? Actually for 'AA' we need to check triple across last two of previous and first of 'AA': if previous last two are 'AA', then adding 'AA' would produce 'AAA'. But we can incorporate that.
+
+But there is further complexity: Suppose previous string ends with B? It will have last two maybe 'AB' or 'BB' or 'BB'? The adjacency matrix may be insufficient. But we can keep last two characters state.
+
+Let's think: The string consists of characters A and B from the concatenated blocks. The underlying 2-character blocks are fixed: "AA","BB","AB". Not "BA". So we cannot start with B? We can start with B using "BB" or "AB"? AB starts with A. So we can start with B only with "BB" as first block, or we can start just after preceding "AB"? Actually we can start with "BB" obviously. But we could start with "AB" then first char A. So starting string may start with A if we have any AB or AA; could start with B if we have BB. Similarly endings.
+
+Therefore we need to find longest length given counts. Since counts small, we can brute force via DP? Recurrence DP[a][b][c][last1][last2] maximum length? but states would be 51^3 * 4 maybe 1e7? okay maybe large but maybe less.
+
+But we might find combinatorial closed form.
+
+Observations: The string can't contain triple AAA or BBB. So maximum runs of same letter length is 2. So we can treat this as tiling problem where we can use AA and AB blocks to create runs of A at most 2, and BB and AB for runs of B at most 2 but AB gives B after A.
+
+But AB contributes 1 A and 1 B. So AB used to break runs of B? Actually AB ends with B, which may extend run of B. But AB also create potential A-run at start: AB begins with A, so may start an A run.
+
+Since AB has different characters, it can help to separate runs. Let's think about constructing sequences of A and B runs allowed up to 2 consecutive same char. So length is 2*(#AA) + 2*(#BB) + 2*(#AB). We need to maximize length; but we might be forced to use fewer due to adjacency constraints.
+
+The adjacency constraints effectively prevent certain sequences of blocks: we cannot use AB after AA, can not use BB after AB, cannot use BB after BB? Wait we can use BB after BB? That would produce BBB? if last block is BB, the string ends with B, B. Adding another BB gives four B's: "BBBB" -> contains BBB triple. yes -> invalid. So we cannot have AB after AA and BB after AB, cannot have same block after same block, can also avoid BB after AB because of triple B across boundary. But BB after AB already for AB->BB. So adjacency table:
+
+- AA -> AB works? No (aa + ab = aaa). So AA -> AB leads to AAA triple at boundary. So forbidden.
+
+- AA -> BB works? AA ends with A, BB starts with B (different). So no triple. So allowed.
+
+- AA -> AA forbidden.
+
+- AA -> BB allowed.
+
+- AA -> AB forbidden.
+
+- BB -> AB forbidden? Let's check: BB ends B, AB starts A -> no triple B. So allowed.
+
+Wait earlier we said BB -> AB forbidden? Sorry we earlier mis-evaluated. Let's recalc: "BB" ends B, "AB" starts A. So run of B stops at 2. So AB start with A. So no triple BBB. So allowed. So BB -> AB is allowed.
+
+- AB -> BB forbidden (since AB ends B, BB starts B -> BBB). So AB -> BB not allowed.
+
+- AB -> AB allowed (AB ends B, AB starts A -> no triple).
+
+- AB -> AA allowed? AB ends B, AA starts A -> no triple.
+
+- AB -> AA allowed.
+
+- ABB? Actually AB -> AB? We checked.
+
+- BB -> AA allowed? BB ends B, AA starts A -> no triple.
+
+- BB -> AA allowed.
+
+- BB -> AB allowed.
+
+- BB -> BB forbidden.
+
+Thus transitions allowed matrix:
+
+AA -> AA forbidden
+AA -> BB allowed
+AA -> AB forbidden
+
+BB -> AB allowed
+BB -> AA allowed
+BB -> BB forbidden
+
+AB -> AB allowed
+AB -> AA allowed
+AB -> BB forbidden
+
+That seems okay.
+
+Also starting block: we can start with any block. So initial previous state none.
+
+Goal: maximize length subject to counts of each block.
+
+This is exactly a path problem on A-B counts.
+
+Because counts are small, can brute force exploring transitions with DP, but we can maybe use greedy logic.
+
+Observation: We can always use all components except maybe we need to skip some to avoid prohibited transitions.
+
+Potential maximal length: 2*(x+y+z) if we can arrange all blocks. But we can optionally drop some. So we need to decide orientation to include all except maybe few. Let's analyze.
+
+If we can use all blocks, we need to find an ordering such that after removing one block we get adjacency graph path that includes all nodes.
+
+Essentially we need to use multiset of blocks. We need to find a Hamiltonian path respecting adjacency and counts.
+
+This is like we have three types 0=A,1=B,2=AB? Since AB block considered two types?
+
+But we can treat it as X=AA, Y=BB, Z=AB.
+
+We can build graph with nodes = types; each node can be used multiple times.
+
+We need to check whether there exists a sequence using all tokens respecting adjacency constraints. That's akin to a BFS/DP that traverses counts.
+
+Since counts small, we can brute force by DP storing dp[a][b][c][last], where last is 0,1,2 representing last block. dp[a][b][c][last] = True if we can achieve length 2*(a+b+c) with counts (a,b,c). Actually we want to maximize length; but we can find whether full usage possible.
+
+But we don't need to store length; we can enumerates all states reachable.
+
+Let's implement DP BFS from state (0,0,0,last). but last? Start with none. We'll iterate adding blocks. Use bitset to store visited states.
+
+But we also need to maximize length when full usage not possible. We can compute maximum length by exploring all states and recording visited lengths.
+
+Because counts <= 50, we can have 51^3 ~ 132k states; times 3 last states is 400k. That's okay.
+
+We'll implement BFS or DP by iterative for each state compute reachable next states by adding one block of each type allowed given counts. We'll track visited states. Additionally final answer is max 2*(a+b+c) among visited states.
+
+Implementation details:
+
+dp[a][b][c][last] boolean. We start with dp[0][0][0][first] = True? Actually we need to indicate start with no last block? We can start with an implicit state with last = 3 meaning start (no previous). Then start exploring: from start state we can add any block that uses available counts: we can set transitions.
+
+Better: we can treat as string building: no constraints before first block.
+
+Thus we can allow any block to add any of the three types; no adjacency constraints needed for the first chosen block.
+
+So we can push all those states directly: e.g., dp[1][0][0][0] = True if x>=1. Similarly for others.
+
+Proceed dynamic programming: for each state we attempt to add block k if counts remaining and adjacency allowed between last and k.
+
+We need max length visited.
+
+We can implement using queue BFS. Complexity okay.
+
+Alternatively, we can use DP table dp[a][b][c][last] bool. We'll iterate a from 0..x, b from 0..y, c from 0..z, and for each last state exists we attempt to add next block; update new counts. But we need to avoid double counting (multiple states). But we can use DFS recursion with memoization. But easier is BFS.
+
+Implementation steps:
+
+Initialize visited dict: e.g., feasible[(a,b,c,last)] = True.
+
+Initialize queue with list of tuples: (a,b,c,last). Start with (0,0,0,3) last=3 indicates no previous.
+
+But we also may want to pre-insert states by adding first block from start: easier to incorporate in loop: when processing state we check all previous last values; but then at the start, we only have last=3. If we add any block k, we allow regardless of adjacency. So we can just check adjacency condition: If last==3 or transition allowed from last to k: allowed.
+
+Ok.
+
+We need adjacency matrix allowed[prev][next] in 0..2 for last types, plus special where prev='none', always True.
+
+Define indices: 0=AA, 1=BB, 2=AB.
+
+allowed matrix determined earlier.
+
+Let's confirm again:
+
+aa -> aa (0->0) forbidden
+aa -> bb (0->1) allowed
+aa -> ab (0->2) forbidden
+
+bb -> aa (1->0) allowed
+bb -> bb (1->1) forbidden
+bb -> ab (1->2) allowed
+
+ab -> aa (2->0) allowed
+ab -> bb (2->1) forbidden
+ab -> ab (2->2) allowed
+
+Thus allowed matrix =[[False,True,False],[True,False,True],[True,False,True]].
+
+Wait we had AB->AB allowed. So 2->2 True. AB->BB forbidden. So 2->1 False. AB->AA allowed. 2->0 True. So matrix as above matches.
+
+Now BFS:
+
+Initialize queue with (0,0,0,3). While queue not empty: pop state. Compute current length = 2*(a+b+c). Update max_length.
+
+Then attempt to add k in [0,1,2] if count not reached:
+if k==0 and a<x: newa = a+1; if last==3 or allowed[last][0]:
+    push (newa,b,c,0)
+Similarly for others.
+
+We must ensure we don't revisit same state. So visited set.
+
+Return max_length used.
+
+Complexities: up to 51^3*4 ~ 530k states visited max.
+
+Edge Cases: Starting at 0 length 0. That's okay.
+
+Let's test example 1: x=2,y=5,z=1. Our DP should find answer 12. Let's test mentally: total count 8 blocks yields 16 length; but maybe can't use all due to adjacency? But answer 12 indicates 6 blocks used. Wait length 12 /2 =6 blocks used; maybe due to adjacency constraints requiring fewer.
+
+Let's test our DP earlier. Probably correct.
+
+Example 2: x=3,y=2,z=2 => total 7 blocks => 14 length. So uses all. Good.
+
+Let's test with simple cases: x=1,y=1,z=0: we have "AA","BB". Can we arrange them? If we do "AA", "BB": no triple. So total length 4. Our DP should output 4. If "BB","AA": fine. Works.
+
+x=1,y=1,z=1: with blocks AA, BB, AB. Can we use all? Let's try sequence: AB first? AB->AA allowed? AB->AA allowed. After AB+AA, we have ends with A? AB ends B, AA starts A, so produce B A A? Actually AB ends B, AA starts A. So no triple. Then AB->AA doesn't create triple. Then AA->BB? after AA ends with A, BB starts B, so allowed. So AB, AA, BB works. Does it contain AAA? We have AB ends B; AA adds A,A giving B A A, no triple. Then AB+AA+BB gives B A A B B. Wait after AA ends A, next B from BB. So no triple. So we can use all 3 blocks. Our DP should yield 6 length.
+
+Edge case: Suppose x=3,z=0,y=0: 3 "AA" blocks. We cannot use all 3 since AA -> AA forbids. So max 1? Actually we can use 1 "AA" block. But could we use 2? Sequence "AA" "AA" gives AAA? Actually "AA" + "AA" => "AAAA" contains AAA. So only 1 such block. length 2. So DP will find better. Let's test: queue start: (0,0,0,3). Add AA: (1,0,0,0). From that state, cannot add AA again due to allowed[0][0] false. Nothing else. So max length 2. Good.
+
+Suppose x=2,y=1,z=0: two AA and one BB. How to arrange? Try AA, BB. Works: length 4. After that can't add AA? At state (1,1) last=1, we can try XX? We have still remaining AA. Allowed[1][0] true gives 2nd AA. So all three blocks used. string: AA BB AA? Sequence: AB? Wait we had only AA and BB. Let's test: start with AA (1,0,0,last=0). Then add BB (1,1,0,last=1). Then add AA(2,1,0,last=0). Let's check formed string: AA + BB + AA. The boundaries: AA->BB: ok. BB->AA: ok. But the length 6. Contains 'AAA'? AA at end is 2 As, no triple. Good.
+
+Suppose x=2,y=2,z=10: many ABs.
+
+We need to ensure DP handles many states.
+
+Implementation details: visited set of tuples (a,b,c,last). Use list of 4-length ints maybe.
+
+Implementation code complexity fine.
+
+Edge: we might not have start `last==3` handling for check allowed: we always allow.
+
+Let's implement.
+
+Testing some loops maybe: we can use standard Python list or deque.
+
+Let's produce final program.
+
+Complexities small.
+
+We should confirm adjacency logic again thoroughly:
+
+Double-check "AA" + "AB": "AA" ends 'A', "AB" starts 'A' -> "AAA" (string will have "AAA" within). So forbidden.
+
+"AA" + "AB" => "AAAB" -> "AAA" at start. So forbidden.
+
+"BB" + "AB": "BB" ends 'B', "AB" starts 'A' -> "BBA"? Wait "BB" "AB" => "BBAB": "BBAB" includes "BBB"? No triple B. So allowed.
+
+"AB" + "BB": "AB" ends 'B', "BB" starts 'B' -> "ABB B"? Actually "AB" "BB" => "ABB B"? Wait "AB" + "BB" => "ABBB" which has BBB. So forbidden; good.
+
+"AB" + "AB": "AB" ends 'B', "AB" starts 'A' -> "ABAB" no triple. Good.
+
+"AB" + "AA": "AB" ends 'B', "AA" starts 'A' -> "ABAA" no triple.
+
+"BB" + "AA": allowed.
+
+"AA" + "BB": allowed.
+
+All good.
+
+Thus allowed matrix correct.
+
+Corner: When after initial block, we may have last==0 or 1 or 2. Additional transitions apply.
+
+Implement BFS.
+
+Potential optimization: dp visited can be 3d array of bitmask of last states; we can use 3D list with [x+1][y+1][z+1][4] bool; but 51^3*4 ~ 500k booleans. Acceptable.
+
+Let's implement with 4-based last dimension.
+
+Pseudo:
+
+def longestString(self, x, y, z):
+    from collections import deque
+    max_len = 0
+    visited = [[[[False]*4 for _ in range(z+1)] for _ in range(y+1)] for _ in range(x+1)]
+    q = deque()
+    visited[0][0][0][3]=True
+    q.append((0,0,0,3))
+    while q:
+        a,b,c,last = q.popleft()
+        if a+b+c>0:
+            max_len = max(max_len, 2*(a+b+c))
+        else:
+            max_len = max(max_len, 0)
+        # try add each block
+        if a < x:
+            if last==3 or allowed[last][0]:
+                if not visited[a+1][b][c][0]:
+                    visited[a+1][b][c][0]=True
+                    q.append((a+1,b,c,0))
+        if b < y:
+            if last==3 or allowed[last][1]:
+                if not visited[a][b+1][c][1]:
+                    visited[a][b+1][c][1]=True
+                    q.append((a,b+1,c,1))
+        if c < z:
+            if last==3 or allowed[last][2]:
+                if not visited[a][b][c+1][2]:
+                    visited[a][b][c+1][2]=True
+                    q.append((a,b,c+1,2))
+    return max_len
+
+Note allowed matrix defined earlier.
+
+Potential bug: we used last==3 or allowed[last][k]. But allowed[last][k] defined for last 0..2. For last==3 we always allow.
+
+Edge case: Starting may use a block; last=3 ensures no constraint.
+
+This will produce max length.
+
+Test with examples: x=2,y=5,z=1. Let's mentally simulate approximate result; I think will produce 12.
+
+But let's test quickly by reasoning maybe create path: A (AA) cannot be after AB; but we can start with AA, then BB, then AA, then BB, then AB, then BB? Let's test:
+
+Sequence: AA (a1). last=0. Add BB (1). last=1. Add AA (2). last=0. Add BB (3). last=1. Add AB (2). last=2. Add BB (4). last=1. Wait we have used x=2, y=5, z=1. That's sequence: AA,BB,AA,BB,AB,BB -> length 12? Wait block count 6 -> 12 length. Yes. This uses all blocks. So DP should find 12 length.
+
+Now example 2: x=3,y=2,z=2. Sequence: AB, AB, AA, BB, AA, BB, AA -> 7 blocks, 14 length. Feasible.
+
+Edge: we must ensure DP may explore this arrangement and find 7 blocks.
+
+Implementation notes: Since we allow all transitions; BFS will explore all reachable states; it may find those states.
+
+Now final code.
+
+Potential small optimization: Instead of visited 4D list we can use dictionary to store reachable states and compute max length later.
+
+The BFS will process each state at most once; complexity OK.
+
+Let's produce solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every integer we are given a fixed number of short strings
+
+```
+x :  "AA"          (two consecutive As)
+y :  "BB"          (two consecutive Bs)
+z :  "AB"          (A followed by B)
+```
+
+We may choose any subset of them (maybe empty) and concatenate them all in any
+order.  
+The resulting string must **not** contain the substring
+
+```
+AAA   or   BBB
+```
+
+We have to maximise the length of the finished string.
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* Every block has length `2`, therefore the answer is always an even
+  number `2 * (number_of_used_blocks)`.
+
+* Only the **last character** of the current string and the first
+  characters of the new block matter for the forbidden substrings.
+  Because all blocks are of length 2, knowing the *last block type*
+  is enough.
+
+* There are only three different block types:
+
+```
+0 : "AA"
+1 : "BB"
+2 : "AB"
+```
+
+* From one block we can follow the next block only if the concatenation
+  does not create any forbidden triple.
+  The allowed transitions are easily checked by hand:
+
+```
+AA -> AA   forbidden
+AA -> BB   allowed
+AA -> AB   forbidden
+
+BB -> AA   allowed
+BB -> BB   forbidden
+BB -> AB   allowed
+
+AB -> AA   allowed
+AB -> BB   forbidden
+AB -> AB   allowed
+```
+
+The transition matrix ( `allowed = [[False,True,False], …]` ) is therefore
+fixed.
+
+* The first chosen block has no restriction.
+
+--------------------------------------------------------------------
+
+#### 2.  State
+
+Because each block consumes one of the counters `x, y, z`
+and we must remember the last block type,
+the state of a part of the construction is
+
+```
+( a_used , b_used , c_used , last_type )
+```
+
+* `a_used` – number of "AA" blocks already used   (0 … x)
+* `b_used` – number of "BB" blocks already used   (0 … y)
+* `c_used` – number of "AB" blocks already used   (0 … z)
+* `last_type` – 0,1,2 for last block, 3 means “no block yet”.
+
+The amount of used blocks is small (`≤ 50`), therefore the number of
+states is bounded by
+
+```
+(x+1) * (y+1) * (z+1) * 4   ≤   51^3 * 4  <   6·10^5
+```
+
+which is easily handled.
+
+
+
+--------------------------------------------------------------------
+
+#### 3.  Transition
+
+From a state `(a,b,c,last)` we try to add one more block of each
+type G = {0,1,2}:
+
+```
+can_add = (a < x)  (or b , c)            // counter not exhausted
+          and (last == 3)                // no predecessor → always allowed
+          and (allowed[last][G]   if last==0..2 else True)
+```
+
+If the new state is not visited yet, we create it and push it into a
+queue (Breadth‑First Search).  
+While visiting a state we keep the greatest length seen so far.
+
+The BFS visits every reachable state at most once, therefore the
+search is optimal and linear in the number of states.
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the maximum possible length.
+
+---
+
+##### Lemma 1  
+For every state `(a,b,c,last)` the transition rules described in
+section&nbsp;3 add exactly the blocks that can legally follow the
+partial string represented by that state.
+
+**Proof.**
+
+*If the block is not available*  
+The check `a < x` (or `b < y` / `c < z`) forbids the whole transition.
+Hence the algorithm never uses a block that would exceed the
+available number.
+
+*If the block is available* (the counter is free)  
+The only remaining restriction is between the existing block and the
+new one.
+If `last == 3` the partial string is empty – no forbidden substring
+can be created, therefore every block is allowed.
+Otherwise `last` is one of the three types
+and `allowed[last][G]` is just the pre‑computed table of “allowed
+adjacent blocks”.
+Thus a transition is taken *iff* the block can legally precede the
+partial string. ∎
+
+
+
+##### Lemma 2  
+Every string that can be built from the given blocks without
+containing `AAA` or `BBB` corresponds to a unique state of the BFS
+and vice‑versa.
+
+**Proof.**
+
+*From string to state.*  
+Consider the constructed string and the number of blocks of each type
+used.  
+The last block type is read from the string.
+Thus the state `(a,b,c,last)` is unique.
+
+*From state to string.*  
+For a state, there exists a sequence of BFS transitions that
+created it (by construction of the BFS).  
+Applying the blocks along that path in reverse order gives a string
+that has exactly the same counter values and ends with the same
+last block. Because `allowed` guarantees that each transition
+is legal, the resulting string contains no forbidden substring. ∎
+
+
+
+##### Lemma 3  
+During the traversal the algorithm visits *every* reachable state
+exactly once and never visits an unreachable state.
+
+**Proof.**
+
+*Reachable state → visited.*  
+By Lemma&nbsp;2 a legal string corresponds to some state.
+The BFS starts with `(0,0,0,3)` and follows exactly the legal
+transitions (Lemma&nbsp;1).  
+Therefore the whole chain of states is reached, so all such states
+will be visited.
+
+*Unreachable state → never visited.*  
+For an unreachable state there is no legal string that represents it.
+Hence there is no path of legal transitions from the start state to
+it, i.e. the BFS will never enqueue it. ∎
+
+
+
+##### Lemma 4  
+The variable `max_length` maintained by the algorithm equals the
+maximum length of any reachable string.
+
+**Proof.**
+
+While processing a state `(a,b,c,last)` the current length is
+`2·(a+b+c)`.  
+The algorithm updates `max_length` with the maximum of all such
+values seen so far, and by Lemma&nbsp;3 every reachable state is
+processed exactly once.  
+Consequently `max_length` equals the maximum length of any reachable
+string. ∎
+
+
+
+##### Theorem  
+`longestString(x, y, z)` returns the maximum possible length of a
+concatenated string that contains only the allowed block types and
+does not contain substring `AAA` or `BBB`.
+
+**Proof.**
+
+*Upper bound.*  
+Any valid string must correspond to a reachable state of the BFS
+(Lemma&nbsp;2).  
+By Lemma&nbsp;4 `max_length` is at least as large as the length of
+any such string.
+
+*Achievability.*  
+Let `S` be a string that attains the maximum length.
+Its state `S_state` is reachable (Lemma&nbsp;2), thus visited during
+the BFS (Lemma&nbsp;3) and its length is considered for `max_length`.  
+Therefore `max_length` is at least the optimum length.
+
+Combining both directions we obtain that the returned value equals
+the optimum. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+Let `X = x+1`, `Y = y+1`, `Z = z+1`.
+
+*Number of states*  
+`4 · X · Y · Z  ≤  4 · 51³  ≈ 5.3·10⁵`
+
+*Each state is processed once*  
+Time   `O( X·Y·Z )`  
+Memory `O( X·Y·Z )`
+
+Both limits are easily below the limits for the given constraints.
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from collections import deque
+
+class Solution:
+    def longestString(self, x: int, y: int, z: int) -> int:
+        # indices: 0 -> "AA", 1 -> "BB", 2 -> "AB", 3 -> "none"
+        allowed = [
+            [False, True, False],   # from "AA"
+            [True,  False, True],   # from "BB"
+            [True,  False, True]    # from "AB"
+        ]
+
+        # visited[a][b][c][last]
+        visited = [[[[False] * 4 for _ in range(z + 1)]
+                    for _ in range(y + 1)]
+                    for _ in range(x + 1)]
+
+        q = deque()
+        visited[0][0][0][3] = True
+        q.append((0, 0, 0, 3))
+
+        max_len = 0
+
+        while q:
+            a, b, c, last = q.popleft()
+            cur_len = 2 * (a + b + c)
+            if cur_len > max_len:
+                max_len = cur_len
+
+            # try to add the four block types
+            if a < x:
+                nxt = 0
+                if last == 3 or allowed[last][nxt]:
+                    if not visited[a + 1][b][c][nxt]:
+                        visited[a + 1][b][c][nxt] = True
+                        q.append((a + 1, b, c, nxt))
+
+            if b < y:
+                nxt = 1
+                if last == 3 or allowed[last][nxt]:
+                    if not visited[a][b + 1][c][nxt]:
+                        visited[a][b + 1][c][nxt] = True
+                        q.append((a, b + 1, c, nxt))
+
+            if c < z:
+                nxt = 2
+                if last == 3 or allowed[last][nxt]:
+                    if not visited[a][b][c + 1][nxt]:
+                        visited[a][b][c + 1][nxt] = True
+                        q.append((a, b, c + 1, nxt))
+
+        return max_len
+```
+
+The program follows exactly the algorithm proven correct above
+and conforms to the required function signature.

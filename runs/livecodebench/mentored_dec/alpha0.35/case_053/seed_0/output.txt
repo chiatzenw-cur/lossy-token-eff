@@ -1,0 +1,425 @@
+<|channel|>analysis<|message|>We need to understand and solve problem: We have n boxes, weights a_i. For any k from 1 to n that divides n? Wait: the shipping method requires that each truck gets exactly k boxes, and we know that if n not divisible by k, loading would not be possible: because we can't have last truck with not enough boxes. So they concluded: "if at some point it is not possible to load exactly k boxes into the truck, then the loading option with that k is not possible." So k must be a divisor where n % k == 0. Wait: But also they say "Alex has quite a lot of connections, so for every 1 ≤ k ≤ n, he can find a company such that each of its trucks can hold exactly k boxes." That means Alex can choose any k, but trucks may not be allowed to load exactly k boxes if n is not divisible by k. But they said "Upon loading is completed, each truck must have exactly k boxes". If n is not divisible by k, we cannot load all boxes as the last group would have fewer than k boxes. Then the loading possibility is not possible.
+
+So he can choose k only such that n % k == 0. For each such k, the trucks are predetermined: we partition array into contiguous groups of size k in order. Then compute total weights of each group. Then find maximum absolute difference between pair of truck sums. Alex wants this difference as large as possible over all k.
+
+Goal: compute max over all divisor k of n: max difference between sums of groups of size k.
+
+We need efficient algorithm for n up to 1.5e5.
+
+Bruteforce: for each k divisor, compute group sums in O(n) leading to O(n * number_of_divisors(n)). Number of divisors could be up to around 1e3 for n up to 1.5e5. So worst-case O(n * d) ~ 1.5e5 * 1e3 = 1.5e8, maybe heavy but okay in Python? could be borderline with t up to 1e4 but sum n total 1.5e5; computing for each k naive may give 1.5e8 operations - too high.
+
+We need better: The pattern is to compute sums of groups of size k quickly. We can precompute prefix sums: pref[i] = sum_{1..i} a_i. Then sum of a[l..r] = pref[r] - pref[l-1]. For each k, we need to iterate i=1..n step k, compute sum of group pref[i+k-1]-pref[i-1], track min and max. Complexity O(n/k * d(k)). Wait each k has n/k groups. Total over all k divisors: sum_{k|n} n/k = n * sum_{k|n} 1/k. For n ≤ 1.5e5, maximum of this sum? Let's approximate: For n large, sum_{k|n} 1/k ≤ sum_{d=1}^n 1/d = O(log n). But this sum over proper divisors only. For n=1e5, sum_{k|n} 1/k <= approx 1 + small. Actually maximum occurs when n is 1. But we can bound: For any n, number of divisors d(n) <= 128 for 1e5, but each group size leads to maybe many groups; sum_{k|n} n/k <= n * d(n) / 2? Not exactly. Example: n=360 has many divisors; compute sum_{k|n} n/k = n * sum_{k|n} 1/k. The sum of reciprocals of divisors of n is bounded by product over prime factors (p_i/(p_i-1)). That's maybe < 6? For large n, factorization difference. Suppose n=2*3*5*7*11=2310, product p/(p-1) ~ about 2*1.5*~1.25*1.166*1.1 ~ 4. Then sum reciprocal <= 4. So n*4 = 5*10^3 = 4k maybe. Actually we saw earlier: sum_{k|n} n/k <= n * (product p/(p-1)). For maximum product in constraints maybe 2*3*5*7*11*13=30030 product 2*1.5*1.25*1.166*1.1*1.083=4.9. So maybe 5n upper bound. Means total operations ~ O(n * 5) = 7.5e5. That's acceptable.
+
+But we must produce answer for each test case for all divisors k.
+
+Implementation plan:
+
+- Read t.
+- For each test case:
+    - read n, vector a.
+    - Compute prefix sum array pref[0..n].
+    - Compute list of divisors of n: we can compute all first: iterate i=1..sqrt(n). If i divides n, add i and n//i if distinct. Keep maybe sorted? Not needed but we may iterate unsorted.
+    - For each k in divisors:
+        - iterate idx from 0 to n-1 in steps of k:
+            - sum = pref[idx+k] - pref[idx]
+            - update min_sum, max_sum
+        - compute diff = max_sum - min_sum
+        - keep global max answer.
+    - edge case: if only one truck: n==k => only one truck, difference 0. But this case will just compute diff=0 anyway.
+
+We must compute min and max of sums. For each k we compute groups; but we don't need to store all sums.
+
+Performance: For n=150k, for each k group count = n/k. Sum across all divisors <= maybe 5*n. So O(n*5) operations.
+
+We also need to compute divisors quickly each test: O(sqrt(n)) per test.
+
+Constraints: t up to 1e4, but sum n <= 150k. So small per test average.
+
+Edge cases: computing min and max when n==k: group sum of all boxes, only one group so min and max same. So diff=0. For small n.
+
+Consider sample.
+
+Now implement in python. Pay attention to 1-indexing.
+
+Implementation details:
+
+pref = [0]*(n+1)
+for i in range(n):
+    pref[i+1] = pref[i] + a[i]
+
+For each k Divisor: compute currentMin = INF, currMax= -INF
+
+For start in range(0, n, k):
+    sum = pref[start+k] - pref[start]
+    if sum < currentMin: currentMin = sum
+    if sum > currentMax: currentMax = sum
+
+Consider large sums: a_i up to 1e9, n up to 1.5e5, prefix sum up to 1.5e14 - fits in 64-bit signed: Python int unlimited.
+
+Edge: we need to consider any k from 1..n. But divisors only. For each test case, the maximum will be achieved at some divisor.
+
+We need to handle k=1: groups each of size 1 -> sum differences between max and min a_i.
+
+OK.
+
+Now final answer. Implementation details:
+
+Compute divisors: maybe use list and extend.
+
+Example:
+
+divs = []
+for i in range(1, int(sqrt(n))+1):
+    if n % i == 0:
+        divs.append(i)
+        if i != n//i:
+            divs.append(n//i)
+
+Edge: n=1: divisors list [1].
+
+Now run.
+
+Time complexity: Good.
+
+Potential pitfalls: For each k, we iterate from 0 to n-1 step k. Complexity O(n/k). For n=1.5e5, k=1 => 1.5e5 loops; k=2 => 7.5e4 loops; etc. Summation maybe 5n. Good.
+
+But we may iterate over divisors which may include both large and small; the sum of n/k maybe bigger? Wait, example: n=1e5, divisible by 1, 2, 4, 5, 10, ... sum_{k|n} n/k = sum_{k|n} n/k = n * sum_{k|n} 1/k. Max ratio sum_{k|n} 1/k ~ 2? Let's evaluate worst-case n= 2^k. Divisors: powers of 2: 1,2,4,...,2^k. Sum_{k|n} 1/k = 1 + 1/2 + 1/4 + ... + 1/2^k = 2 - 1/2^k ~2. So for n=2^17=131072 -> total loops ~ 2*n=250k. So good.
+
+Thus algorithm good.
+
+Testing with sample.
+
+Let's quick analyze sample 1: n=2 [1,2] divisors:1,2. For k=1: sums: 1,2 => diff=1 -> best=1. For k=2: only group 1+2=3 diff=0. So answer 1. matches.
+
+For second, n=6. Divisors:1,2,3,6. For k=1: diff= max 10 - min 1? Wait vector: 10 2 3 6 1 3. max diff=10-1=9. but sample says 9 for k=6? Let's compute: k=6, sum all = 25? Wait 10+2+3+6+1+3 = 25, diff = 0. So max 9. But they said choosing k=6 gives max 10 and min 1? Wait 6 trucks each of size 1? Wait k=6 means 6 boxes per truck. So only one truck. So diff 0. They say choose six trucks with max 10 min 1 -> that is k=1 (truck of 1 box). They incorrectly wrote 'six trucks' maybe referencing trucks count n/k=6 trucks. Wait n=6, k=1 leads 6 trucks, each with 1 box. Good. So answer 9.
+
+Third case n=4 all 1e9 same weights. For any k, sums equal. answer 0.
+
+Fourth case 15 random numbers. Output 189114. We'll confirm later.
+
+So algorithm works.
+
+Edge: small n. Good.
+
+Large t but sum n small.
+
+Let's produce final code.
+
+Potential optimization: Use Python loops; but ensure speed. Use local variables to reduce attribute lookups:
+
+pref = [0]*(n+1)
+for i, val in enumerate(a, 1):
+    pref[i] = pref[i-1] + val
+
+Then for each k: cur_min, cur_max: int(1<<63)-1 maybe.
+
+We'll use min_val = 10**20.
+
+Option: Use while loop for start: idx = 0; while idx < n: ... idx += k.
+
+Even better: use for function step.
+
+Let's code.
+
+Check for m=1: loops: for idx in range(0, n, 1): 0..n-1. Good.
+
+Now test with sample.
+
+Let's mentally compute sample 4: n=15 with given numbers. Should output 189114. We'll test later.
+
+Sum of groups: We'll compute quickly maybe but trust.
+
+Edge: for 1 <= k <= n, but n could be 1. We compute divisors [1] only.
+
+Implement solve function.
+
+Now produce final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every test case we have
+
+* `n` – number of boxes,  
+* `a[1 … n]` – the weight of every box.
+
+For a fixed number `k` (truck capacity) the boxes are loaded
+
+```
+[1 , … , k]      →  truck 1
+[k+1 , … , 2k]   →  truck 2
+...
+```
+
+A loading is possible **iff** `k` divides `n` – otherwise the last truck would
+receive less than `k` boxes.
+For a possible `k` we obtain after the complete loading
+
+```
+sum[1] , sum[2] , … , sum[n/k]
+```
+
+(the weight of every truck).  
+From these `n/k` sums we need
+
+```
+max_{i,j} |sum[i] – sum[j]|   =   max_sum – min_sum
+```
+
+Alex wants this value to be as large as possible.
+We have to output this maximum over *all* `k` that divide `n`.
+
+--------------------------------------------------------------------
+
+#### 1.  Observation – it is enough to try all divisors of `n`
+
+If a number `k` does **not** divide `n`, the loading is impossible,
+hence we never have to consider it.
+If `k` divides `n`, the trucks are completely determined – the only
+choice is which `k` we use.
+
+--------------------------------------------------------------------
+
+#### 2.  Computing a truck sum quickly
+
+Let  
+
+```
+pref[0] = 0
+pref[i] = a[1] + a[2] + … + a[i]          (1 ≤ i ≤ n)
+```
+
+Then the weight of the truck that starts at position `l` and contains `k`
+boxes is
+
+```
+pref[l + k] – pref[l]
+```
+
+`pref` is built once in `O(n)` time.
+
+--------------------------------------------------------------------
+
+#### 3.  Enumerating all divisors
+
+All divisors of `n` are found by the classical
+`O( √n )` loop:
+
+```
+for d in 1 … ⌊√n⌋
+        if n % d == 0
+                add d                   // small divisor
+                if d != n//d
+                        add n//d        // corresponding large divisor
+```
+
+The number of divisors of `n` is at most about `128` for `n ≤ 150 000`,
+hence this is negligible.
+
+--------------------------------------------------------------------
+
+#### 4.  Processing one divisor `k`
+
+For a fixed `k` we walk over the array in steps of length `k`
+
+```
+min_sum =  +∞
+max_sum =  –∞
+for pos = 0, k, 2k, …, n-k
+        cur = pref[pos + k] - pref[pos]
+        min_sum = min(min_sum, cur)
+        max_sum = max(max_sum, cur)
+answer = max( answer, max_sum - min_sum )
+```
+
+The loop visits exactly `n / k` trucks.
+The total number of processed trucks over all divisors is
+
+```
+Σ_{k | n} n / k = n * Σ_{k | n} 1/k
+```
+
+For `n ≤ 1.5·10^5` the sum of the reciprocals of divisors is bounded
+by around `4.9` (product of `p/(p-1)` over all prime factors).
+Therefore at most a few times `n` truck sums are examined –
+*O( n ) per test case*.
+
+--------------------------------------------------------------------
+
+#### 5.  Correctness Proof  
+
+We prove that the algorithm outputs the required maximum absolute
+difference.
+
+---
+
+##### Lemma 1  
+For any loading capacity `k` that does not divide `n` the loading is
+impossible, hence it cannot influence the answer.
+
+**Proof.**
+
+If `k` does not divide `n`, after loading
+`⌊n/k⌋` trucks there are `n – k·⌊n/k⌋ ≠ 0` boxes left.
+The last truck would receive fewer than `k` boxes, which violates the
+rules.  Therefore such a `k` is not allowed. ∎
+
+
+
+##### Lemma 2  
+For a fixed divisor `k` the algorithm computes  
+`max_sum – min_sum` over all trucks of that loading.
+
+**Proof.**
+
+The loop iterates over all starting positions of the trucks:
+`pos = 0, k, 2k, … , n-k`.  
+For each it calculates the truck sum with the prefix sum formula,
+and updates the minimum and maximum of all computed sums.
+Hence after the loop `min_sum` is the smallest truck sum and
+`max_sum` is the largest one.
+The algorithm returns `max_sum – min_sum`. ∎
+
+
+
+##### Lemma 3  
+For each divisor `k` the algorithm evaluates the
+maximum possible absolute difference of two truck sums for that `k`.
+
+**Proof.**
+
+By Lemma&nbsp;2 the algorithm produces the exact value  
+`max_sum – min_sum`.  
+For any two truck sums `x` and `y`,
+`|x - y| ≤ max_sum – min_sum`.  
+Equality is achieved when `{x, y} = {min_sum, max_sum}`.
+Therefore this is the best possible value for the chosen `k`. ∎
+
+
+
+##### Lemma 4  
+Let `Ans` be the value reported by the algorithm.
+For every divisor `k` of `n` the maximum absolute difference of two truck
+sums in a loading with capacity `k` is **≤** `Ans`.
+
+**Proof.**
+
+During the processing of `k` the algorithm computes the optimal value
+for this `k` (Lemma&nbsp;3) and takes the maximum over all
+divisors.  
+Consequently `Ans` is at least that optimal value. ∎
+
+
+
+##### Lemma 5  
+There exists a divisor `k*` of `n` for which the maximum absolute
+difference of two truck sums equals `Ans`.
+
+**Proof.**
+
+The algorithm keeps the current maximum `Ans` among the values
+computed for each divisor.
+When `k*` was processed, its optimal value was computed and
+`Ans` was either unchanged or set to that value,
+therefore a divisor achieving `Ans` exists. ∎
+
+
+
+##### Theorem  
+For every test case the algorithm outputs
+
+```
+max_{k divides n}   ( maximum absolute difference of two truck sums for k)
+```
+
+which is the required answer.
+
+**Proof.**
+
+By Lemma&nbsp;4 the value `Ans` is **not smaller** than the optimum
+over all allowable `k`.  
+By Lemma&nbsp;5 there is a divisor that reaches `Ans`,
+so `Ans` is **not larger** than that optimum.  
+Hence `Ans` equals the optimum value. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Complexity Analysis
+
+For one test case with `n` boxes
+
+* building the prefix sums : `O(n)`
+* enumerating all divisors   : `O( √n )`
+* processing all divisors :  
+  `Σ_{k|n} n / k = O( n )`  (at most five times `n`)
+
+Therefore
+
+```
+time   :  O(n)         (≤ 1.5·10^5 operations per test case)
+memory :  O(n)         (prefix array)
+```
+
+The sum of all `n` over the whole input is at most `150 000`,
+so the program easily fits into limits.
+
+--------------------------------------------------------------------
+
+#### 7.  Reference Implementation  (Python 3)
+
+```python
+import sys
+import math
+
+# -------------------------------------------------------------
+
+def solve() -> None:
+    it = iter(sys.stdin.read().strip().split())
+    t = int(next(it))
+    out_lines = []
+
+    for _ in range(t):
+        n = int(next(it))
+        a = [int(next(it)) for _ in range(n)]
+
+        # prefix sums
+        pref = [0] * (n + 1)
+        for i in range(1, n + 1):
+            pref[i] = pref[i - 1] + a[i - 1]
+
+        # all divisors of n
+        divisors = []
+        limit = int(math.isqrt(n))
+        for d in range(1, limit + 1):
+            if n % d == 0:
+                divisors.append(d)
+                if d != n // d:
+                    divisors.append(n // d)
+
+        best = 0          # the answer for the current test case
+
+        for k in divisors:
+            min_sum = 10**20
+            max_sum = -1
+            pos = 0
+            while pos < n:
+                cur = pref[pos + k] - pref[pos]
+                if cur < min_sum:
+                    min_sum = cur
+                if cur > max_sum:
+                    max_sum = cur
+                pos += k
+            diff = max_sum - min_sum
+            if diff > best:
+                best = diff
+
+        out_lines.append(str(best))
+
+    sys.stdout.write("\n".join(out_lines))
+
+# -------------------------------------------------------------
+if __name__ == "__main__":
+    solve()
+```
+
+The program follows exactly the algorithm proven correct above
+and conforms to the required input / output format.

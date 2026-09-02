@@ -1,0 +1,271 @@
+<|channel|>analysis<|message|>We need to compute maximum distance: mileage: 10 km per liter, so distance multiplies fuel used. But they mention injection occurs when 5 liters consumed from main tank, then if additional tank has at least 1 liter, 1 liter transferred. However injection not continuous but "for every 5 liters consumed" declines. Essentially each time the main tank runs through a block of 5 liters consumed, we transfer one liter from additional. But this only if earlier main tank consumed 5 liters.
+
+But we need to compute distance until main tank empty. Let's denote main m, add a. We track fuel usage: Each liter gives 10 km. For each time 5 liters consumed from main, we get 1 liter from add. But careful: After injection, us may get enough to consume another 5 liter to trigger another injection. But we cannot get more injection until 5 liters consumed again. So we need simulation stepping in 5 unit consumption. However fuel may not be sufficient to consume full 5 liters (like m <5). need to compute distance accordingly.
+
+Simplify: For each cycle (consumption of 5 liters), if main >=5: consume 5, distance +=50. Then if add>=1, subtract add and add 1 to main. Actually injection adds to main meaning after consumption? The injection occurs after consumption of 5 liters. So main = main-5+1= main-4. Equivalent to main reduce by 4. But if main becomes negative? can't happen if main>=5. So after cycle, main reduces by 4 as long as add>=1. If add is 0, no injection, main reduces by 5.
+
+But we should treat extra leftover. Example: main 5, add 10. Step1: main>=5: main=5->use 5 ->distance +50, add>=1 so inject 1: main=1, add=9. Step2: main=1: less than5: consume 1 ->distance+10, main=0, no injection possible. Finish. Works.
+
+Now let's construct algorithm: total_km=0. While main>0: if main>=5: consume5: add fuel distance+50 ; main -=5. After that, if additional>=1: subtract1 from additional and main +=1. else nothing. Repeat. When main<5: all remaining main fuel used: distance += main*10 ; break.
+
+Wait we should think about scenario where main<5 but we still have additional tank with fuel: If main <5, we consume whatever main has. After that it's empty. There's no injection because injection happens only after consumption of 5 liters. Since we didn't consume 5 liters, injection not triggered. So the remaining additional fuel after main empties cannot be used. So algorithm correct.
+
+Edge Cases: large numbers up to 100 each. loop at most (main + additional) maybe 200 times. Good.
+
+Let's just implement iteration.
+
+Complexities: O(main/5) loops.
+
+Return total_km.
+
+Examples:
+
+1) main=5 add=10 -> cycles: while main>=5: main>=5: adds 50, main=0 after consumption? Wait compute: main=5; consume5 => main=0; but injection: add>=10? yep; add=9; main +=1 => main=1. After loop iteration, main=1 <5. So break after loop as else: distance+=main*10=10; total=60. Works.
+
+2) main=1 extra=2: while main>=5 false; distance+=1*10=10. Works.
+
+Edge: main=10 add=0: loops: first iteration: main>=5: consume5 distance+50, main=5. No injection. second iteration: consume5 distance+50, main=0. total=100 km. That's correct.
+
+Edge: main=6 add=1. Steps: main>=5: consume5,distance+50, main=1, add>=1: add1: main=2, add=0. Now main=2 <5: distance+=20. total=70. Simulation: initial 6 liters. After 5 used, injection 1: main=2, add=0. Use 2, distance +20. total 70.
+
+Edge: main=15 add=1. Steps: first: main=15 -> consume5 -> main=10 -> add 1-> main=11. Add=0. Next: main=11 -> consume5 => main=6 -> no add -> main=6. Next: main=6 -> consume5 => main=1 --> no add -> main=1. Then produce distance: 3 cycles of 50 each =150, last main <5: 1*10=20 total 170? Wait after 3 cycles, current main after third consumption: start 6, consume5, main=1. But we had injection? no add. So main=1 <5, so distance +=1*10=10? Wait earlier we missed 1*10. Let's calculate properly: Starting main=15. While main>=5: iteration1: main=10, add=0, distance 50. iteration2: main=5, distance 100. iteration3: main=0, distance 150. Actually after iteration2, main=5, then iteration3 consumes5, reduces to 0, no addition. Then loop exit, remaining main=0; distance added 0. So total=150. But our earlier step had error. Let's recompute algorithm: At iteration1: main>=5: main=10, distance=30? Wait we said each 5 liters gives 5*10=50. Yes.
+
+But injection occurs after consumption of 5 liters. Initially main=15. After using 5, main=10, injection? add>=1? Yes, add=0? Actually add=1 originally, so after step injection leads main=11, add=0. Next iteration: main=11>=5, consumption reduces main to 6, injection? add=0, no effect. Next: main=6>=5, consumption reduces main to 1, injection? no. After loop exit, remaining main=1, distance+=1*10=10. Total distance: first: 50, second: 50, third: 50 + 10 =110? Wait compute detail:
+
+Iteration1: main=15; after consumption: main=10; trigger injection: main=11; add=0; distance=50.
+
+Iteration2: main=11; after consumption: main=6; injection none; distance=100.
+
+Iteration3: main=6; after consumption: main=1; injection none; distance=150.
+
+Exit loop: add=0 main=1: distance +=10 => 160. Wait but we had 3 * 50 =150, plus 10 final => 191? Wait miscalc. Let's recompute: The distance after each iteration added 50 (5 liters * 10 km). So after 3 iterations: 150 collected. After loop we add main *10 =1*10=10 -> total 160. So result 160 km. Let's check physically: Starting 15 liters main, 1 liter add. Trip: Use 5 liters -> distance 50; inject 1 from add -> main has 11 remaining. Use 5 liters -> distance 50; no more injection. Main left 6. Use 5 -> distance 50; left 1. Use 1 -> distance 10. Total 160 km. correct.
+
+Edge: main=14 add=1. Steps: iteration1: consume5 -> main=9 -> injection -> main=10 add=0; dist=50; iteration2: consume5 -> main=5, dist=100; iteration3: consume5 -> main=0, dist=150; remaining main=0 add=0. So 150. Sequence: 5, 5, 5 -> 15 used from main; injection after first 5 got 1. So total main fuel use 15; distance 150. So algorithm holds.
+
+Thus implement simulation.
+
+Return int; no rounding issues.
+
+Complexities fine.
+
+Let's write code:
+
+class Solution:
+    def distanceTraveled(self, mainTank: int, additionalTank: int) -> int:
+        distance = 0
+        m=mainTank
+        a=additionalTank
+        while m>0:
+            if m>=5:
+                # consume
+                m -=5
+                distance +=50
+                if a>=1:
+                    a -=1
+                    m +=1
+            else:
+                distance += m*10
+                m =0
+        return distance
+
+Edge: m>=5 and after consumption injection may result m still >0 (like 1). Loop continues. Good.
+
+Return int.
+
+Testing:
+
+main=5 add=0 => iterations: m>=5: m=0, d=50; a=0 no injection; loop exit; distance=50. But maybe we expected 50? Wait dest? With 5 liters main and no add, distance 50. correct.
+
+We can also maybe compress into formula, but simulation enough.
+
+Let's produce final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+The truck
+
+* consumes fuel from the **main** tank only,
+* for every **5 liters** used from the main tank  
+  it immediately (suddenly) receives **1 liter** from the **additional** tank –  
+  **if** there is at least 1 liter there,
+* mileage is fixed: **10 km** per litre.
+
+The additional tank never gives fuel continuously; it only gives a single liter
+after each 5‑liter block has been consumed.
+
+The task is to calculate the total distance (in km) the bus can travel
+before the main tank becomes empty.
+
+
+
+--------------------------------------------------------------------
+
+#### Observations  
+
+* While the main tank contains **5 or more** litres, a whole block can be
+  processed.
+  * 5 litres are used → `+50 km`
+  * If the additional tank has fuel → one litre is moved into the main tank  
+    (the main tank therefore loses only **4 litres** in total for that block).
+* When the main tank contains **less than 5** litres, the rest of the fuel
+  is simply used – no additional fuel can be injected because the 5‑liter
+  condition never occurs again.
+
+With the constraints `1 ≤ mainTank, additionalTank ≤ 100`  
+the number of iterations is at most a few dozen, so a straightforward simulation
+is fully sufficient.
+
+
+
+--------------------------------------------------------------------
+
+#### Algorithm
+```
+distance ← 0
+m ← mainTank            # remaining fuel in main tank
+a ← additionalTank      # remaining fuel in additional tank
+
+while m > 0
+    if m ≥ 5
+        m ← m - 5
+        distance ← distance + 50          # 5 litres × 10 km/litre
+
+        if a ≥ 1
+            a ← a - 1
+            m ← m + 1                      # 1 litre injected
+    else
+        # fewer than 5 litres left – use all of them
+        distance ← distance + m * 10
+        m ← 0
+
+return distance
+```
+The algorithm exactly follows the described behaviour of the fuel system.
+
+
+
+--------------------------------------------------------------------
+
+#### Algorithm Correctness Proof  
+
+We prove that the algorithm returns the correct maximum distance.
+
+---
+
+##### Lemma 1  
+During each loop iteration when `m ≥ 5`, after the body of the loop finishes,
+both tanks reflect the state of the truck after it has consumed exactly 5 litres
+from the main tank and, if possible, received 1 litre from the additional tank.
+
+**Proof.**
+
+* `m ← m - 5` models the consumption of 5 litres.
+* `distance ← distance + 50` correctly adds the distance for those 5 litres.
+* If `a ≥ 1`, subtracting 1 from `a` and adding 1 to `m` represents the
+  instantaneous injection from the additional tank.
+* Therefore the variables `m` and `a` after the iteration are the same as the
+  physical tanks after the described actions.
+
+∎
+
+
+
+##### Lemma 2  
+When the loop terminates (`m = 0`), `distance` equals the distance travelled
+using all fuel that can be used by the truck.
+
+**Proof.**
+
+The loop stops because `m` became 0.  
+- In every possible state of the truck during the simulation,
+  the loop processed exactly the fuel that is being consumed at that moment
+  (Lemma&nbsp;1, or the final accumulator when `m < 5`).
+- The distance added in each iteration corresponds precisely to the
+  kilometres travelled during the consumption that iteration represents.
+
+Thus all usable fuel has been processed and its contribution to the distance
+has been added to `distance`.  
+No further fuel can be used because the main tank is empty. ∎
+
+
+
+##### Lemma 3  
+No fuel that could be used by the truck is left unused when the algorithm
+terminates.
+
+**Proof.**
+
+When the loop exits, `m` is 0.  
+The only possible remaining fuel is in the additional tank (`a > 0`),
+but the rules of the problem state that injection only happens after a
+full 5‑litre consumption.  
+Since no amount of additional fuel can trigger such a consumption
+once the main is empty, that fuel is indeed unusable.
+Hence all usable fuel is already accounted for. ∎
+
+
+
+##### Theorem  
+`distanceTraveled` returns the maximum distance (in kilometres) that the
+truck can travel given `mainTank`, `additionalTank`.
+
+**Proof.**
+
+By Lemma&nbsp;1 each iteration correctly simulates one possible real action
+of the truck.  
+By Lemma&nbsp;2 the accumulated `distance` after the loop equals the distance
+obtained from all fuel that has been processed.  
+By Lemma&nbsp;3 no additional usable fuel remains.  
+Therefore the returned value is exactly the maximal distance attainable. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis  
+
+Let `k` be the number of processed 5‑liter blocks.  
+Each iteration handles one block (or the last few litres) and
+does O(1) work.
+
+* `k ≤ ⌊mainTank / 5⌋ + 1 ≤ 20` (because `mainTank ≤ 100`),
+* So the time complexity is **O(k) = O(1)**,
+* The algorithm uses only a few integer variables → **O(1)** additional space.
+
+
+
+--------------------------------------------------------------------
+
+#### Reference Implementation  (Python 3)
+
+```python
+class Solution:
+    def distanceTraveled(self, mainTank: int, additionalTank: int) -> int:
+        """
+        Compute the maximum distance the truck can travel.
+        Mileage: 10 km per liter.
+        Whenever 5 liters are consumed from the main tank, 1 liter is injected
+        from the additional tank if it has at least 1 liter.
+        """
+        distance = 0
+        m = mainTank      # fuel left in main tank
+        a = additionalTank  # fuel left in additional tank
+
+        while m > 0:
+            if m >= 5:
+                # consume a full block of 5 liters
+                m -= 5
+                distance += 50   # 5 liters × 10 km/liter
+
+                # inject one liter if possible
+                if a >= 1:
+                    a -= 1
+                    m += 1
+            else:
+                # less than 5 liters left: consume the rest
+                distance += m * 10
+                m = 0
+
+        return distance
+```
+
+The code follows exactly the algorithm proven correct above and conforms to
+the required function signature.

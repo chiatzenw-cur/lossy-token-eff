@@ -1,0 +1,370 @@
+<|channel|>analysis<|message|>We need sum over all non-empty subsets of max^2 * min. We could do combinatorics. Sort array. For each element as max? Potential approach: For sorted array a[0..n-1]. Let's consider contributions of each pair (max, min). For each pair (i,j) with i <= j indices after sorting: max = a[j], min = a[i]. For all subsets where max is at j and min at i, and other elements chosen between i and j but not beyond extremes. Elements between i and j can be freely chosen arbitrarily; both inclusive? For subset with indices i..j, but we require that in this subset, the maximum index is j and min index is i. So subset S must contain positions i and j, and for any k between i and j not present it's okay. Also cannot include any element outside i..j because that would change min or max. But we can choose any subset of the elements between i and j exclusive; number of choices: 2^{(j-i-1)}. Also for indices equal (i=j), subset is single element. So total subsets where min at i, max at j: 2^{(j-i-1)}. But we also need to consider subsets that include elements between but also perhaps include outside? Wait suppose we use sorted array; if we include index outside between i,j, then min or max would change. So can't include outside. So count is indeed 2^{(j-i-1)}. So sum over all pairs i<=j: a[j]^2 * a[i] * 2^{(j-i-1)}.
+
+We can compute efficiently. Complexity O(n^2) too large. Need better.
+
+Observe another approach: For each element as max, compute sum over min. Fix j as max index. For i from 0..j: contribution a[j]^2 * a[i] * 2^{j-i-1}. Here exponent depends on distance. Let's precompute powers of two: pow2[k] = 2^k mod M.
+
+Then sum over i <= j: a[j]^2 * a[i] * pow2[j-i-1] for i<j; plus when i=j: a[j]^2 * a[j] * 1 (pow2[-1]? treat as 1). So we can compute prefix weighted sum.
+
+Let j be current index. Want S_j = sum_{i=0}^{j} a[i] * pow2[j-i-1] (with pow2[-1] =1 when i=j). But pow2[j-i-1] is pow2[j-1-i]? Let's rewrite.
+
+For i=j: factor 1. For i<j: weight = pow2[j-i-1] = pow2[(j-1)-i].
+
+Thus S_j = a[j] + sum_{i=0}^{j-1} a[i] * pow2[(j-1)-i].
+
+We can maintain prefix array where we compute T_k = sum_{i=0}^{k} a[i] * pow2[k-i]. That's convolution of a with pow2.
+
+Specifically, if we precompute pow2 of length n. Then for each k, we can compute in O(n) total using sliding window: observe that T_k = pow2[0]*a[k] + pow2[1]*a[k-1] + ... + pow2[k]*a[0]. Then T_{k+1} = pow2[0]*a[k+1] + pow2[1]*a[k] + ... + pow2[k+1]*a[0].
+
+We can derive recurrence: T_{k+1} = pow2[0]*a[k+1] + sum_{i=0}^{k} a[i]*pow2[1+(k-i)] = a[k+1] + sum_{i=0}^{k} a[i]*2*pow2[(k-i)] because pow2[1 + (k-i)] = 2 * pow2[k-i]. But careful: pow2[1+(k-i)] = 2 * pow2[k-i] mod M. So T_{k+1} = a[k+1] + 2 * sum_{i=0}^{k} a[i]*pow2[k-i] = a[k+1] + 2*T_k.
+
+Thus recurrence: T_0 = a[0]; for k>=0: T_{k+1} = a[k+1] + 2*T_k mod M. That's simple.
+
+Then S_j = a[j] + sum_{i=0}^{j-1} a[i] * pow2[(j-1)-i] = a[j] + T_{j-1} where T_{j-1} computed as above. So compute T array easily.
+
+Now for each j, contribution to result: a[j]^2 * S_j. Use mod.
+
+Edge case j=0: T_{-1} empty; S_0 = a[0] -> using special-case.
+
+So algorithm:
+
+sort nums (since order does not matter). Precompute pow2? Not need.
+
+Initialize T = nums[0] (mod M). result = nums[0]^2 * nums[0] mod M.
+
+For j from 1 to n-1:
+
+S_j = nums[j] + T
+
+Add contribution = nums[j]^2 % M * S_j % M to result.
+
+Update T = nums[j] + 2*T % M
+
+Return result % M.
+
+Let's test with given examples: nums sorted: [1,2,4] actually original [2,1,4] sorted to [1,2,4]. Let's compute:
+
+M large.
+
+T0=1
+result = 1^2*1=1
+
+j=1: S1 = nums[1] + T =2+1=3
+contrib=4*3=12 => result=13
+Update T= nums[1] +2*T=2+2*1=4
+
+j=2: S2=nums[2]+T=4+4=8
+contrib=16*8=128 => result=141
+T updates irrelevant.
+
+Matches output.
+
+Second example: [1,1,1] sorted same. T0=1 result=1
+j=1: S=1+1=2 contrib=1*2=2 result=3
+T=1+2*1=3
+j=2: S=1+3=4 contrib=1*4=4 result=7
+
+Works.
+
+Proof: Our recurrence correct.
+
+We need mod M = 1e9+7.
+
+Implementation details: use int64.
+
+Complexity O(n log n). We need to import typing List.
+
+Return int.
+
+Edge cases: sort, for large numbers multiply can exceed int32; use Python big ints but mod.
+
+Answer: Provide full solution.
+
+Let's craft final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every non‑empty subset `S` of indices
+
+```
+i0 , i1 , … , ik         (0 ≤ i0 < i1 < … < ik < n)
+```
+
+the **power** of `S` is  
+
+```
+max( nums[i] )² · min( nums[i] )
+```
+
+We have to add this value for all subsets.
+
+--------------------------------------------------------------------
+
+#### 1.  Observation – work in sorted order
+
+The actual order of the heroes does not matter.  
+After sorting
+
+```
+a[0] ≤ a[1] ≤ … ≤ a[n‑1]
+```
+
+every subset `S` has a unique **minimum** element – the leftmost element of `S`
+in the sorted array – and a unique **maximum** element – the rightmost one.
+
+For a fixed pair of indices `i ≤ j`
+
+```
+min  = a[i]
+max  = a[j]
+```
+
+`S` must contain both `i` and `j`.  
+Anything that lies strictly between `i` and `j` may be included or omitted
+independently, while nothing outside `[i , j]` is allowed.
+Therefore the number of subsets with that exact `(min , max)` pair equals
+
+```
+2^( j-i-1 )          (for i = j : 1 subset – the single element)
+```
+
+So the total answer is
+
+```
+Σ_{0 ≤ i ≤ j < n}  a[j]² · a[i] · 2^( j-i-1 )
+```
+
+--------------------------------------------------------------------
+
+#### 2.  Re‑organisation
+
+Fix `j` (the index of the **maximum**).  
+For every `i ≤ j`
+
+```
+contribution = a[j]² · a[i] · 2^( j-i-1 )
+```
+
+It is convenient to separate the factor `a[j]²`:
+
+```
+answer = Σ_{j=0}^{n-1}  a[j]² · ( a[j] + Σ_{i=0}^{j-1} a[i] · 2^( (j-1)-i ) )
+```
+
+Define
+
+```
+T_k = Σ_{i=0}^{k} a[i] · 2^( k-i )
+```
+
+then
+
+```
+Σ_{i=0}^{j-1} a[i] · 2^( (j-1)-i ) = T_{j-1}
+```
+
+and the term inside the parenthesis becomes
+
+```
+S_j = a[j] + T_{j-1}
+```
+
+Thus
+
+```
+answer = Σ_{j=0}^{n-1}  a[j]² · S_j
+```
+
+--------------------------------------------------------------------
+
+#### 3.  Recurrence for `T_k`
+
+```
+T_0 = a[0]
+T_{k+1} = a[k+1] + 2 · T_k
+```
+
+Proof:
+
+```
+T_{k+1} = Σ_{i=0}^{k+1} a[i] · 2^( (k+1)-i )
+        = a[k+1] + Σ_{i=0}^{k} a[i] · 2^( (k+1)-i )
+        = a[k+1] + 2 · Σ_{i=0}^{k} a[i] · 2^( k-i )
+        = a[k+1] + 2 · T_k
+```
+
+So while scanning the array once we can maintain
+
+```
+T   — current value of T_k
+S_j = a[j] + T
+```
+
+and update
+
+```
+T ← a[j] + 2 · T
+```
+
+All operations are performed modulo `M = 1 000 000 007`.
+
+--------------------------------------------------------------------
+
+#### 4.  Algorithm
+```
+sort(nums)
+T = nums[0]
+answer = (nums[0] * nums[0] % M) * nums[0] % M      // j = 0
+
+for j = 1 … n-1
+        S = nums[j] + T
+        answer += (nums[j] * nums[j] % M) * (S % M)
+        answer %= M
+        T = nums[j] + 2 * T
+        T %= M
+
+return answer
+```
+
+--------------------------------------------------------------------
+
+#### 5.  Correctness Proof  
+
+We prove that the algorithm returns  
+`Σ_{∅≠S⊆{0..n-1}}  max(nums[S])² · min(nums[S])   (mod M)`.
+
+---
+
+##### Lemma 1  
+For any sorted array `a` and indices `i ≤ j`
+
+```
+number of subsets S with min=a[i] and max=a[j] = 2^(j-i-1)
+```
+
+**Proof.**  
+All elements of `S` must be inside `[i , j]`.  
+Indices `i` and `j` must be present.  
+Every index `k` with `i < k < j` can be chosen or not independently,
+which gives `2^(j-i-1)` possibilities. ∎
+
+
+
+##### Lemma 2  
+Let  
+
+```
+T_k = Σ_{t=0}^k a[t] · 2^(k-t)
+```
+
+Then for all `k ≥ 0`  
+
+```
+T_{k+1} = a[k+1] + 2 · T_k
+```
+
+**Proof.** (same as earlier). ∎
+
+
+
+##### Lemma 3  
+For every `j` the algorithm’s variable `S_j` equals  
+
+```
+S_j = a[j] + Σ_{i=0}^{j-1} a[i] · 2^( (j-1)-i )
+```
+
+**Proof.**  
+When the loop reaches index `j`, the variable `T` contains `T_{j-1}`
+because it has been updated `j` times using Lemma&nbsp;2.
+Hence `S_j = a[j] + T = a[j] + T_{j-1}`,
+which expands exactly to the right‑hand side. ∎
+
+
+
+##### Lemma 4  
+During the `j`‑th iteration the partial sum added to `answer`
+equals  
+
+```
+a[j]² · ( a[j] + Σ_{i=0}^{j-1} a[i] · 2^( (j-1)-i ) )
+```
+
+**Proof.**  
+By Lemma&nbsp;3 the algorithm’s `S` is exactly that inner sum plus `a[j]`,
+and it multiplies it by `a[j]²`. ∎
+
+
+
+##### Theorem  
+The algorithm returns the required sum of powers of all non‑empty groups,
+modulo `M`.
+
+**Proof.**  
+Expand the formula for all `j` using Lemma&nbsp;4
+
+```
+answer = Σ_{j=0}^{n-1} a[j]² · a[j]
+        + Σ_{j=1}^{n-1} a[j]² · Σ_{i=0}^{j-1} a[i] · 2^( (j-1)-i )
+```
+
+The first part is the sum over all single‑element subsets
+(`min = max = a[j]`).
+
+For the second part, re‑index with `i ≤ j-1`:
+
+```
+Σ_{i=0}^{n-2} Σ_{j=i+1}^{n-1} a[j]² · a[i] · 2^( j-i-1 )
+```
+
+The indices `i` and `j` cover all unordered pairs of distinct indices,
+while the exponent matches Lemma&nbsp;1.
+Hence the double sum is exactly the total contribution of all subsets
+containing at least two elements.
+
+Adding both parts gives the power of every non‑empty subset exactly once,
+so the algorithm’s final `answer` is the desired sum (modulo `M`). ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Complexity Analysis
+
+```
+Sorting       :  O(n log n)
+Single scan   :  O(n)
+Memory usage  :  O(1)   (apart from the input array)
+```
+
+--------------------------------------------------------------------
+
+#### 7.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+MOD = 10 ** 9 + 7
+
+class Solution:
+    def sumOfPower(self, nums: List[int]) -> int:
+        if not nums:
+            return 0
+
+        nums.sort()                     # work on sorted strengths
+        n = len(nums)
+
+        # T_k as defined in the proof
+        T = nums[0] % MOD
+        ans = (nums[0] * nums[0] % MOD) * nums[0] % MOD   # j = 0
+
+        for j in range(1, n):
+            a_j = nums[j] % MOD
+            S = (a_j + T) % MOD            # S_j
+            ans = (ans + a_j * a_j % MOD * S) % MOD
+
+            # update T = a[j] + 2 * T
+            T = (a_j + 2 * T) % MOD
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above.

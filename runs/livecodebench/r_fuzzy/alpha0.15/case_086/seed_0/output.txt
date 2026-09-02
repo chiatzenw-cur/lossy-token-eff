@@ -1,0 +1,240 @@
+<|channel|>analysis<|message|>We need to count pairs of points with XOR distance sum equal k. Coordinates up to 1e6, k <= 100. points max 50000. Brute O(n^2) too too large. Need k small, maybe use bucketing by x xor y pair? distance = (x1 xor x2)+(y2 xor y1). We can try to transform: since k small, we can iterate over all possible xor pairs? For each point [x,y], we can consider all values dx such that dx in [0,k] and dy = k-dx. But we may not have dy limited since XOR result only 0.. 2^20. But all combos for dx and dy. For each pair (dx, dy), we need to count previous points (x',y') such that (x xor x') = dx and (y xor y') = dy. All these pairs produce same sum. We can use unordered map from (x, y) to count? Actually we need to support queries to find number of points that satisfy the XOR equations. Can't be done by hash on entire vector? It can be done by using dictionary of coordinates? Actually for each point (x,y), we need to count how many previous points (x',y') satisfy (x XOR x') = dx, (y XOR y') = dy. That is equivalent to x' = x XOR dx, y' = y XOR dy. So there is exactly one candidate point for each dx,dy. So can just look up counts. For each xor difference combination that sum to k, we count number of previous points with exact coordinates equal to (x XOR dx, y XOR dy). So we just iterate over all dx from 0..k, dy = k-dx. Then for each point compute target = [x ^ dx, y ^ dy], and look up count of target in a dict of previously seen points. Complexity O(n * k). k <= 100 => ~5 million operations fine. Each lookup O(1). Should be careful for double counting: when i < j only, we count each pair once. Since we process points sequentially and only look at previous points, we won't double count. Implementation: dict = dict mapping pair tuple to count. For each pair (x,y). For dx in range(k+1): dy = k-dx. target = (x ^ dx, y ^ dy). Add dict.get(target,0) to answer. After processing, increment dict[(x,y)].
+
+Edge cases: Note that dx and dy could be any integer up to k? But XOR values could exceed k. Because dx is XOR of coordinates of two points (x1 xor x2). That value may be large but we restrict to dx <= 100. But the requirement is that dx + dy = k - maybe each small. However possible that if k small, the only dx within [0,k] anyway. However there may be other pairs with dx>k but dy small such that sum k? But sum dx+dy = k, so if dx>k, then dy negative invalid. So all valid dx are limited to 0..k. Good.
+
+But we must confirm that all pair differences sum to k, but our algorithm only considers dx from 0; but XOR values produce non-negative integers meaning dx XOR = x^x' may be >k. But we only test dx <= k potential, so if a pair has product with xors both >k? Suppose dx = 8, dy 4, k=12, both <=k. But dx=2^math? Actually dx >=0 e.g. 8 <= 12 fine. Honestly dx <= min(k, maxXOR). But enumerating 0..k covers all possibilities.
+
+Implementation details: The dict will store counts; on each point we process all dx values. Complexity O(n*k). For up to 50000 * k=100 -> 5000000 lookups ok. Use tuple (x,y) as key.
+
+Implement function. Complexity fine.
+
+Edge: k=0 we iterate dx=0. then we just count previously same point. That's right.
+
+Let's produce final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For two points
+
+```
+p1 = (x1 , y1)
+p2 = (x2 , y2)
+```
+
+the distance used in the statement is
+
+```
+distance(p1 , p2) = (x1 XOR x2) + (y1 XOR y2)
+```
+
+`XOR` is the bitwise exclusive–or operation.
+
+For a given integer `k` we have to count all unordered pairs  
+
+```
+(i , j) ,  i < j
+```
+
+whose distance equals `k`.
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* The distance is an **integer** between `0` and `2^20·2` (because  
+  `x , y ≤ 1 000 000 < 2^20`), but the problem guarantees  
+  `k ≤ 100`.  
+  Therefore the two partial distances
+
+  ```
+  dx , dy  ≥ 0
+  dx + dy = k
+  ```
+
+  must satisfy `0 ≤ dx ≤ 100` and `0 ≤ dy ≤ 100`.
+
+* If we already processed all points with index `< i`,
+  the number of pairs `(j , i)` with the required distance is
+  obtained by looking for *how many previous points have a
+  specific coordinate*.
+
+  For a fixed point `(x , y)` and a chosen `(dx , dy)`
+
+  ```
+  (x XOR x') = dx      →  x' = x XOR dx
+  (y XOR y') = dy      →  y' = y XOR dy
+  ```
+
+  Thus there is exactly **one** candidate point that may form the
+  required distance with `(x , y)` – the point `(x XOR dx, y XOR dy)`.
+
+* Therefore we can scan the list once and, for every point,
+  try all `dx` ( `0 … 100` ), compute the corresponding
+  `dy = k - dx`, build the point `(x XOR dx , y XOR dy)` and
+  ask how many times the point already appeared among the previous pairs.
+
+--------------------------------------------------------------------
+
+#### 2.  Algorithm
+```
+answer = 0
+counter = empty hash map  (key: (x,y) , value: how many times seen)
+
+for each point (x , y) in coordinates (in given order):
+
+    for each dx from 0 to k:          // k <= 100
+        dy = k - dx
+        target = (x XOR dx , y XOR dy)
+        answer += counter.get(target, 0)
+
+    counter[(x , y)] += 1            // add current point to the map
+
+return answer
+```
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the exact number of all pairs
+with difference `k`.
+
+---
+
+##### Lemma 1  
+During the processing of the point `P = (x , y)` (index `i`)
+the map `counter` contains exactly the points with indices `< i`
+and their counts.
+
+**Proof.**  
+Initialization is empty.  
+When a point is processed, after all queries are answered it is added
+to `counter`.  
+Thus before processing point `i` the map contains points
+indices belonging to `{0,…,i-1}` and no others.
+∎
+
+
+
+##### Lemma 2  
+For each pair of points `(p , q)` such that  
+`p` is processed later (`p` index `> q`) and  
+`distance(p,q) = k`,  
+there exists exactly one iteration of the inner loop that counts
+this pair.
+
+**Proof.**  
+Let `P` be the later point and `Q` be the earlier point.  
+Define
+
+```
+dx = Px XOR Qx
+dy = Py XOR Qy       (both non‑negative)
+```
+
+Because the distance between them is `k`,
+`dx + dy = K`.  
+Consequently, when `P` is processed, one iteration of the inner loop
+uses `dx` (range `0…k`) and computes `dy = k-dx`.  
+The computed target point is
+
+```
+(Px XOR dx , Py XOR dy) = (Qx , Qy)
+```
+
+By the definition of `dx` and `dy`,
+the target point equals `Q`.  
+Because of Lemma&nbsp;1, `Q` is already counted in `counter`,
+so the count of `Q` is added to `answer`.  
+No other iteration can produce the same target, because a different
+`dx` would produce a different target point. Hence the pair is counted
+exactly once. ∎
+
+
+
+##### Lemma 3  
+No pair of points with distance `k` is missed by the algorithm.
+
+**Proof.**  
+Consider any pair `(p,q)` that satisfies `distance(p,q)=k`.  
+Without loss of generality let `p` have the larger index.
+When `q` finishes being processed, it is inserted into `counter`.  
+When later `p` is processed, Lemma&nbsp;2 gives that the pair will be
+counted.  
+Thus every admissible pair contributes exactly one to `answer`. ∎
+
+
+
+##### Lemma 4  
+No pair equals `k` is missed and no pair is counted twice.
+
+**Proof.**  
+By Lemma&nbsp;3 every admissible pair is counted once,
+and no pair can become counted twice because the second time the
+later one would already be present in the map but **the earlier one
+would be missing** in the second processing, which never occurs. ∎
+
+
+
+##### Theorem  
+`answer` returned by the algorithm equals the number of pairs
+`(i, j)` with `i < j` such that
+
+```
+(xi XOR xj) + (yi XOR yj) = k
+```
+
+**Proof.**  
+By Lemma&nbsp;4 all admissible pairs counted, none missed, none double‑counted.
+Therefore `answer` is precisely the required count. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+Let `n = len(coordinates)`.
+
+*Inner loop runs `k+1 ≤ 101` iterations*  
+for each of `n` coordinates.
+
+```
+Time   :  O(n · k)       ≈ 5·10^6 operations for n=5·10⁴, k=100
+Memory :  O(n)           (dictionary of coordinates)
+```
+
+Both bounds satisfy the constraints easily.
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+from collections import defaultdict
+
+class Solution:
+    def countPairs(self, coordinates: List[List[int]], k: int) -> int:
+        """
+        Count how many unordered pairs with distance calculated by
+        (x1 XOR x2) + (y1 XOR y2) equal to k.
+        """
+        answer = 0
+        # dictionary mapping (x,y) -> how many times already seen
+        counter = defaultdict(int)
+
+        for x, y in coordinates:
+            # try all possible dx such that dx + dy = k
+            for dx in range(k + 1):
+                dy = k - dx
+                target = (x ^ dx, y ^ dy)
+                answer += counter.get(target, 0)
+
+            # add the current point to the dictionary
+            cnt_key = (x, y)
+            counter[cnt_key] += 1
+
+        return answer
+```
+
+The program follows exactly the algorithm proven correct above
+and conforms to the needs of the problem.

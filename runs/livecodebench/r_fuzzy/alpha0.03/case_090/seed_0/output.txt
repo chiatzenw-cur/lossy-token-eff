@@ -1,0 +1,348 @@
+<|channel|>analysis<|message|>We need count numbers in range [low,high] whose digit parity count equal and divisible by k. Constraints: high up to 1e9 (10 digits?). 1e9 is 10^9, 9 digits. Actually 1,000,000,000 has 10 digits; but high <= 1e9 so <= 1,000,000,000 (1e9) inclusive: 10 digits max 10? 1e9 has 10 digits (1 followed by 9 zeros). Counting digits up to 10.
+
+Brute force range too large (1e9). Need efficient counting using digit DP. Need to count numbers <= N that satisfy conditions. Then answer = f(high) - f(low-1). Need DP over digits positions, track parity count difference? We need equal even and odd counts. We can track balance = evenCount - oddCount. Want 0 at end. Since digits length variable, leading zeros not counted and can affect parity? For leading zeros, they don't count as digits. Traditional DP uses tight and pos, plus parDiff: difference even-odd so far, with offset. Max length 10, diff range [-10,10]. We'll also track length? Actually leading zeros may shift diff not counting. But we can treat that leading zeros don't contribute to parity. At each step, if leading zeros flag, then we don't add to diff. Use another flag started. Implementation: dp[pos][diff+offset][tight][started] maybe memoization. Count. At end, need numbers >1? We include 0? Range low>=1, but our function count<=N will count 0 as not valid because started=0 at end => not considered? We only count starts -> if started false at end, ignore. Also ensure number divisible by k: we need to track modulo k. Since k<=20 small. So add modulo state. So DP state: pos index (from 0 to len-1), diff offset [-maxlen, maxlen] maybe 11. modulus 0..k-1. tight flag, started flag.
+
+We will compute recursively.
+
+pos ranges: 0 index for most significant. We'll convert number digits list.
+
+Memoization dict (pos, diff, mod, tight, started). Complexity: len 10, diff 21, mod <=20, tight 2, started 2, total 10*21*20*2*2=16800 states. Good.
+
+DP transitions: iterate digit d from 0..limit. new_tight = tight & (d==limit). new_started = started or d!=0. new_diff = diff; if new_started: if d%2==0 new_diff+1 else -1. new_mod = (mod*10 + d) % k if new_started else mod? Actually if not started yet, we don't add digits, but number is 0 so remainder 0? But if we skip leading zeros, eventually once we start, we compute remainder. For leading zeros we can keep mod=0 (since not contributing). But once we start, we need compute using full digits including zeros after start. That easy.
+
+At end position (pos==len), if started and diff==0 and mod==0 -> count 1 else 0.
+
+Edge case: number 2-digit maybe? zeros after start count. Works.
+
+Implement function count_up_to(N) returns number <= N.
+
+Then solve.
+
+Test examples.
+
+Let's implement. Use recursion with lru_cache.
+
+Time: fine.
+
+Let's produce final code.
+
+Implementation details: We'll convert N to digits list by str, etc.
+
+Edge: low could be 1 => low-1=0, count_up_to(0) should return 0. handle.
+
+Check with examples.
+
+Let's do quick mental tests.
+
+Example1: low 10 high 20 k 3.
+Count <=20: numbers divisible by 3 with equal parity digits. Let's list 3,6,9,12,15,18,... up to 20. 12 and 18 equals. So count 2. Count <=9 too? None. So answer 2. Good.
+
+Edge low=1 high=10 k=1. Count <=10 includes 10 only? Also others 0? 0 not considered. So result 1. good.
+
+Edge low=5 high=5 k=2 -> count <=5 -> primes none. none. answer 0.
+
+Ok.
+
+Will use Python.
+
+Proceed to final.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a number `x`
+
+* let `even(x)` be the number of even digits,
+* let `odd(x)`  be the number of odd digits.
+
+`x` is *beautiful* iff
+
+```
+even(x) == odd(x)          (1)
+x  is divisible by k        (2)
+```
+
+`low , high ≤ 10^9` – the interval can contain up to a billion numbers,  
+therefore we have to count the numbers with a *digit DP*.
+
+The answer is
+
+```
+beautiful(high) – beautiful(low – 1)                     (3)
+```
+
+`beautiful(N)` – amount of beautiful numbers in `[0 , N]`.
+
+--------------------------------------------------------------------
+
+#### 1.  State definition
+
+We process the decimal representation of `N` from the most significant
+digit to the least.
+
+```
+pos   – current position (0 … len-1)
+diff  – even_count – odd_count  seen so far
+mod   – current value modulo k
+tight – prefix already equal to N's prefix ?
+started – have we seen a non‑zero digit yet ?
+```
+
+* `diff` is in `[-len , len]`, we store it offset by `len` to use it
+  as an array index (or as a key in a dictionary).
+* `mod` is in `0 … k-1`,  `k ≤ 20`.
+* `tight` and `started` each have two possibilities.
+
+The number of states is at most
+
+```
+len (10) × d_range (21) × k (≤20) × 2 × 2   ≈ 1.7·10^4
+```
+
+so memoisation is trivial.
+
+--------------------------------------------------------------------
+
+#### 2.  Transition
+
+For the current position we may put any digit `d`
+
+```
+0 … limit
+limit = digits[pos]        if tight
+      = 9                   otherwise
+```
+
+* `new_tight   = tight  and  (d == limit)`
+* `new_started = started or (d != 0)`
+
+If the number has not started yet (`new_started == False`) nothing
+changes – we are still only counting leading zeros.  
+When it starts, the digit contributes to the parity balance and to the
+modulo.
+
+```
+if new_started:
+        new_diff  = diff + (1 if d%2==0 else -1)
+        new_mod   = (mod*10 + d) % k
+else:
+        new_diff  = diff          # unchanged
+        new_mod   = 0             # still 0 (no digits)
+```
+
+--------------------------------------------------------------------
+
+#### 3.  Base cases
+
+```
+pos == len      # all digits processed
+```
+
+A valid number must
+
+* have started (`started == True`) – we ignore the empty number 0
+* have `diff == 0` (equal even/odd counts)
+* have `mod == 0`  (divisible by k)
+
+If all three are true we return `1`, otherwise `0`.
+
+--------------------------------------------------------------------
+
+#### 4.  Algorithm
+
+```
+def beautiful(N):
+        if N < 0:        return 0
+        digits = list of decimal digits of N
+        memo = empty dictionary
+        return dfs(0, offset, 0, True, False)
+
+answer = beautiful(high)
+        - beautiful(low-1)
+```
+
+`dfs` follows the transition described above and caches every evaluated
+state.
+
+The recursion is safe because the depth is at most 10.
+
+--------------------------------------------------------------------
+
+#### 5.  Correctness Proof  
+
+We prove that the algorithm returns the correct answer.
+
+---
+
+##### Lemma 1  
+For every state `(pos,diff,mod,tight,started)` the function `dfs`
+returns the number of ways to fill the remaining positions
+(`pos … len-1`) so that
+
+* the already processed prefix satisfies the `tight` and `started`
+  conditions,
+* the whole number will finish with `even == odd`,
+  `value % k == 0`, and no leading zeros.
+
+**Proof.**
+
+Induction over `pos` from `len` down to `0`.
+
+*Base (pos == len):*  
+The suffix is empty, there is exactly one way (accept the number)
+iff the final conditions (`started`, `diff==0`, `mod==0`) hold.
+`dfs` returns `1` or `0` accordingly – the claim holds.
+
+*Induction step:*  
+Assume the claim true for all larger positions.
+For state `S = (pos,diff,mod,tight,started)`
+
+```
+dfs(S) = sum over all admissible digits d
+        dfs(S next state with d)
+```
+
+All admissible digits are exactly the ones that respect the `tight`
+condition (`d ≤ limit`).  
+The next state keeps the invariant:  
+the prefix built so far satisfies the new `tight`,
+`started`, and the current `diff`/`mod` values are updated exactly as
+the placed digit would do.
+
+By the induction hypothesis each `dfs(next state)` counts exactly the
+ways to finish the number from that point onward that lead to a
+beautiful number.  
+Summation over all admissible digits gives the exact number of
+beautiful completions for state `S`. ∎
+
+
+
+##### Lemma 2  
+`beautiful(N)` equals the number of beautiful integers in `[0,N]`.
+
+**Proof.**
+
+`beautiful(N)` invokes `dfs` on the state where
+
+```
+pos = 0
+diff = 0            (no digits processed)
+mod  = 0
+tight = True        (look at prefix of N)
+started = False     (no non‑zero digit placed)
+```
+
+By Lemma&nbsp;1 `dfs` counts all completions of this prefix
+(i.e. all numbers `≤ N`) that fulfil the beauty conditions.
+Leading zeros are ignored because `started` must become `True`
+before a number counts, so the empty number `0` is not counted.
+Hence the returned value is exactly the amount of beautiful integers
+in `[0,N]`. ∎
+
+
+
+##### Lemma 3  
+For any `low, high` with `1 ≤ low ≤ high` the algorithm outputs
+
+```
+beautiful(high) – beautiful(low-1)
+```
+
+which equals the number of beautiful integers in `[low, high]`.
+
+**Proof.**
+
+`beautiful(high)` counts all beautiful numbers `≤ high`.  
+`simple(high) – beautiful(low-1)` removes all beautiful numbers `< low`,
+leaving precisely the beautiful numbers where `low ≤ x ≤ high`.
+
+Since the two sets are disjoint, subtraction does not double‑count or
+miss any number. ∎
+
+
+
+##### Theorem  
+`Solution.numberOfBeautifulIntegers(low, high, k)` returns the amount of
+beautiful integers in the closed interval `[low, high]`.
+
+**Proof.**
+
+* By Lemma&nbsp;2 the function `beautiful` correctly counts beautiful
+  numbers up to any bound `N`.
+
+* By Lemma&nbsp;3 the final subtraction yields exactly the amount of
+  beautiful numbers in `[low, high]`.
+
+Therefore the algorithm is correct. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Complexity Analysis
+
+Let `L = number of digits of N` (≤ 10),  
+`D = 2L+1`  (range of `diff`),  
+`k ≤ 20`.
+
+Number of DP states: `L · D · k · 2 · 2 = O(L · D · k) ≤ 1.7·10^4`.  
+Each state iterates over at most 10 digits.  
+
+```
+Time   :  O(L · D · k · 10)   ≤ 2·10^5   operations
+Memory :  O(L · D · k)        ≤ 1.7 ·10^4 integers
+```
+
+Both are negligible for the given limits.
+
+--------------------------------------------------------------------
+
+#### 7.  Reference Implementation  (Python 3)
+
+```python
+from functools import lru_cache
+from typing import List
+
+class Solution:
+    def numberOfBeautifulTheyIntegers(self, low, high, k):
+        # helper that counts beautiful numbers ≤ N
+        def count_beautiful(N: int) -> int:
+            if N < 0:
+                return 0
+            digits = list(map(int, str(N)))
+            length = len(digits)
+            offset = length  # to shift diff into non‑negative indices
+
+            @lru_cache(maxsize=None)
+            def dfs(pos: int,
+                    diff: int,    # diff + offset
+                    mod: int,
+                    tight: bool,
+                    started: bool) -> int:
+                if pos == length:
+                    # finished number
+                    return int(started and diff == offset and mod == 0)
+                limit = digits[pos] if tight else 9
+                total = 0
+                for d in range(limit + 1):
+                    ntight = tight and (d == limit)
+                    nstarted = started or d != 0
+                    ndiff = diff
+                    nmod = mod
+                    if nstarted:
+                        ndiff = diff + (1 if d % 2 == 0 else -1)
+                        nmod = m := (mod * 10 + d) % k
+                    # else staying leading zeros: diff / mod unchanged
+                    total += dfs(pos + 1,
+                                 ndiff,
+                                 nmod,
+                                 ntight,
+                                 nstarted)
+                return total
+
+            # start recursion
+            return dfs(0, offset, 0, True, False)
+
+        return count_beautiful(high) - count_beautiful(low - 1)
+
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

@@ -1,0 +1,348 @@
+<|channel|>analysis<|message|>We need to count pairs where XOR distances add to k. The coordinates up to 1e6, k up to 100. N up to 50000.
+
+We can brute force O(N^2)=2.5B too big.
+
+We need an efficient approach.
+
+Observation: For each point, we can think of the other points that give a specific xor distance. Since k <= 100, coordinates differences small? Not exactly: XOR values can be huge; but sum of two XORs equals k. Since k <= 100, each term must be <= k. So x1 XOR x2 <= k and y1 XOR y2 <= k. So each difference's XOR is bounded by k, small. That means we can restrict possible neighbors within small XOR range. But coordinates up to 1e6, but XOR bounded by 100 => difference in binary limited to low bits. In effect, only small bits differ; high bits the same.
+
+Given k <= max 100, we can precompute for each point all possible x2 values that produce x1 XOR x2 <= k. For each point, we can iterate over all possible xM = x1 XOR x2 where xM is value from 0..k (since x1 XOR x2 <=k). But we also need y1 XOR y2 <= k. The pair of xM and yM must satisfy xM + yM = k.
+
+Thus we can loop over all xM from 0..k, yM = k - xM. For each point (x1,y1), we need to count number of other points that have x2 such that x1 XOR x2 = xM and y1 XOR y2 = yM. That is points with coordinates (x2, y2) where x2 = x1 XOR xM and y2 = y1 XOR yM. So we just need to count occurrences in the multiset of coordinates of that computed point.
+
+Thus we just need to build a hashmap of coordinates frequency. Then for each point, for each xM in 0..k, compute yM = k - xM, then target(x2, y2). Count freq. Sum over all points, divide by 2 because each pair counted twice? We need to ensure we don't double count when i<j. We can for each point iterate over all combinations and accumulate counts in global answer, non-ordered, and then divide by 2. But careful: when k==0, xM,yM=0 => target same as point itself; counting self pair, we must subtract N for self pairs? Actually for k==0 we need combinations of identical points. For each point, target is same point, so freq includes itself; then includes self pair; we need choose pairs (i<j) among duplicates. But for identical points, countSym approach: answer = sum_{points} freq[target] -1 ??? Let's design.
+
+Method: For each point p, we compute total freq of target t. For each point with coordinates p, we add freq[t] to total count. After processing all points, total_count = sum counts. But each pair is counted twice, because for pair (p,q) with v such that p->q via complement argument. For k>0: For pair (p,q) with p != q, when we process p, count t = q if p XOR q sum = k. Similarly when q processed, t = p. So counted twice sum. For k>0 and distinct points, we can divide by 2. For k==0, duplicates cause pairs counted multiple times but self considered? Let's analyze: For k==0, we consider pairs where distance 0: required xor differences zero => x1=x2,y1=y2. So pairs among identical coordinates. Our algorithm: for each point p, xM = 0, yM = 0; target is itself. freq[t] includes all points with that coordinate, instance itself. So count added = freq[t] (which includes self). Summing across all points with freq f. Then total_sum = sum over all points l (freq[point]) = sum f * f? Wait, we iterate over each point individually: for each point (including duplicates), we add freq[t] (which is f). So total_sum over all points is f * f = f^2. Now we need number of unordered pairs with i<j. That is f choose 2 = f*(f-1)/2. We computed f^2, need to subtract f to remove self pair counts after dividing by 2. Because f^2 includes self pair counted when p=q (there are f such self pairs). After dividing by 2, we get (f^2 - f)/2 + f/2? Let's compute: total_sum = 2 * sum pairs? Let's compute properly: Each unordered pair (p,q) with p!=q counted twice. Each self pair counted once per point? Wait self pair P same as same point? Actually pair (i,j) with i<j cannot be same index, so self pair not considered. So we don't want to count self. But our algorithm counted self when p==q, but there are no pairs involving same index. However we counted these when we add freq[t] for each point p. For the point p, we added f. Among those f, one is itself, f-1 are other identical points. So self pair counted as 1 per point. So total self counting = N. Since we will divide by 2, we must subtract N before dividing? Wait dividing by 2 counts self pairs too? We shouldn't count them. But if after computing total_sum, we do (total_sum - N)/2? Let's test with example 2: coordinates all 5 points identical. f=5. Then total_sum = sum f * f 5 times? Wait we sum over each point: for each point (f=5), sum += freq[t] = 5. Total_sum = 5*5=25. N=5. After removing N: 25-5=20. Dividing by 2 gives 10. Which matches expected. Good.
+
+For k>0, similar but self pairs don't exist because target distinct? Actually if k>0, the target could coincide with point if xM=0 and yM=0 only when k=0; but k>0, so xM>0 or yM>0. Thus target always different point, so self count doesn't exist. So we can just divide by 2.
+
+Edge case: Suppose k>0 but there might be points with other coordinates equal to target we computed; but that's fine.
+
+Therefore algorithm:
+
+- Build dictionary mapping (x,y) to count.
+
+- Count = 0
+- If k <= 100:
+  for xM in range(k+1):
+      yM = k - xM
+      for each point p in coordinates:
+          target = (p[0] ^ xM, p[1] ^ yM)
+          cnt = freq.get(target,0)
+          count += cnt
+- After loop, if k==0:
+     count = (count - len(coordinates)) // 2
+  else:
+     count //= 2
+
+Time complexity: O((k+1) * N). k <= 100, N <= 50000 => 5*10^6 operations, feasible.
+
+Optimization: Use local for each (xM,yM) pair, we can iterate over points and compute target's count. Could also use precomputed list of coordinates etc.
+
+Implementation details:
+
+- Should use tuples as keys.
+
+Return count.
+
+Let's test mentally example 1:
+
+coords random: [1,2],[4,2],[1,3],[5,2]; k=5.
+
+freq: each unique.
+
+Loop xM=0 to 5:
+
+Enumerate each point.
+
+We need compute resulting count.
+
+I think will produce 4.
+
+Let's manually compute:
+
+xM=0,yM=5: target1 for each point: (1,2) -> (1,7) none; (4,2)-> (4,7) none; (1,3)-> (1,8) none; (5,2)-> (5,7) none.
+
+xM=1,yM=4: target for each: (1,2)-> (0,6) none; (4,2)->(5,6) none; (1,3)->(0,7) none; (5,2)->(4,6) none.
+
+xM=2,yM=3: ...
+(1,2)->(3,1) none; (4,2)->(6,1) none; (1,3)->(3,0) none; (5,2)->(7,1) none.
+
+xM=3,yM=2: #:(1,2)->(2,0) none; (4,2)->(7,0) none; (1,3)->(2,1) none; (5,2)->(6,0) none.
+
+xM=4,yM=1: (1,2)->(5,3) none; (4,2)->(0,3) none; (1,3)->(5,2) none; (5,2)->(0,3) none? Wait target=(5,2) ^ (4,1) -> (1,3) actually? Let's compute: (5 XOR 4) = 1, (2 XOR 1) =3. So point (5,2) -> target (1,3) exists. So count add for point (5,2) cnt=1. Conversely, (1,3)->(1,3) -> target (5,2) exists. So count add 1. So total 2 from that pair.
+
+xM=5,yM=0: (1,2)->(4,2) exists; (4,2)->(1,2) exists; (1,3)->(4,3) no; (5,2)->(0,2) none. So count 2 from pair (1,2)-(4,2). So total 4; then divide by 2 => 2 pairs. Works.
+
+Edge-case when k>0 and duplicates? Suppose two same point but still distance 0? If k>0, duplicates would not produce distance >0 because XOR min 0. But duplicates produce 0 difference. So if k>0, duplicates cannot be counted. So algorithm unaffected.
+
+Thus final algorithm implemented.
+
+Now produce answer as code. Ensure to use typing List of List.
+
+Potential memory: freq size up to 5e4.
+
+Implement simple.
+
+Make sure to use for loops properly.
+
+Also note that we are summing up counts via large ints; use Python int.
+
+Let's code.
+
+Complexities fine.
+
+Let's produce final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For two points  
+
+```
+p = (x₁ , y₁)      q = (x₂ , y₂)
+```
+
+the distance defined in the problem is
+
+```
+dist(p , q) = (x₁ XOR x₂) + (y₁ XOR y₂)
+```
+
+`k` must be equal to this distance.  
+`k` is at most **100**, therefore each part of the sum
+
+```
+x₁ XOR x₂   ≤ k
+y₁ XOR y₂   ≤ k
+```
+
+must be a small integer (`0 … 100`).  
+This observation gives a very compact enumeration of all possible neighbours.
+
+--------------------------------------------------------------------
+
+#### Key Observation
+
+For a fixed point `p` and a fixed value `X = x₁ XOR x₂`  
+(`0 ≤ X ≤ k`), the second part of the sum must be
+
+```
+Y = k – X          ( 0 ≤ Y ≤ k )
+```
+
+and the neighbour must satisfy
+
+```
+x₂ = x₁ XOR X
+y₂ = y₁ XOR Y
+```
+
+So for every point `p = (x₁ , y₁)` the only possible neighbours
+(which could give distance `k`) are the points
+
+```
+(x₁ XOR X , y₁ XOR (k – X))   for each  X = 0 … k
+```
+
+Hence to answer the problem we only need to know how many
+points exist at those coordinates – i.e. a frequency dictionary.
+
+
+
+--------------------------------------------------------------------
+
+#### Algorithm
+```
+build dictionary freq[(x , y)] = number of points with that coordinate
+
+ans = 0
+for X in 0 … k:
+        Y = k – X
+        for each point p = (x , y) in coordinates:
+                target = (x XOR X , y XOR Y)
+                ans += freq.get(target, 0)
+
+# each unordered pair counted twice (once from each point)
+if k == 0:
+        # self‑pairs were counted once per point, need to remove them
+        ans = (ans - len(coordinates)) // 2
+else:
+        ans //= 2
+return ans
+```
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the number of pairs  
+`(i , j)` with `i < j` and `dist(p_i , p_j) = k`.
+
+---
+
+##### Lemma 1  
+For any point `p = (x₁ , y₁)` and any integer `X` with `0 ≤ X ≤ k`  
+let `Y = k – X`.  
+The point `q = (x₂ , y₂)` satisfies `dist(p , q) = k`
+iff `q = (x₁ XOR X , y₁ XOR Y)`.
+
+**Proof.**
+
+```
+dist(p , q) = (x₁ XOR x₂) + (y₁ XOR y₂)
+```
+
+If `q = (x₁ XOR X , y₁ XOR Y)`, then
+
+```
+x₁ XOR x₂ = x₁ XOR (x₁ XOR X) = X
+y₁ XOR y₂ = y₁ XOR (y₁ XOR Y) = Y
+```
+
+and `X + Y = k`.  
+Conversely, if `dist(p , q) = k` then
+
+```
+x₁ XOR x₂ = X    (0 ≤ X ≤ k)
+y₁ XOR y₂ = Y = k – X
+```
+
+hence `x₂ = x₁ XOR X` and `y₂ = y₁ XOR Y`. ∎
+
+
+
+##### Lemma 2  
+During the execution of the algorithm, for every pair of distinct
+points `(p , q)` with `dist(p , q) = k`
+there are exactly two increments of `ans` contributed by this pair.
+
+**Proof.**
+
+Consider the pair `(p , q)`.
+
+*While processing point `p`*  
+according to Lemma&nbsp;1 exactly one `X` (namely `X = x₁ XOR x₂`) has
+`q` as the target.  
+So `ans` is incremented by `freq[q]` which contains `q` as one of
+its elements – thus `ans` is increased by `1` for this pair.
+
+*While processing point `q`*  
+the same argument shows the opposite direction, giving another
+increment of `ans` by `1`.
+
+For any other pair of points the edge Case does not hold,
+hence no increment is added. ∎
+
+
+
+##### Lemma 3  
+If `k = 0` the algorithm counts each unordered pair of distinct
+points exactly twice and counts each point exactly once as a
+self‑pair.  
+After the correction `(ans - len(coordinates)) // 2` the value equals
+the number of unordered pairs with distance `0`.
+
+**Proof.**
+
+When `k = 0` we have `X = Y = 0`, therefore
+
+```
+target = (x₁ XOR 0 , y₁ XOR 0) = (x₁ , y₁) = p
+```
+
+so each point contributes `freq[p]` to `ans` while iterating over
+itself.  
+Thus `ans` contains `freq[p]` contributions for each point `p`, i.e.
+`freq[p]` self‑pairs counted (one per point).  
+The total number of self‑pairs is `n = len(coordinates)`.
+
+By Lemma&nbsp;2, each unordered pair of different points is counted
+exactly twice.  
+Therefore `ans` equals
+
+```
+2 * (#unordered pairs) + n
+```
+
+Applying the formula `(ans - n) // 2` leaves exactly the number of
+unordered pairs. ∎
+
+
+
+##### Lemma 4  
+If `k > 0` the algorithm counts each unordered pair of distinct
+points exactly twice and counts no self‑pair.  
+After the division by `2` the result equals the number of unordered
+pairs with distance `k`.
+
+**Proof.**
+
+For `k > 0` the value `X = 0` forces `Y = k > 0` and vice versa,
+so the target point can never equal the source point.
+Thus no self‑pair is counted.
+
+By Lemma&nbsp;2 every unordered pair of distinct points with distance
+`k` is counted twice, no other pair is counted.  
+Dividing by `2` gives the desired count. ∎
+
+
+
+##### Theorem  
+The algorithm returns the number of pairs `(i , j)` with `i < j`
+such that the distance between points `i` and `j` equals `k`.
+
+**Proof.**
+
+By Lemma&nbsp;3 the algorithm is correct for `k = 0`.  
+By Lemma&nbsp;4 the algorithm is correct for `k > 0`.  
+These cover all possible values of `k`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+Let `n = len(coordinates)` ( `2 ≤ n ≤ 50 000` )  
+`k ≤ 100`.
+
+```
+building freq  :  O(n)
+main loops      :  (k+1) * n   ≤ 101 * 5·10⁴  ≈ 5·10⁶ operations
+memory usage    :  O(n)        (frequency map)
+```
+
+Both time and memory limits are easily satisfied.
+
+
+
+--------------------------------------------------------------------
+
+#### Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def countPairs(self, coordinates: List[List[int]], k: int) -> int:
+        # frequency dictionary of coordinates
+        freq = {}
+        for x, y in coordinates:
+            freq[(x, y)] = freq.get((x, y), 0) + 1
+
+        # counting
+        ans = 0
+        for X in range(k + 1):
+            Y = k - X
+            for x, y in coordinates:
+                target = (x ^ X, y ^ Y)
+                ans += freq.get(target, 0)
+
+        if k == 0:
+            # remove self‑pair occurrences and divide by two
+            ans = (ans - len(coordinates)) // 2
+        else:
+            ans //= 2
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above.

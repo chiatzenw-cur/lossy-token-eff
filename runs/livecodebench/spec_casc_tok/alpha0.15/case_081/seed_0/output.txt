@@ -1,0 +1,260 @@
+<|channel|>analysis<|message|>We need to find maximum possible length of subsequence of equal elements after at most one operation per index where we can change the value to any integer within [nums[i]-k, nums[i]+k]. We can choose to modify each index at most once, but we can decide to not modify. We want to maximize subsequence length where all chosen elements become equal to some target value T. For each index i, we can decide to transform nums[i] to T if T is within [nums[i]-k, nums[i]+k]. If not, we cannot use that index. Since we can choose indices arbitrarily, we want to pick target T that maximizes number of indices where |nums[i]-T| <= k. This is like finding the maximum count of numbers within distance k of a target. Equivalent to: find maximum size of a set of indices such that all their values are within k of some T. Since T can be any integer, we can think of intervals [nums[i]-k, nums[i]+k] for each index. Then we want to find a point T that lies in the maximum number of intervals. That's classic: maximum overlap of intervals. The answer is maximum number of intervals covering a point. Since number of intervals up to 1e5, we can sweep line on sorted endpoints.
+
+But careful: We may apply operation to each index only once, we can choose to not modify. But if T is within [nums[i]-k, nums[i]+k], we can modify to T. If T equals original value, we don't need to modify. So yes.
+
+Thus the answer is maximum overlap. There is no better strategy because we can choose any T; we cannot get more by selecting multiple Ts because subsequence must be equal elements. So for each index we can transform to T if within range. So maximum beauty is max over T of number of i such that |nums[i]-T| <= k.
+
+Thus algorithm: create events: for each i, add event at start = nums[i]-k, end = nums[i]+k. We need to find maximum count of active intervals covering a point.
+
+We can use sweep line: sort all start and end events, use +1 at start, -1 after end. For inclusive intervals, we need to handle endpoints correctly. For integer T, we can treat intervals as closed. In sweep we can add +1 at start, -1 at end+epsilon. Since values can be large and not necessarily integer? all integers. So we can treat coverage at endpoints. We can sort events as (coordinate, delta). For start, delta=+1; for end, delta=-1. But to ensure inclusive, we need to subtract after end. So we can interpret end as end+1? But coordinates up to 1e5 +/- 1e5, so up to 2e5 range. We can use coordinate compression or use divide and conquer. But 1e5 events: we can sort start and end separately. Standard approach: sort starts ascending, ends ascending. Use two pointers: i for starts, j for ends. As we sweep increasing coordinate, we keep adding starts until start <= current coordinate, subtract ends where end < current coordinate? Wait typical algorithm: you sort starts and ends. Then iterate over starts sorted; for each start, we add 1. While the smallest end < current start, we subtract 1. Complexity O(n log n). But we need inclusive: If interval [l, r] inclusive, when we process a start at coordinate c, we should consider that ends at coordinate c-1 should be removed. Actually we can treat endpoints as half-open: [l, r+1). Implementation: use ends as r+1. Then we add at l, subtract at r+1. So we can compute max overlap.
+
+Alternatively, we can create events as (coord, delta) and sort. For each event, we add delta to current count, update max. But we need to ensure order of events with same coord: starts (+1) before ends (-1) to account inclusive. Because if an interval starts and ends at same coordinate, we want it counted. So we want +1 before -1. Equivalent to sorting by (coord, delta) where delta: +1 before -1. So we can sort by (coord, -delta) because +1 > -1. Actually delta values: +1, -1. We want +1 first. So sort by (coord, -delta). Let's produce that.
+
+But careful: For an interval [l, r], we create event (l, +1), (r+1, -1). That ensures inclusive. Then we don't need to handle order. We'll just add all events sorted.
+
+Simpler: Use coordinate compression: for each i create intervals [l, r], add l to array, r+1 to array. Then sort and sweep counts.
+
+Thus complexity O(n log n). Should fit constraints.
+
+Edge cases: k large, intervals may exceed bounds, but values up to 1e5, k up to 1e5, but coordinates can be negative. Use Python int.
+
+Let's test with example: nums=[4,6,1,2], k=2. intervals: [2,6], [4,8], [-1,3], [0,4]. Actually for nums[2]=1: interval [-1,3]; for nums[3]=2: [0,4]. Now we create events: (2,+1),(7,-1) ; (4,+1),(9,-1); (-1,+1),(4,-1); (0,+1),(5,-1). Sorted events: (-1,+1),(0,+1),(2,+1),(4,+1),(4,-1),(5,-1),(7,-1),(9,-1). Sweep: cnt=0; add at -1 =>1; max 1; +1 at0 =>2; max 2; +1 at2 =>3; max 3; +1 at4 =>4; max 4; -1 at4 =>3; -1 at5 =>2; -1 at7 =>1; -1 at9 =>0. Max 4. But answer expected 3. Wait we get 4? Let's analyze.
+
+Our order may double count something? Let's recalc intervals correctly: For i=0: [2,6] inclusive. For i=1: [4,8]. For i=2: [-1,3]. For i=3: [0,4]. They all overlap at T=4? Let's check: 4 within [2,6] yes; [4,8] yes; [-1,3] no (since 4 > 3). [0,4] includes 4. So 3 intervals at 4. So max 3. But our sweep found 4 at coordinate 4. Let's examine events: l=2, r=6 => add (2,+1),(7,-1). l=4,r=8 => (4,+1),(9,-1). l=-1,r=3 => -1,+1, 4,-1. l=0,r=4 => 0,+1,5,-1. Sorted: (-1,+1),(0,+1),(2,+1),(4,+1),(4,-1),(5,-1),(7,-1),(9,-1). Let's sweep: start cnt=0. > -1 +1 =>1. 0 +1 =>2. 2 +1 =>3. At 4 +1 =>4. Then 4 -1 =>3. So at coordinate 4, we had 4 before removal. But why is it 4? At coordinate 4, three intervals should be overlapping: [2,6], [4,8], [0,4]. The [-1,3] interval ends at 3, so not overlapping at 4. But we have event at 4 with -1 from [-1,3] removed. But we also had event at 4 with +1 from [0,4]! Wait: For [0,4], we added start at 0, end at 5. So no event at 4. The -1 at 4 corresponds to end of interval [-1,3] (since removed at 4). So at 4 just before removing, we count 4 intervals: [2,6], [4,8], [-1,3], [0,4]. But [-1,3] should not include 4. Our inclusion of -1 at 4 is due to using r+1 as removal. But we used r+1 for removal: for [-1,3], r=3, r+1=4. So removal at 4. That means the interval is considered active until end of 3 inclusive. At coordinate 4, we subtract. However when processing events at same coordinate, we need to apply additions before subtractions: we added +1 from [4,8] at 4; before this, we had +1 from [2,6] counted earlier; also had +1 from [0,4]? Wait [0,4] has removal at 5, so it is still active at 4. So before processing -1 at 4, we have count 3, then add +1 at 4 leads to 4, then subtract -1 at 4 (for [-1,3]) leads to 3. So the maximum at coordinate 4 in presence of addition before subtraction is 4. But does that correspond to any actual T? At T=4, the interval [-1,3] is not included. So the interval still counted before removal, but we counted it because we added +1 at coordinate 4 before subtracting -1. The counts reflect overlap at coordinate 4+epsilon? Actually we treat removal at 4 occurs after counting at 4. But we ordered +1 before -1, so we counted [-1,3] as still active at 4. But since we removed after counting, we effectively considered T=4 inclusive? Wait we treat intervals as [l, r] inclusive. So at coordinate r, the interval is still active. We want to count endpoints inclusive. For interval [-1,3], at r=3, T=3 is inside, but T=4 is outside. So we should not count it at 4. So we should remove at 4 before counting at 4. This means we need to subtract events before adding at same coordinate. So we need to sort events so that -1 is before +1 for same coordinate. Because we removed at coordinate r+1? Wait we used r+1 for removal. For [-1,3], r+1=4. So the removal event at 4 corresponds to the interval being no longer active at 4. Since we treat the removal at 4 as before counting at 4, we should process -1 before +1 at same coordinate. But we also have +1 from [4,8] at 4. So we need to process -1 at 4 first then +1 at 4. That yields correct count of 3 at 4. So we need to sort events by (coord, delta) where delta: -1 before +1. So we can sort by (coord, delta). Since delta values -1 < +1, natural sorting does that. But earlier we used +1 before -1 which was wrong. So we need to process -1 before +1. Let's verify: sorted events: (-1,+1),(0,+1),(2,+1),(4,-1),(4,+1),(5,-1),(7,-1),(9,-1). Sweep: cnt=0. -1 +1 =>1. 0 +1 =>2. 2 +1 =>3. 4 -1 =>2. 4 +1 =>3. 5 -1 =>2. 7 -1 =>1. 9 -1 =>0. Max 3. Ok.
+
+Thus algorithm: for each i, create event (l, +1), event (r+1, -1) where r = nums[i]+k. Then sort events by (coord, delta). Process sequentially: cur += delta; max = max(max, cur). Works.
+
+Edge: r+1 may overflow 32-bit? but Python fine.
+
+Edge: negative coordinates: fine.
+
+Complexities: O(n log n). Acceptable.
+
+Let's test with second example: nums=[1,1,1,1], k=10. intervals: [-9,11] each. r+1=12. For each: ( -9, +1 ), (12, -1). 4 intervals. Sorting: (-9,+1) repeated 4 times, then (12,-1) repeated 4 times. Sweep: cur=0; add +1 at -9 overall 4 times -> cur=4, max=4. Then -1 events -> cur=0. So max=4. Good.
+
+Edge: k=0. Then intervals are [nums[i], nums[i]] (single-point). r+1=nums[i]+1. So events: (value, +1), (value+1, -1). The algorithm counts maximum number of equal numbers in original array. Good.
+
+Thus we can implement.
+
+Time complexity O(n log n). Memory O(n).
+
+Let's produce Python function.
+
+Potential optimization: We can avoid sorting by using counting frequency of starts and ends? But with range up to 2e5 maybe simpler. But n=1e5 with 2e5 range of values. But k, nums up to 1e5, but r+1 up to 2e5. That's within 1e5+1e5+1=200001. We could use array of size 200002 to accumulate counts. But l may be negative upto -1e5? Because nums[i]-k could be negative. So we need offset. Instead we can use dict.
+
+But sorting is fine.
+
+I'll implement solution: create list of tuples events; sort them; sweep.
+
+One nuance: we need to treat l maybe < -1e5? But no issue.
+
+Consider maximum coordinate difference: ~200k. Sorting events of length 2*n up to 200k. Fine.
+
+Edge: we need to process events incremental. Use loop.
+
+Return max.
+
+Let's produce final code.
+
+Also we can use default is sorted list. Let's implement.
+
+Alright.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every index `i` we may change `nums[i]` to any integer inside
+
+```
+[ nums[i] – k ,  nums[i] + k ]
+```
+
+(`k` can be `0`, then no change is possible).
+
+After all chosen changes we want a subsequence consisting of equal numbers.
+If the final value of this subsequence is `T`, an index `i` can contribute to it
+iff after the change it can become `T`, i.e.
+
+```
+| nums[i] – T |  ≤  k          (1)
+```
+
+For a fixed `T` the number of usable indices is simply the number of indices
+whose interval `I_i = [nums[i]-k , nums[i]+k]` contains `T`.
+
+Hence the problem is:
+
+> **Find a point `T` that lies inside the maximum number of intervals
+>  `I_i`.**  
+> The answer is this maximum count.
+
+The intervals are closed – a point equal to an endpoint is allowed.
+The classic way to solve this is a sweep line over the interval endpoints.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.   Sweep Line
+
+For every interval `I = [L , R]` we create two events
+
+```
+(L , +1)          // interval starts
+(R + 1 , -1)      // interval ends – after R it is no longer valid
+```
+
+The second event uses `R+1` instead of `R` so that the interval is *active*
+up to and including `R`.  
+When we sweep from left to right
+
+```
+current += delta of the event
+answer   = max(answer , current)
+```
+
+The order of events with the same coordinate is important:
+*removals* (`-1`) must be processed **before** *additions* (`+1`).
+Otherwise an interval that ends at `x` would still be counted for `x`,
+which is wrong for `R+1` end events.
+
+With this ordering the sweep exactly counts how many intervals contain each
+integer point `T`.  
+The maximum value encountered during the sweep is the required beauty.
+
+--------------------------------------------------------------------
+
+#### 2.   Correctness Proof  
+
+We prove that the algorithm returns the maximum possible beauty.
+
+---
+
+##### Lemma 1  
+For any index `i` and any integer `T` the condition  
+`|nums[i] – T| ≤ k` holds iff `T` lies inside the interval
+`I_i = [nums[i] – k , nums[i] + k]`.
+
+**Proof.**
+
+```
+|nums[i] – T| ≤ k
+⇔  -(k) ≤ nums[i] – T ≤ k
+⇔  nums[i] – k ≤ T ≤ nums[i] + k
+⇔  T ∈ I_i
+```
+∎
+
+
+
+##### Lemma 2  
+During the sweep, just before processing an event at coordinate `x`,
+`current` equals the number of intervals whose left end is ≤ `x-1`
+and right end is ≥ `x-1`.  
+After processing all events at `x`, `current` equals the number of
+intervals that contain `x`.
+
+**Proof.**
+
+Intervals are represented by a `+1` at the left end `L` and a `-1`
+at `R+1`.  
+When the sweep reaches coordinate `x`
+
+* all `+1` events with `L = x` are processed – these intervals start to
+  contain `x`.
+* all `-1` events with `R+1 = x` are processed before the `+1` events –
+  exactly the intervals that ended at `x-1` are removed.
+
+Thus after all events at `x` are processed, `current` counts all
+intervals that include `x`. ∎
+
+
+
+##### Lemma 3  
+`answer` after the sweep equals the maximum number of intervals that
+contain a common integer point.
+
+**Proof.**
+
+By Lemma&nbsp;2, after processing the events at each integer `x`,
+`current` equals the number of intervals containing `x`.  
+`answer` is updated with the maximum of all these values,
+hence it is the maximum over all integer points. ∎
+
+
+
+##### Theorem  
+`maximumBeauty(nums, k)` returns the maximum posibles beauty of the
+array after applying the allowed operations.
+
+**Proof.**
+
+*Soundness*  
+Let `T*` be any integer achieving the maximum beauty `B`.  
+For each index that can be transformed to `T*` its interval contains `T*`  
+(Lemma&nbsp;1).  
+Therefore at least `B` intervals contain `T*`.  
+By Lemma&nbsp;3 the sweep algorithm outputs a value `ans` that is
+at least the number of intervals containing `T*`, i.e. `ans ≥ B`.
+
+*Optimality*  
+Assume the algorithm outputs `ans`.  
+By Lemma&nbsp;3 there exists an integer `T` that lies inside exactly
+`ans` intervals.  
+Choosing `T` as the common value of the subsequence, all those
+`ans` indices can be transformed to `T` (Lemma&nbsp;1).  
+So a beauty of `ans` is achievable.
+
+Thus `ans = B`, the optimum. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 3.   Complexity Analysis
+
+Let `n = len(nums)`.
+
+*Building events* – `2n` events.  
+*Sorting* – `O(n log n)`.  
+*Sweep* – linear in number of events, `O(n)`.  
+
+Memory usage: `O(n)` for the event list.
+
+With `n ≤ 10^5` this easily satisfies the limits.
+
+
+
+--------------------------------------------------------------------
+
+#### 4.   Reference Implementation  (Python 3)
+
+```python
+import sys
+from typing import List
+
+class Solution:
+    def maximumBeauty(self, nums: List[int], k: int) -> int:
+        """
+        Return the maximum possible beauty of the array after applying
+        the allowed operations.
+        """
+        events = []          # (coordinate, delta)
+        for v in nums:
+            left = v - k
+            right = v + k
+            events.append((left, 1))          # interval starts
+            events.append((right + 1, -1))    # interval ends after right
+
+        # Sort by coordinate, and for equal coordinate process -1 first
+        events.sort(key=lambda x: (x[0], x[1]))
+
+        cur = 0
+        best = 0
+        for _, delta in events:
+            cur += delta
+            if cur > best:
+                best = cur
+
+        return best
+```
+
+The implementation follows exactly the algorithm proven correct above
+and conforms to the required function signature.

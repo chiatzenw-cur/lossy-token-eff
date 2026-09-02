@@ -1,0 +1,110 @@
+<|channel|>analysis<|message|>We need function is_bored(S). Count number of sentences whose first word is "I". Sentences delimited by '.', '?' or '!'.
+
+Edge cases: punctuation may follow or multiple sentences, maybe leading/ trailing spaces, punctuation inside words? S may contain multiple spaces. Sentences may start after delimiter and optional whitespace.
+
+Implement: split using regex. Could use re.split('(?<=[.?!])\s*') to split at punctuation followed by whitespace. But we need to handle final punctuation maybe not present. Example: "I love" no period. Not counted. So only sentences ended with punctuation produce a sentence.
+
+We should treat any token after punctuation as start of new sentence, ignoring leading spaces. Also if punctuation preceded by e.g. "I." with no spaces, still counts as sentence starting with I. So we can iterate over characters, segment. Implementation: iterate split by re.split(r'[.?!]', S). That gives list of sentence fragments, but we lose punctuation. Then for each fragment, strip leading/trailing whitespace. If empty continue. Check first word: split by whitespace, get first word; if equal to "I" (case-sensitive?). Problem likely case-sensitive: a sentence that starts with the word "I". Should be exactly "I". For "i" not count.
+
+We also need to handle if punctuation at end but not at end of string: "I love." will generate fragment "I love". Which starts with 'I', count. Good.
+
+But using re.split removes punctuation. But if there is punctuation at end no trailing delimiter, the fragment may be incomplete. The specification says sentences are delimited by '.', '?' or '!'. So only those that have punctuation count as sentence. So splitting by punctuation is fine. But if last fragment not empty after last delimiter, e.g., "Hello world" no delimiter yields one fragment "Hello world" but not ended in punctuation considered not a sentence? According to example, "Hello world" returns 0. So the whole string is not a sentence because no delimiter. So we should not count last fragment unless it was terminated by punctuation. How to detect if last fragment terminated? We can check if string ends with delimiters; we can use re.split but we lose that info. Instead we can iterate scanning. Approach: parse characters, identify sentence start index after last delimiter (start of string or after delimiter). Keep track of current start, when we encounter delimiter, we have a sentence from start to current position. We count if first word at start equals "I". Then set start = after delimiter (i+1). After loop, check if start < len(S) and substring from start onward exists but no delimiter; ignore.
+
+Need to handle spaces: start may be after delimiter, which could be space. We skip initial whitespace to find actual start. For counting we need first word of sentence but not trimmed.
+
+Implementation: iterate over enumerate string. When char in '.?!': process sentence: take substr S[start:i], strip leading/trailing spaces, if not empty: get first word split(' ', 1): word. If word == "I": count++. Then start = i+1.
+
+At end: ignore non-terminated substring.
+
+Edge: multiple delimiters consecutively: e.g., "I love!! Love you." After first '!' we process "I love". Good. After second '!' start i+1 ignoring nothing. Next sentinel '!'? There is no delim after. But sentence will start at just after the second '!' maybe no content. We need to skip delimiters. Implementation: After setting start, we may skip following delimiters and spaces. But we process when char is delimiter; multiple delimiters will process successive substrings possibly empty; we skip empty. Should be fine.
+
+We also need to skip leading spaces: when we slice toward candidate string, we strip spaces before splitting.
+
+For first word extraction: stripped.split(maxsplit=1)[0] if any.
+
+Return count.
+
+Also handle possible newline or other whitespace: whitespace allowed.
+
+Now produce function with docstring.
+
+Constraints: Use standard library only: re optional not needed.
+
+Let's produce final code:
+
+```python
+def is_bored(S):
+    """
+    Count how many sentences in S start with the word "I".
+    Sentences are delimited by '.', '?' or '!'.
+    ...
+    """
+    bd_marks = ".?!"
+    count = 0
+    start = 0
+    for i, ch in enumerate(S):
+        if ch in bd_marks:
+            # slice up to i
+            fragment = S[start:i].strip()
+            if fragment:
+                first_word = fragment.split(maxsplit=1)[0]
+                if first_word == "I":
+                    count += 1
+            start = i + 1
+    return count
+```
+
+We also should consider sentence starts after delimiter and whitespace: start will be index after delimiter char; next we will skip whitespace trimmed when fragment slice and .strip().
+
+Edge: If S ends with delimiter, after loop start could equal len(S). Not needed.
+
+Test with given examples.
+
+We'll run mental tests:
+
+1) "Hello world": no delimiters, loop never increments, count 0. Good.
+
+2) "The sky is blue. The sun is shining. I love this weather": iterate; first '.' after 16 char? substring "The sky is blue" -> first word "The" not I. count 0. Next '.' after ... substring "The sun is shining" -> first word "The". count 0. Next '.' substring "I love this weather" -> first word I; count ++: result 1. Good.
+
+Edge: "I." returns 1: substring "I" per .strip -> "I" ; counts.
+
+Edge: "I do it!Ok": processing: for exclamation after "I do it" - substring "I do it". Count 1. Then start after '!': pointer i+1, next char O. No more delimiters until end -> ignore.
+
+Edge: Consecutive punctuation: "I!" "!"? Let's test: S="I!!". iterate: at i=1 char '!' - substring 'I' -> count 1. start=2. Next char at i=2 '!', fragment slice from start=2 to i=2: S[2:2] which is '' .strip -> '' so ignore. start=3. end. Count 1.
+
+Edge: Multiple delimiters followed by spaces: "I!   I?" -> first exclamation counts; later whitespace cause start at char after '!' index 2; at char 'I' then 'I?' counts. Works.
+
+Now provide final code.<|end|><|start|>assistant<|channel|>final<|message|>```python
+def is_bored(S):
+    """
+    Count the number of sentences in *S* that begin with the word "I".
+
+    Sentences are delimited by one of the following punctuation marks:
+    a period ('.'), a question mark ('?'), or an exclamation point ('!').
+
+    The function returns an integer – the number of sentences whose first
+    non‑whitespace word is exactly "I" (case‑sensitive).
+
+    Examples
+    --------
+    >>> is_bored("Hello world")
+    0
+    >>> is_bored("The sky is blue. The sun is shining. I love this weather")
+    1
+    """
+    punct = {'.', '?', '!'}          # delimiters that end a sentence
+    count = 0
+    start = 0                         # index where the current sentence starts
+
+    for i, ch in enumerate(S):
+        if ch in punct:
+            # Extract the sentence fragment from the last start to this marker
+            fragment = S[start:i].strip()
+            if fragment:
+                first_word = fragment.split(maxsplit=1)[0]
+                if first_word == "I":
+                    count += 1
+            start = i + 1          # Next sentence begins after the marker
+
+    return count
+```

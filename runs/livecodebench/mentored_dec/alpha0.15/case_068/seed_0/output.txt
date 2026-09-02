@@ -1,0 +1,468 @@
+<|channel|>analysis<|message|>We need to design solution. We have up to 1e5 arrays. Need efficient queries.
+
+Goal: For each query (x,y) find max over j of nums1[j]+nums2[j] subject to nums1[j]>=x and nums2[j]>=y. Equivalent to: among all j satisfying both constraints, maximize sum.
+
+Observation: For each j, we can think of point (nums1[j], nums2[j]) with value sum. Query asks for max among points in NE quadrant relative to (x,y). So it's like 2D dominance queries with max value.
+
+We can process queries offline.
+
+We can sort points by nums1 descending. Sort queries by x descending. Then we can maintain DS indexed by nums2 values, storing max sum of points added so far (with nums1 >= current x). For each query, we need maximum over nums2 >= y among points with nums1>=x. So we need data structure for prefix/suffix max over sorted nums2.
+
+Since nums2 values up to 1e9, compress coordinates or use segment tree.
+
+Idea: compress all nums2 values from points and queries y values. Build segment tree over sorted unique nums2. When we insert point, we update index of its nums2 with value sum. Since we need max over suffix with nums2>=y, we can query segment tree over index of y to end.
+
+Processing:
+
+- Build array points: (a=nums1[i], b=nums2[i], s=a+b)
+- Sort points decreasing a.
+- Build queries: each element q=(x,y,index)
+- Sort queries decreasing x.
+- Use pointer over points adding while a>=x.
+
+- For adding: need index in compressed: bisect_right.
+
+- Segment tree: we can use fenwick tree for maximum suffix? Fenwick can handle prefix queries but we can transform by reversing order. Simpler: we can use sorted unique nums2 ascending. For suffix query, we can query max over all indices >= idx. Segment tree easy.
+
+Potential optimization: Use coordinate compression of all nums2 and y.
+
+Constraints 1e5 so fine.
+
+Edge cases: duplicates: we store maximum sum for each nums2. But if there are multiple points with same nums2, we want maximum sum among them. Fenwick tree maximum: we need to set tree[idx] = max(tree[idx], sum). Since we process in descending a, updates are incremental. But if a decreasing, adding new point with same nums2 might be lower sum? We still take max.
+
+Now building segment tree:
+
+We can implement Fenwick tree for max from idx to end. Standard trick: prefix max from 1..idx. To get suffix, we can reversed coordinates. But easier: segment tree.
+
+Complexities: O((n+q) log n).
+
+Return array ans length q.
+
+Let's confirm example:
+
+test with Python quickly? we won't run here.
+
+Implementation details:
+
+- compress list of all nums2 values + y of queries.
+
+- mapping: val -> index (0-based). For Fenwick easier use 1-based indexing.
+
+Fenwick for max: Create tree size m+2. Update: while idx<=m: tree[idx] = max(tree[idx], val); idx += idx & -idx.
+
+Prefix query: while idx>0: res=max(res, tree[idx]); idx -= idx & -idx.
+
+But we need suffix maximum for idx>=pos. We can convert, or we can query prefix of reversed: compress mapping reversed: sorted ascending; we can convert pos = lower_bound(ys) to index ascending. To get suffix, we can query prefix over reversed indices by storing at index m-idx+1.
+
+Simpler: build segment tree over ascending indices: query interval [pos, m-1] to get max. We'll implement simple segment tree.
+
+Segment tree operations:
+
+- build zero with negative inf.
+
+- update point: tree[pos] = max(tree[pos], val). top-down or bottom-up.
+
+- query range max: O(log n).
+
+Implement arrays tree of size 4*m.
+
+Processing:
+
+points sorted by a descending.
+
+for queries sorted by x descending:
+
+while point_idx < n and points[point_idx].a >= query.x:
+
+  update at compressed_b of point with sum.
+
+  point_idx +=1
+
+ans[query.idx] = query tree over idx_y to end; if max is -inf return -1.
+
+Edge: bisect_left for y because we want all b>=y, so find first index with value >= y. Then query [pos, m-1].
+
+Need coordinate mapping: values = sorted(set(nums2)+set(y values)).
+
+positions = {val: idx} 0-based.
+
+For query y: pos = bisect_left(values, y). If pos == m: no values >= y -> answer -1.
+
+Return answer list.
+
+Now complexity wise ok.
+
+Let's confirm with examples:
+
+Example 1: points: (4,2,6),(3,4,7),(1,9,10),(2,5,7). Sorted by a desc: indices order 0 (4),1 (3),3 (2),2 (1). queries: (4,1),(1,3),(2,5) sorted descending by x: (4,1),(2,5),(1,3). Process:
+
+Start with point 0 a=4>=4: update b=2, sum=6. tree at b 2 (idx maybe 0? values sorted?). whatever.
+
+query 4,1: need b>=1: index of 1 is pos? values include 2,4,5,9. pos of 1 lower_bound=0. query max from 0... => 6. good.
+
+process next point 1 a=3 >=2: update b=4 sum=7. query2: 2,5 => need b>=5. pos of 5=2? values index 2 pos? values sorted: [2,4,5,9]; pos=2. current tree values: 6 at idx0 2, 7 at idx1? Wait b=4 index1. For query need only idx>=2: b=5 or 9. Only 9 has sum=10? Yet 9 hasn't been added yet because point 2 (a=1) not yet added. So query returns -inf or something. Then after adding point 3 (a=2) sum=7 at b=5. So after adding, query processed with current states: now tree has 7 at idx2. Then answer=7.
+
+Next query (1,3): add remaining point 2 a=1: update b=9 sum=10. query need b>=3 -> pos=1 (since 4?). Wait lower_bound of 3 is index of 4? Actually values: [2,4,5,9] -> index 1. Query range 1.. => maxima among sums at idx1 (7), idx2 (7), idx3 (10) -> 10 chosen. Works.
+
+Our algorithm handles.
+
+Now Example 2: points sorted accordingly, will compute correct.
+
+Edge example with -1: query with y > max value: pos == m => return -1.
+
+Implementation details:
+
+Segment tree:
+
+def update(node,l,r,idx,val): if l==r: tree[node]=max(tree[node], val). else: mid; if idx<=mid: update left else right; then tree[node]=max(tree[2*node], tree[2*node+1]).
+
+def query(node,l,r,ql,qr): if ql>r or qr<l: return -inf; if ql<=l and r<=qr: return tree[node]; else: mid; return max(query left, query right).
+
+initialize tree with NEG_INF. Use large negative (-inf). We can use -1? But sums positive >0. So -1 can represent none. but careful of negative. Since all nums1 and nums2 >=1, sum>=2. So -1 safe sentinel. So tree initial values -1.
+
+But we must ensure that value -1 not used as real sum. Works.
+
+Segment tree size: 4*m.
+
+Now notes: compress b values for point update referencing idx.
+
+Coord compression: arr = sorted set of nums2 values.
+
+Also y values for queries need coordinate search at query time.
+
+Let's code:
+
+class Solution:
+    def maximumSumQueries(self, nums1, nums2, queries):
+
+works.
+
+Time complexity O((n+q) log (n+q)). Space O(n+q).
+
+Let's produce final answer.
+
+Also we might need to import bisect.
+
+Edge Cases: duplicates b values: compress mapping.
+
+Large sums may exceed 32-bit int: nums1[i]+nums2[i] up to 2e9 fits 32-bit signed? 2e9 < 2^31-1 (2147483647), so fine.
+
+Now produce final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every index `j`
+
+```
+point j  →  (xj , yj ,  valuej)
+xj = nums1[j]          (>= 1)
+yj = nums2[j]          (>= 1)
+valuej = xj + yj       (>= 2)
+```
+
+For a query `(x , y)` we have to look at all points that lie in the
+**North‑East** quadrant
+
+```
+xj >= x  and  yj >= y
+```
+
+and return the maximum `valuej` of those points.
+If the quadrant is empty the answer is `-1`.
+
+--------------------------------------------------------------------
+
+#### 1.   Observations
+
+* `n , q ≤ 10^5` – an \(O(nq)\) solution is impossible.
+* The problem is a **2‑dimensional dominance query**  
+  (we need a maximum over all points that dominate the query point).
+* We can process all queries *offline*:
+  sort both the points and the queries by the `x`‑coordinate
+  (descending).  
+  While we iterate the queries we add all points whose `x` is still
+  large enough, i.e. all points with `xj ≥ current query x`.
+* After the points are added we only have to answer  
+  “maximum `valuej` for all points with `yj ≥ y`”.
+  That's a one‑dimensional range‑maximum query with the right border
+  fixed at `+∞`.  
+  We can maintain it with a segment tree (or Fenwick tree) over the
+  `y`‑coordinates.
+
+--------------------------------------------------------------------
+
+#### 2.   Data structures
+
+* **Coordinate compression** for `yj`.  
+  All values that ever appear as `yj` or as a query `y` are collected
+  and sorted → array `ys`.  
+  `ys[i]` is the *i*‑th smallest `y`‑value.  
+  The tree will contain all indices `0 … len(ys)-1`.
+
+* **Segment tree**  
+  `tree[node]` stores the maximum `valuej` among the points that were
+  inserted into the corresponding segment.  
+  All positions are initialised with `-1` (means “no point yet”).
+
+* **Offline lists**
+
+    * `points` : list of tuples `(xj , yj , valuej)` sorted by `xj`
+      **descending**.
+    * `queries` : list of tuples `(x , y , original_index)` sorted by
+      `x` **descending**.
+
+--------------------------------------------------------------------
+
+#### 3.   Algorithm
+```
+compress all y-values → ys (ascending)
+
+build segment tree of size len(ys) with initial value -1
+
+sort points by x descending
+sort queries by x descending
+
+point_ptr = 0          # next point to be inserted
+for each query (x, y, idx) in sorted queries:
+        while point_ptr < n and points[point_ptr].x >= x:
+                y_val = points[point_ptr].yj
+                sum_val = points[point_ptr].valuej
+                update segtree at compressed index of y_val with sum_val
+                point_ptr += 1
+
+        pos = first index in ys with ys[pos] >= y   (bisect_left)
+        if pos == len(ys):              # no y in the tree satisfies yj >= y
+                answer[idx] = -1
+        else:
+                answer[idx] = query segtree on range [pos, len(ys)-1]
+```
+
+*Updating*  
+The tree stores the maximum value for each position, so `valuej` is
+inserted by `tree[pos] = max(tree[pos], valuej)`.
+
+*Querying*  
+The segment tree returns the maximum value inside the
+interval `[pos, len(ys)-1]`.  
+If that value is still `-1` it means no point satisfied the `y`‑constraint.
+
+--------------------------------------------------------------------
+
+#### 4.   Correctness Proof  
+
+We prove that the algorithm returns the correct answer for every query.
+
+---
+
+##### Lemma 1  
+After processing a query `q` with value `xq`, every point `p`
+with `xp ≥ xq` has been inserted into the segment tree
+(and no point with `xp < xq` has been inserted).
+
+**Proof.**
+
+`points` are sorted descendingly by `x`.  
+The outer loop iterates queries also in descending `x`.  
+Before answering a query, we execute
+
+```
+while point_ptr < n and points[point_ptr].x >= xq
+        insert(points[point_ptr])
+        point_ptr += 1
+```
+
+Thus every point with `x ≥ xq` is inserted.
+Because `point_ptr` only increases, a point with `x < xq` is not yet
+inserted when the query is evaluated. ∎
+
+
+
+##### Lemma 2  
+At the moment a query `q` is answered,  
+for every `y`‑coordinate `t` the tree contains  
+`max { valuej |  point j has  xj ≥ xq   and   yj = t }`
+or `-1` if no such point exists.
+
+**Proof.**
+
+By Lemma&nbsp;1, exactly all points with `xj ≥ xq` have been inserted.
+When a point is inserted we perform
+
+```
+tree[compressed(yj)] = max(tree[compressed(yj)], valuej)
+```
+
+Consequently, after all necessary insertions the tree position for a
+fixed `t` holds the maximum among all inserted points whose `yj = t`
+(to the left of `compressed(t)` nothing else influences it). ∎
+
+
+
+##### Lemma 3  
+For a query `(xq, yq)` the value returned by  
+
+```
+max_{t >= yq} tree[t]
+```
+
+equals  
+
+```
+max { valuej |  xj >= xq   and   yj >= yq }
+```
+
+or `-1` if no such point exists.
+
+**Proof.**
+
+Take any `t >= yq`.  
+By Lemma&nbsp;2, `tree[t]` equals the maximum `valuej` among all
+points with `xj ≥ xq` and `yj = t`.  
+The segment tree query over `[pos, end]` (where `pos` is the first
+index with `ys[pos] >= yq`) takes the maximum of all these `tree[t]`
+for all `t` that satisfy `t >= yq`.  
+Therefore the result is exactly the maximum `valuej` over all
+points with `xj ≥ xq` and `yj ≥ yq`.  
+If no such point exists every queried leaf contains `-1`,
+hence the result of the segment query is `-1`. ∎
+
+
+
+##### Theorem  
+For every query the algorithm outputs the required maximum sum
+or `-1` if none exists.
+
+**Proof.**
+
+Fix a query `q = (xq, yq)`.  
+During the processing of `q` the algorithm implements the steps
+described in Lemma&nbsp;3.  
+Therefore the value stored in `answer[original_index_of_q]` equals the
+maximum `valuej` among all indices `j` that satisfy
+`xj ≥ xq` and `yj ≥ yq`.  
+If such an index does not exist the value is `-1`.  
+This is precisely the definition of the answer in the statement. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.   Complexity Analysis
+
+Let  
+
+```
+n = len(nums1) = len(nums2)
+q = len(queries)
+m = number of distinct y values in {nums2} ∪ {query y}
+```
+
+* coordinate compression – `O((n+q) log (n+q))`
+* sorting points – `O(n log n)`
+* sorting queries – `O(q log q)`
+* each point is inserted once → `O(n log m)`
+* each query performs one segment tree range query → `O(q log m)`
+
+Overall
+
+```
+time   : O((n + q) log (n + q))
+memory : O(n + q + m)          (arrays and segment tree)
+```
+
+With `n, q ≤ 10^5` this easily satisfies the limits.
+
+--------------------------------------------------------------------
+
+#### 6.   Reference Implementation  (Python 3)
+
+```python
+import bisect
+from typing import List
+
+class Solution:
+    def maximumSumQueries(self, nums1: List[int], nums2: List[int],
+                          queries: List[List[int]]) -> List[int]:
+        n = len(nums1)
+
+        # ---------- coordinate compression of y-values ----------
+        all_ys = set(nums2)
+        all_ys.update(y for _, y in queries)
+        ys = sorted(all_ys)
+        m = len(ys)
+        # mapping: y_value -> index in [0, m-1]
+        y_to_idx = {v: i for i, v in enumerate(ys)}
+
+        # ---------- points ----------
+        points = []
+        for a, b in zip(nums1, nums2):
+            points.append((a, b, a + b))
+        points.sort(key=lambda x: x[0], reverse=True)    # descending by x
+
+        # ---------- queries ----------
+        qlist = []
+        for idx, (x, y) in enumerate(queries):
+            qlist.append((x, y, idx))
+        qlist.sort(key=lambda x: x[0], reverse=True)    # descending by x
+
+        # ---------- segment tree ----------
+        NEG = -1
+        size = 1
+        while size < m:
+            size <<= 1
+        tree = [NEG] * (2 * size)
+
+        def seg_update(pos: int, value: int) -> None:
+            """linear index pos in [0, m-1]"""
+            pos += size
+            if tree[pos] >= value:
+                return
+            tree[pos] = value
+            pos >>= 1
+            while pos:
+                new_val = tree[pos << 1]
+                if tree[(pos << 1) | 1] > new_val:
+                    new_val = tree[(pos << 1) | 1]
+                if tree[pos] == new_val:
+                    break
+                tree[pos] = new_val
+                pos >>= 1
+
+        def seg_query(l: int, r: int) -> int:
+            """maximum on [l, r] inclusive, 0‑based"""
+            l += size
+            r += size
+            res = NEG
+            while l <= r:
+                if l & 1:
+                    if tree[l] > res:
+                        res = tree[l]
+                    l += 1
+                if not (r & 1):
+                    if tree[r] > res:
+                        res = tree[r]
+                    r -= 1
+                l >>= 1
+                r >>= 1
+            return res
+
+        # ---------- offline processing ----------
+        ans = [-1] * len(queries)
+        ptr = 0  # next point to insert
+        for x_q, y_q, qi in qlist:
+            # insert all points with x >= x_q
+            while ptr < n and points[ptr][0] >= x_q:
+                _, y_val, val = points[ptr]
+                seg_update(y_to_idx[y_val], val)
+                ptr += 1
+
+            # find first compressed y >= y_q
+            pos = bisect.bisect_left(ys, y_q)
+            if pos == m:
+                ans[qi] = -1
+            else:
+                ans[qi] = seg_query(pos, m - 1)
+
+        return ans
+```
+
+The program follows exactly the algorithm proven correct above
+and conforms to the required function signature.

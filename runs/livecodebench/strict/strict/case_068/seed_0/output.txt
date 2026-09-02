@@ -1,0 +1,360 @@
+<|channel|>analysis<|message|>We need to design solution: For each query (x, y), find max sum s = nums1[j] + nums2[j] where nums1[j] >= x and nums2[j] >= y. n up to 1e5, queries up to 1e5. Brute force O(n*m) too much.
+
+Observing constraints: both nums arrays arbitrary. What structure? Could sort pairs by nums1 descending and maintain a data structure on nums2 to query max sum where >=y. Since we need both conditions.
+
+We can transform each pair (a,b) with sum a+b. For query (x,y): need max of a+b among pairs with a>=x and b>=y. Equivalent to consider all pairs sorted by a descending. While processing queries sorted by x descending, we add all pairs with a >= current x into a data structure keyed by b containing max sum. Then query for b >= y: get maximum sum among those entries with b>=y.
+
+Data structure: we need to support insert (b, sum) and query maximum sum among keys >= y. Since b up to 1e9, we can use coordinate compression and a segment tree / Fenwick tree for max on suffix. Alternatively, use balanced BST like sorted list with max suffix maybe using bisect + prefix maxima from right. But with 1e5, a Fenwick tree of size m where m = unique b values after compression works.
+
+Thus algorithm:
+
+- Build list of tuples (a,b,sum). sort by a descending.
+- queries with indices: each query [x,y]. sort by x descending.
+- Process: pointer i over pairs. For each query sorted by x descending: while i < n and pairs[i].a >= x: add to fenwick at index idx of b: fenwick.update(idx, sum). Since multiple may have same b, we need to keep max. Fenwick supports max update: value is maximum of current and new sum.
+- After all pairs with a>=x added: we need max sum for b>=y. Using fenwick, we can get maximum over suffix indices [pos of y to end]. Fenwick design: typical Fenwick for prefix. For suffix we can query max over [pos, end] by query maximum from pos to end using fenwick for suffix maybe need reverse mapping: store values reversed? Or build segment tree. But we can also use Fenwick for suffix by storing at reversed index: idx_rev = M-idx+1. Then query prefix of reversed index based on y? Actually easier: Build segment tree for range maximum query and point update. Implementation of segment tree straightforward for up to 1e5. So use segment tree.
+
+- Sort unique b values, map to indices 0..m-1. Segment tree array size 4*m. update point: set tree[pos] = max(tree[pos], val). query range: return max over [l,r] where l = index of smallest b >= y. Use bisect_left on sorted unique bs to find l. If l==m: no b >= y: answer = -1. else query tree(l,m-1). Complexity O((n+q) log n).
+
+Edge Cases: Need to handle ties and duplicate b values with max sum. Already using max. Ensure initial tree values -inf.
+
+Implementation details:
+
+- Import bisect.
+
+Complexities: O((n+q) log n).
+
+Return result in original order: store answers in list of size q, fill by index.
+
+Let's craft sample.
+
+Double-check: In processing descending by x, we need to ensure pairs processed exactly once. Use ascending? But using descending ensures we add pairs with a>=x for current query. The queries processed from largest x to smallest.
+
+Now complexity wise: sort of 1e5 each, fine.
+
+Implementation specifics:
+
+- Build arr = [(nums1[i], nums2[i], nums1[i]+nums2[i]) for i in range(n)]
+- Sort arr by first desc: arr.sort(key=lambda x:-x[0])
+- Build queries list: [(x,y,idx)] sort by x desc.
+- Unique vals in arr: bs = sorted(set(b for _,b,_ in arr))
+- M = len(bs)
+- Build segment tree arrays: seg = [0]*(4*M) or negative. We'll store -1 to denote none? But we need to differentiate. Since sums are >=2. Use -1 as sentinel. Or use None. We'll use -float('inf').
+
+Define methods:
+
+def update(node,l,r,idx,val):
+  if l==r: seg[node] = max(seg[node], val)
+  else: mid...
+        if idx<=mid: left else right
+        seg[node]=max(seg[2*node], seg[2*node+1])
+
+def query(node,l,r,ql,qr):
+  if ql>r or qr<l: return -inf
+  if ql<=l and r<=qr: return seg[node]
+  else: return max(query(...), query(...))
+
+Now processing.
+
+Edge: bisect_left returns position. If pos==M: no candidate -> answer -1.
+
+Otherwise answer = query(1,0,M-1,pos,M-1) if > -inf else -1.
+
+Alternatively, since we insert only when pair a>=x, will we maintain others? Then we might have candidate but with b<y, we ignore because query will skip.
+
+Return list.
+
+Test with provided examples.
+
+Let's gather.
+
+Edge Cases: duplicates indices.
+
+Implementation notes: Use sys.setrecursionlimit.
+
+Now produce code.
+
+Let's craft final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every query `(x , y)` we need an index `j` with  
+
+```
+nums1[j] ≥ x   and   nums2[j] ≥ y          (1)
+```
+
+and among all such indices we want the maximum
+
+```
+nums1[j] + nums2[j]                       (2)
+```
+
+`n` (length of the two arrays) and  
+`q` (number of queries) can both be `10⁵`, therefore an
+`O(n·q)` brute‑force solution is impossible.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* Only the **value** of the element of `nums1` matters for the
+  inequality `nums1[j] ≥ x`.  
+  While answering many queries we can process the queries **in
+  decreasing order of `x`**.  
+  When we move from a larger `x` to a smaller one we *add* all indices
+  whose `nums1` value now satisfies the new (smaller) threshold.
+
+* After adding these indices we still have to obey the
+  second inequality `nums2[j] ≥ y`.  
+  So we need a data structure that, among all already added indices,
+  gives the maximum sum for indices whose `nums2` value is at least a
+  given threshold.
+
+* `nums2[j]` can be as large as `10⁹`, but only the values that actually
+  appear in the input are important.  
+  After removing duplicates and sorting them we can **compress**
+  the values into the range `[0 … m-1]` (`m ≤ n`).
+
+--------------------------------------------------------------------
+
+#### 2.  High level algorithm
+
+```
+1.  Build pairs:  (a , b , s)  where   a = nums1[i],
+                                    b = nums2[i],
+                                    s = a + b
+    sort all pairs by a in *decreasing* order.
+
+2.  Attach an original index to every query,
+    sort all queries by x in *decreasing* order.
+
+3.  Build a segment tree that supports
+        • point update  :  set value at position idx to max(old , v)
+        • range maximum :  max value in interval [l , r]
+    Initially all tree leaves contain −∞.
+
+4.  Scan queries in the sorted order
+        keep a pointer over the sorted pairs
+        while next pair’s a ≥ current query’s x:
+                update the tree at the compressed position of its b
+                with the value s (the sum)
+        answer = maximum value on the suffix of the tree that
+                 starts at the first b ≥ y
+        store answer in the result array at the query’s original position
+```
+
+*Why does this work?*
+
+* When a query `(x , y)` is processed, **all** indices with
+  `nums1[j] ≥ x` have already been inserted into the tree.
+  (Those with a larger `a` were inserted earlier, those with a smaller
+  `a` will be inserted later – but they do **not** satisfy `a ≥ x`.)
+
+* The tree contains for every inserted index the sum `a + b`.
+  A range maximum over all indices with `b ≥ y`
+  is exactly the statement (2) under the constraints (1).
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the correct answer for
+every query.
+
+---
+
+##### Lemma 1  
+When the algorithm starts to process a query `(x , y)`,
+the segment tree contains exactly the pairs
+`(a , b , s)` with `a ≥ x`.
+
+**Proof.**
+
+Pairs are sorted by decreasing `a`.  
+During the scan of queries we maintain a pointer `p`
+over the sorted pairs.
+
+*Initially* `p = 0`.  
+For the first query with the largest `x`, we insert
+all pairs with `a ≥ x`.  
+So the statement holds.
+
+*Induction step*  
+Assume it holds just before processing query `q_k` with threshold
+`x_k`.  
+During the processing we insert all still not inserted pairs
+with `a ≥ x_k`.  
+After finishing the insertions, the tree contains all pairs
+with `a` at least `x_k`.  
+All those pairs were `≥ x_{k-1}` previously,
+hence the tree still contains *exactly* the indices that satisfy the new
+threshold. ∎
+
+
+
+##### Lemma 2  
+For a query `(x , y)` let `S` be the set
+`{ (a , b , s)  |  a ≥ x  and  b ≥ y }`.  
+The algorithm outputs  
+
+```
+max{ s | (a , b , s) ∈ S }  (or -1 if S is empty).
+```
+
+**Proof.**
+
+By Lemma&nbsp;1 the segment tree contains all pairs `(a , b , s)` with
+`a ≥ x`.  
+During the query we ask for the maximum value over the suffix
+starting at the first compressed `b` that is `≥ y`.  
+All indices with `b < y` are outside that suffix,
+hence cannot influence the answer.
+All indices with `b ≥ y` are inside and thus considered.
+Therefore the maximum returned by the tree is exactly
+
+```
+max{ s | a ≥ x and b ≥ y }
+```
+
+If no such index exists, the queried suffixed interval is empty
+and the tree reports `-∞`, producing the algorithm’s output `-1`. ∎
+
+
+
+##### Theorem  
+For every query the algorithm outputs the correct answer.
+
+**Proof.**
+
+Let an arbitrary query `(x , y)` be given.
+By Lemma&nbsp;2 the algorithm outputs the maximum
+`a+b` over all indices satisfying `a ≥ x` and `b ≥ y`,
+or `-1` if no such index exists.
+This is precisely the definition of the required answer. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+*Sorting*  
+`pairs` and `queries` each sorted once: `O(n log n + q log q)`.
+
+*Processing*  
+During the whole scan every pair is inserted exactly once:
+`O(n log n)` for the segment‑tree updates.  
+Every query causes one segment‑tree range maximum query:
+`O(q log n)`.
+
+Total time:  
+
+```
+O((n + q) log n)
+```
+
+The segment tree stores at most `4 * m` integers,
+`m ≤ n`; memory consumption is `O(n)`.
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+from bisect import bisect_left
+from typing import List
+
+class Solution:
+    # ------------------------------------------------------------
+    # Segment tree for range maximum.  The tree is 1‑based indexed
+    # ------------------------------------------------------------
+    class SegTree:
+        def __init__(self, size: int):
+            self.N = size
+            self.sz = 1
+            while self.sz < size:
+                self.sz <<= 1
+            # initialise all leaves with -inf
+            self.dat = [-1 << 60] * (2 * self.sz)
+
+        def _upd(self, idx: int, val: int):
+            """ point update:  dat[idx] = max(dat[idx], val) """
+            idx += self.sz
+            if val > self.dat[idx]:
+                self.dat[idx] = val
+                idx >>= 1
+                while idx:
+                    new = max(self.dat[idx << 1], self.dat[(idx << 1) | 1])
+                    if new == self.dat[idx]:
+                        break
+                    self.dat[idx] = new
+                    idx >>= 1
+
+        def update(self, pos: int, val: int):
+            self._upd(pos, val)
+
+        def query(self, l: int, r: int) -> int:
+            """ maximum on interval [l, r] """
+            l += self.sz
+            r += self.sz
+            res = -1 << 60
+            while l <= r:
+                if l & 1:
+                    res = max(res, self.dat[l])
+                    l += 1
+                if not (r & 1):
+                    res = max(res, self.dat[r])
+                    r -= 1
+                l >>= 1
+                r >>= 1
+            return res
+
+    # ------------------------------------------------------------
+    def maximumSumQueries(
+        self,
+        nums1: List[int],
+        nums2: List[int],
+        queries: List[List[int]],
+    ) -> List[int]:
+        n = len(nums1)
+        # 1. build sorted pairs
+        pairs = [
+            (nums1[i], nums2[i], nums1[i] + nums2[i]) for i in range(n)
+        ]
+        pairs.sort(key=lambda x: -x[0])  # decreasing a
+
+        # 2. sort queries by decreasing x, keep original index
+        q_list = [(x, y, idx) for idx, (x, y) in enumerate(queries)]
+        q_list.sort(key=lambda x: -x[0])  # decreasing x
+
+        # 3. compress b values
+        b_vals = sorted({b for _, b, _ in pairs})
+        m = len(b_vals)
+
+        # 4. segment tree
+        seg = self.SegTree(m)
+
+        ans = [-1] * len(queries)
+        p = 0  # pointer over pairs
+
+        for x, y, q_idx in q_list:
+            # insert all pairs with a >= x
+            while p < n and pairs[p][0] >= x:
+                a, b, s = pairs[p]
+                bi = bisect_left(b_vals, b)   # position in compressed array
+                seg.update(bi, s)
+                p += 1
+
+            # query for b >= y
+            li = bisect_left(b_vals, y)
+            if li == m:
+                ans[q_idx] = -1
+            else:
+                best = seg.query(li, m - 1)
+                ans[q_idx] = best if best != -1 << 60 else -1
+
+        return ans
+```
+
+The program follows exactly the algorithm proven correct above
+and conforms to the required function signature.

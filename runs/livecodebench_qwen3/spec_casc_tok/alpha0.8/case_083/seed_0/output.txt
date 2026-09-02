@@ -1,0 +1,929 @@
+<think>
+Okay, let's see. I need to find the number of interesting subarrays in the given array. The definition of an interesting subarray is a bit tricky. Let me read the problem again carefully.
+
+So, for a subarray nums[l..r], let cnt be the number of elements in that subarray where nums[i] % modulo == k. Then, this cnt must satisfy cnt % modulo == k. So the condition is that when you count how many elements in the subarray meet the modulo condition, that count itself modulo the given modulo equals k.
+
+Hmm. So, for example, in the first example, modulo is 2, k is 1. The subarray [3] has cnt=1. 1 mod 2 is 1, which equals k. So that's interesting. Similarly, for the subarray [3,2], the cnt is 1 (since 3%2=1, 2%2=0, so only 3 counts). Again, 1 mod 2 is 1. So that's interesting. And for [3,2,4], same cnt. So all three subarrays starting at index 0 are interesting.
+
+So how can I approach this efficiently? Since the array can be up to 1e5 elements, O(n²) approaches would be too slow. Need something smarter.
+
+Let me think about prefix sums. Let's consider the count of elements in the subarray that satisfy nums[i] % modulo == k. Let's call this count as 'cnt'. For each subarray, we need cnt mod modulo == k.
+
+Let me think about how to model this. Let's consider that for each position, we track the number of elements that meet nums[i] % modulo == k up to that point. Let's call this prefix array. Let's denote prefix[i] as the number of elements in nums[0..i-1] that satisfy the condition. Then, for a subarray from l to r (inclusive), the cnt is prefix[r+1] - prefix[l]. 
+
+So, for the subarray [l..r], the cnt is prefix[r+1] - prefix[l]. Then, the condition is that (prefix[r+1] - prefix[l]) mod modulo == k.
+
+But how can I compute this efficiently? Let me rephrase the condition. Let me denote the difference as (prefix[r+1] - prefix[l]) ≡ k mod modulo. Which can be rewritten as (prefix[r+1] - k) ≡ prefix[l] mod modulo. Because if (A - B) mod m == k, then A - B ≡ k mod m. Which implies A ≡ B + k mod m. Or perhaps I need to think of it differently.
+
+Wait, let's think of the equation:
+
+(prefix[r+1] - prefix[l]) mod modulo = k.
+
+Let me denote the current prefix value as current. For each r, I want to find the number of previous prefix values (prefix[l]) such that (current - prefix[l]) mod modulo == k.
+
+But how to compute this. Let me think of this as (current - prefix[l]) ≡ k mod modulo. Which can be rearranged as (current - k) ≡ prefix[l] mod modulo. So, for each current, the number of previous prefix[l] that are congruent to (current - k) mod modulo.
+
+Wait, but maybe I need to think of it in terms of the equation. Let me think again.
+
+Let me denote the value of the prefix sum as P. For a subarray ending at index r, the current prefix sum is P. Then for any previous prefix sum Q (at index l), the difference P - Q is the count of elements in the subarray from l to r. So we want (P - Q) mod modulo == k.
+
+Which is equivalent to (P - Q) ≡ k mod modulo. Which can be rewritten as P - Q = k + t * modulo, for some integer t. But since we're working mod modulo, maybe it's easier to think in terms of congruence.
+
+So (P - Q) mod modulo equals k. Let me rearrange that:
+
+P - Q ≡ k mod modulo
+
+=> P - k ≡ Q mod modulo
+
+So for each current P, we need to find the number of previous Q's such that Q ≡ (P - k) mod modulo.
+
+But how do I compute this? Well, if I can keep track of the counts of each modulo value of the prefix sums, then for each current prefix sum, I can calculate the required value (P - k) mod modulo and check how many times that value has occurred before.
+
+But wait, there's a problem. Let me think about the initial conditions. Let's consider the prefix sum array. Let's say prefix[0] is 0. Because for the subarray starting at index 0, the prefix sum up to index 0 is 0 (since the subarray is from 0 to r, and the prefix sum is the count up to r+1).
+
+Wait, let me re-define the prefix sum. Let me define prefix[i] as the number of elements in nums[0..i-1] that satisfy nums[i] % modulo == k. So for example, prefix[0] is 0, prefix[1] is the count of elements in nums[0], prefix[2] is count of elements in nums[0..1], etc.
+
+So for the subarray nums[l..r], the count is prefix[r+1] - prefix[l]. 
+
+So the condition is (prefix[r+1] - prefix[l]) mod modulo == k.
+
+So for each r, when we process prefix[r+1], we can look for the number of previous prefix[l] values (for l <= r) such that (prefix[r+1] - prefix[l]) mod modulo == k.
+
+But how can we compute that efficiently?
+
+Let me think of it as for each current value of prefix, what is the required value of previous prefix that would satisfy the condition.
+
+So for each prefix value P, we need the number of previous Q's where (P - Q) mod modulo == k. 
+
+Which is equivalent to (P - Q) mod modulo == k. 
+
+Which can be rewritten as (P - k) mod modulo == Q mod modulo. 
+
+Because:
+
+(P - Q) ≡ k mod modulo → P - Q ≡ k → P - k ≡ Q mod modulo → Q ≡ (P - k) mod modulo.
+
+So for each current P, we can compute (P - k) mod modulo, and check how many times this value has appeared in the previous prefix sums. 
+
+Wait, but why? Because if Q mod modulo is equal to (P - k) mod modulo, then P - Q ≡ k mod modulo. So the difference between P and Q is congruent to k modulo modulo. 
+
+But since we are dealing with mod operations, the (P -k) mod modulo is the same as (P -k + m*modulo) for some integer m, but the mod ensures that it's in the range [0, modulo-1].
+
+So, the idea is to track the counts of prefix mod modulo as we iterate through the array. 
+
+So here's the plan:
+
+- Preprocess the array to create a prefix sum array where each element is the count of elements in nums[0..i-1] that satisfy nums[i] % modulo == k. 
+
+But actually, we can compute this on the fly. 
+
+Let me think of the steps:
+
+Initialize a variable current_count = 0. This will track the number of elements that meet nums[i] % modulo == k up to the current index. 
+
+We also need to track the counts of the current_count mod modulo. 
+
+But the prefix sum array is cumulative. Let's think of prefix[0] as 0. Then for each element in nums, we check if it meets the condition (nums[i] % modulo == k). If it does, we add 1 to current_count. 
+
+Then, for each step i (from 0 to n-1), after updating current_count, we can compute the current prefix sum (current_count) and check how many previous prefix sums (from 0 to i) satisfy (current_count - previous) mod modulo == k. 
+
+Wait, no. Because the prefix sum for the current index is current_count. For example, when processing the i-th element (0-based), the prefix sum up to i is current_count (since the prefix sum up to index i is the count of elements in nums[0..i] that satisfy the condition). Wait, maybe my earlier prefix array definition is a bit off. Let me re-clarify.
+
+Let me think of the prefix array as follows:
+
+prefix[0] = 0. 
+
+prefix[i] = number of elements in nums[0..i-1] that satisfy nums[j] % modulo == k. 
+
+So for the first element (i=1), prefix[1] is the count of elements in nums[0] that satisfy. 
+
+Then, when processing the i-th element (from 0 to n-1), the prefix sum is prefix[i+1] = prefix[i] + (1 if nums[i] % modulo == k else 0).
+
+So for each i, after calculating prefix[i+1], we want to find the number of previous prefix[j] (j ranges from 0 to i) such that (prefix[i+1] - prefix[j]) mod modulo == k.
+
+So, for each prefix[i+1], we need to find the number of previous prefix[j] where (prefix[i+1] - prefix[j]) mod modulo == k.
+
+But as per earlier, this is equivalent to (prefix[i+1] - k) mod modulo == prefix[j] mod modulo. 
+
+Therefore, for each current prefix value, say current, we can compute (current - k) mod modulo, and check how many times that value has been seen in the prefix array up to j < i+1.
+
+Wait, but how to handle the mod here? Because (current - k) could be negative, so we need to adjust it to be within the modulo range. 
+
+For example, if current is 5, modulo is 3, and k is 1. Then current - k = 4. 4 mod 3 is 1. So when we compute (current - k) mod modulo, that's 1. So if we have a prefix[j] value that mod modulo is 1, then (current - prefix[j]) mod modulo would be (5 - 1) mod 3 = 4 mod 3 = 1, which is k. So that's correct.
+
+But if current is 2, modulo is 3, and k is 1. Then (current - k) mod 3 is (2 - 1) mod 3 = 1. So any previous prefix[j] that mod 3 is 1 would be valid. 
+
+So the key idea is: for each current prefix value, we can compute (current - k) mod modulo, and check how many previous prefix values have that mod value. 
+
+But then, how do we track these previous values? We can use a hashmap (dictionary) to track the count of each mod value of the prefix sums. 
+
+Let me outline the steps:
+
+Initialize a dictionary, say count_map, which keeps track of how many times each mod value of prefix has been seen. Initially, the prefix is 0, so count_map starts with {0: 1}.
+
+Then, we iterate through the array, keeping track of current_count (the number of elements that meet the condition up to the current index). For each index i, we compute current_count and then compute the required value (current_count - k) mod modulo. Then, we check how many times this value has been seen in the count_map, and add that to the answer. 
+
+Wait, but why? Because for each current prefix value (current_count), the number of previous prefix[j] (from j=0 to i) that have (current_count - prefix[j]) mod modulo == k is equal to the number of times (current_count -k) mod modulo has appeared in the count_map. 
+
+Wait, no. Because when we process the i-th element, the prefix array for j ranges from 0 to i. But the current_count is prefix[i+1]. So for each step, after updating current_count, we calculate the required value (current_count -k) mod modulo, and look up how many times that value has occurred in the count_map. 
+
+But why? Because the count_map initially contains the prefix[0] (which is 0). Then, for each i, we compute prefix[i+1] (current_count), and for that, we look back at all previous prefix[j] (j from 0 to i) and check if (current_count - prefix[j]) mod modulo == k. 
+
+So, for example, when processing prefix[i+1], the count_map holds the counts of prefix[j] for j from 0 to i. So when we calculate (current_count - k) mod modulo, we check how many times that mod value has been seen in the count_map. Then, for each occurrence, that corresponds to a previous prefix[j] where (current_count - prefix[j]) mod modulo == k. 
+
+So, the answer is the sum of all these counts for each step.
+
+Wait, but how does this account for all possible subarrays ending at the current index? Let me think. For each prefix[i+1], the current_count is the count of elements up to i. Then, for each j < i+1, the subarray from j to i is considered. So the count_map needs to contain all the prefix[j] values for j from 0 to i. 
+
+But when we process the i-th element, we first calculate current_count (prefix[i+1]), then check how many prefix[j] in the count_map (which are prefix[0..i]) satisfy the condition. 
+
+Wait, but when processing i-th element, the count_map contains the prefix values up to j= i. Because, for example, when we start, count_map has 0:1. Then, for each step, after calculating the current_count, we check the count_map, then add the current_count's mod value to the count_map. 
+
+Wait, no. Because for prefix[i+1], we need to check all previous j from 0 to i, which are the prefix values up to j=i. So, for the current_count (prefix[i+1]), we first check the count_map which has prefix values up to j=i. Then, after checking, we add the current_count's mod value to the count_map. 
+
+Wait, but that's not correct. Because if we add the current_count's mod to the count_map after checking, then when we process the next element, the count_map will include all previous prefix values up to j = i+1. 
+
+Let me think. Let's say the steps are:
+
+Initialize count_map with {0: 1} (prefix[0] is 0). 
+
+current_count = 0.
+
+For each element in nums:
+
+- check if nums[i] % modulo == k. If yes, current_count +=1.
+
+- Then, compute the required mod_value = (current_count - k) mod modulo. 
+
+- The number of previous prefix[j] values that have mod_value is count_map.get(mod_value, 0). 
+
+- Add this to the answer.
+
+- Then, add current_count's mod value (current_count % modulo) to the count_map. 
+
+Wait, but that would be wrong. Because current_count is prefix[i+1], and when we check for the mod_value, we are looking for previous prefix[j] values (prefix[0..i]) which have (current_count - prefix[j]) mod modulo == k. 
+
+But the current_count is prefix[i+1], and the count_map at that moment contains the prefix[j] values from 0 to i. So when we process the current_count (prefix[i+1]), we check for the count_map, which has the prefix[j] values for j up to i. Then, after that, we add the current_count's mod to the count_map for future steps. 
+
+Yes, that seems correct. 
+
+Let me take example 1. 
+
+Example 1: nums = [3,2,4], modulo = 2, k = 1.
+
+First, compute for each element whether it meets the condition. 
+
+nums[i] % modulo ==k ?
+
+For 3 % 2 = 1 == k (1) → yes. 
+
+2%2 = 0 != 1 → no. 
+
+4%2 =0 !=1 → no. 
+
+So the current_count is 0, then 1, then 1, then 1.
+
+But let's walk through the steps.
+
+Initialize count_map = {0:1}, answer = 0.
+
+current_count starts at 0.
+
+Processing first element (3):
+
+current_count += 1 (since 3%2=1 ==k). Now current_count is 1.
+
+required mod_value = (current_count - k) mod modulo → (1 -1) mod 2 = 0 mod 2 → 0.
+
+count_map has 0:1. So answer += 1.
+
+Then, we add current_count mod modulo (1 mod 2 = 1) to count_map. Now count_map is {0:1, 1:1}.
+
+Processing second element (2). 
+
+Check if 2%2 ==1? No. current_count remains 1.
+
+required mod_value = (1 -1) mod 2 = 0 → again. count_map has 0:1, 1:1. So answer += 1. Now answer is 2.
+
+Then add current_count mod modulo (1 mod 2 = 1). count_map[1] becomes 2.
+
+Processing third element (4). 
+
+Check if 4%2 ==1? No. current_count remains 1.
+
+required mod_value = (1 -1) mod 2 = 0 → count_map has 0:1, 1:2. So answer += 1. Now answer is 3.
+
+Then add current_count mod modulo (1 mod 2 = 1). count_map[1] becomes 3.
+
+So total answer is 3, which matches example 1. 
+
+Yes, that works. 
+
+Another example: example 2. 
+
+Input: nums = [3,1,9,6], modulo = 3, k = 0.
+
+We need to find the count of subarrays where cnt % modulo == k. For this case, k is 0, so the cnt must be a multiple of 3.
+
+But first, let's process the nums elements.
+
+Check for each nums[i] % modulo == k (which is 0).
+
+3%3 is 0 → yes. 1%3 is 1 → no. 9%3 is 0 → yes. 6%3 is 0 → yes.
+
+So the current_count increments for each of these elements. 
+
+Let's walk through the steps:
+
+count_map starts with {0:1}, answer = 0.
+
+current_count = 0.
+
+First element (3):
+
+current_count +=1 → 1.
+
+mod_value = (1 - 0) mod 3 = 1 mod 3 = 1.
+
+Check count_map for 1. Initially, count_map has 0:1. So no. answer += 0.
+
+Add current_count mod 3 → 1 mod3 = 1. count_map becomes {0:1, 1:1}.
+
+Second element (1): not in the condition. current_count remains 1.
+
+mod_value = (1 -0) mod3 = 1. count_map has 0:1, 1:1. So answer += 1. Now answer is 1.
+
+Add current_count mod3 = 1 → count_map[1] becomes 2.
+
+Third element (9): yes. current_count becomes 2.
+
+mod_value = (2 -0) mod3 → 2 mod3 = 2. Check count_map for 2. Not present. answer remains 1. 
+
+Add current_count mod3 → 2. count_map now has {0:1, 1:2, 2:1}.
+
+Fourth element (6): yes. current_count becomes 3.
+
+mod_value = (3 -0) mod3 = 0. Check count_map for 0. The count is 1. So answer += 1. Now answer is 2. 
+
+Then add current_count mod3 = 3 mod3 = 0. count_map[0] becomes 2.
+
+So total answer is 2. Which matches example 2.
+
+Yes! So the approach works. 
+
+So the steps are:
+
+1. Initialize count_map with {0: 1} (since prefix[0] is 0).
+
+2. Initialize current_count to 0.
+
+3. Initialize answer to 0.
+
+4. For each number in nums:
+
+   a. Check if nums[i] % modulo == k. If yes, increment current_count.
+
+   b. Compute the required mod_value = (current_count - k) % modulo.
+
+   c. Add the count_map.get(mod_value, 0) to the answer.
+
+   d. Compute current_count's mod value (current_count % modulo) and add it to count_map (increment the count for that mod value).
+
+Wait, but why is step 4b (current_count -k) mod modulo?
+
+Because (current_count - prefix[j]) mod modulo == k → (current_count -k) mod modulo == prefix[j] mod modulo. 
+
+So yes. So for each current_count, the required is (current_count -k) mod modulo. 
+
+But wait, what if (current_count -k) is negative? For example, if current_count is 0, and k is 1, modulo is 2. Then (current_count -k) is -1. mod 2 would be 1. 
+
+So in Python, the mod operator handles negative numbers correctly? Let me check. For example, (-1) % 2 → 1 in Python. So yes. 
+
+So the calculation of (current_count -k) mod modulo is correct. 
+
+So the key is that for each current_count, the required value is (current_count -k) mod modulo. 
+
+Now, the problem is that the current_count can be up to n, which is up to 1e5. But modulo can be up to 1e9. So the mod value can be stored as a key in the count_map. 
+
+But the count_map is only tracking the mod values of the prefix sums. 
+
+So the algorithm will be O(n) time, with O(modulo) space. But since modulo can be up to 1e9, but in practice, the number of different mod values we can have is up to n, since each step adds 1 or 0 to current_count. 
+
+Wait, no. The current_count can be up to n (since each element may contribute 1). So the mod value is (current_count) mod modulo. 
+
+So the count_map will store the count of each mod value of the prefix sums. 
+
+But for large modulo, like 1e9, but since the current_count is up to n (say 1e5), the number of possible mod values is up to 1e5. So the count_map's size is manageable. 
+
+So the algorithm is O(n) time, which is acceptable for n up to 1e5.
+
+But let me test for some edge cases. 
+
+Edge case 1: when modulo is 1, and k is 0. Because k must be 0 < modulo (which is 1). Wait, the constraints say 0 <=k < modulo. So when modulo is 1, k can be 0. 
+
+For example, nums = [1], modulo = 1, k =0. 
+
+Each nums[i] mod 1 is 0. So for current_count, it's 1. 
+
+Then, required mod_value is (current_count -k) mod modulo → (1 -0) mod1 = 0 mod1 = 0. 
+
+count_map initially has {0:1}.
+
+So answer += 1. 
+
+Then add current_count mod1 = 1 mod1 = 0. So count_map now has {0:2}. 
+
+But what is the actual answer? Let's see. 
+
+The subarray [1]. cnt is 1. cnt mod1 is 0. Which equals k (0). So it's interesting. So the answer is 1. Which matches the calculation.
+
+Another edge case: when k is 0 and modulo is 1. 
+
+Another example: nums = [1, 1], modulo = 1, k = 0. 
+
+current_count starts as 0.
+
+First element: current_count is 1. 
+
+mod_value = (1-0) mod 1 = 0. count_map has 0:1 → answer +=1. 
+
+Add 1 mod1 = 0 → count_map[0] becomes 2.
+
+Second element: current_count is 2. mod_value = (2-0) mod1 = 0. count_map has 0:2 → answer +=2. 
+
+Total answer 3. 
+
+What is the actual count? 
+
+All subarrays:
+
+[1] → cnt=1 → 1 mod1 =0 → yes. 
+
+[1] → same. 
+
+[1,1] → cnt=2 → 2 mod1 =0 → yes. 
+
+Total 3. Correct. 
+
+So the algorithm works here.
+
+Another case: when k is larger than modulo. Wait, but the constraints state that 0 <=k < modulo. So that's not possible.
+
+Now, considering that for each step, the current_count is incremented by 0 or 1. So the problem is manageable.
+
+So the plan is:
+
+Implement the algorithm as described. For each element, check if it meets the condition, update current_count, calculate mod_value, add to answer the count_map's entry for mod_value, then update count_map with current_count mod modulo.
+
+But wait, in the first example, the initial count_map is {0:1} (prefix[0] = 0). For each element in nums, we do steps 4a-4d.
+
+Wait, let's re-express:
+
+In the code, for each number in nums:
+
+current_count is being updated. So, for the first element, after processing it, current_count is 1 (for example 1). Then, the required mod_value is (current_count -k) mod modulo. Which for the first step is (1 - 1) mod 2 = 0. So we check count_map for 0, which is present once. So add 1 to the answer. Then add the current_count mod modulo (1 mod 2 = 1) to the count_map.
+
+Yes. So the code steps are correct.
+
+Now, the code needs to:
+
+- Iterate over nums, for each element, check if nums[i] % modulo == k. 
+
+But wait, the original problem says that the condition is nums[i] % modulo ==k. So that's the count of elements that contribute to current_count. 
+
+Yes. 
+
+So the code outline is:
+
+Initialize count_map with {0:1}.
+
+current_count = 0
+
+ans = 0
+
+for num in nums:
+
+    if num % modulo == k:
+
+        current_count +=1
+
+    mod_value = (current_count - k) % modulo
+
+    ans += count_map.get(mod_value, 0)
+
+    # Now, add current_count mod modulo to count_map
+
+    current_mod = current_count % modulo
+
+    count_map[current_mod] = count_map.get(current_mod, 0) + 1
+
+Wait, wait. Wait, no. The count_map is supposed to track the mod of the prefix sums. So for the prefix sum up to the current index (i+1), which is current_count, we need to add its mod value to the count_map. 
+
+But the current_count is the prefix sum for the current index. So after processing the current element, the current_count is the prefix sum for the next index. 
+
+Wait, for example, after processing the first element, current_count is 1, which is the prefix sum for prefix[1] (the first element). 
+
+So when processing the element, we first check if it contributes to current_count, then compute the required mod_value for the current_count. Then, add the current_count mod modulo to the count_map. 
+
+So yes, the code above would do that. 
+
+Wait, but the count_map for the prefix sums is being built as follows:
+
+Initially, prefix[0] = 0. So count_map has {0:1}.
+
+Then, for each element, after processing, the current_count is prefix[i+1], and after processing the element, we add the current_count mod modulo to the count_map. 
+
+Wait, no. Because the count_map is supposed to contain all prefix[j] mod modulo for j from 0 up to i. 
+
+For example, when processing the first element (i=0), the current_count is prefix[1] (which is for the subarrays ending at i=0). 
+
+But the count_map contains prefix[0], and after processing the current element, we add prefix[1] to the count_map. 
+
+So, for the next steps, when processing the next element, the count_map includes prefix[0], prefix[1], etc. 
+
+Yes, which is correct. 
+
+So the code seems correct.
+
+But let's test example 2 again. 
+
+Example 2: nums = [3,1,9,6], modulo = 3, k=0.
+
+current_count starts at 0.
+
+count_map starts with {0:1}.
+
+Processing 3:
+
+3%3 =0 ==k (0). So current_count becomes 1.
+
+mod_value = (1 -0) mod3 = 1 mod3 = 1. 
+
+count_map has 0:1. So count_map.get(1, 0) → 0. ans +=0. 
+
+Then, current_mod is 1 mod3 =1. count_map now {0:1, 1:1}.
+
+Processing 1:
+
+1 mod3 is 1, which is not 0. So current_count remains 1. 
+
+mod_value = (1 -0) mod3 = 1. count_map has 0:1, 1:1. So ans +=1. 
+
+Then current_mod is 1 mod3 =1. count_map now {0:1, 1:2}.
+
+Processing 9:
+
+9 mod3 is 0. current_count becomes 2.
+
+mod_value = (2 -0) mod3 =2. count_map has 0:1, 1:2. count_map.get(2) → 0. ans remains 1. 
+
+current_mod is 2 mod3 =2. count_map now {0:1, 1:2, 2:1}.
+
+Processing 6:
+
+6 mod3 is 0. current_count becomes 3. 
+
+mod_value = (3 -0) mod3 =0. count_map has 0:1, 1:2, 2:1. count_map.get(0) is 1. ans +=1. total ans is 2. 
+
+current_mod is 3 mod3 =0. count_map[0] becomes 2.
+
+So the answer is 2. Which is correct.
+
+So that seems to work.
+
+Another example: nums = [1], modulo = 1, k = 0. 
+
+current_count starts at 0.
+
+count_map is {0:1}.
+
+Processing 1: 1 mod1 is 0. So current_count becomes 1. 
+
+mod_value = (1 -0) mod1 → 1 mod1 = 0. 
+
+count_map.get(0) is 1. ans +=1. 
+
+current_mod is 1 mod1 =0. count_map[0] becomes 2. 
+
+So ans is 1, which is correct.
+
+Another example: nums = [1, 1, 1], modulo = 2, k = 1.
+
+Each element mod 2 is 1, so current_count increases by 1 each time.
+
+Processing first element:
+
+current_count =1. mod_value = (1 -1) mod2 = 0 mod2 =0. count_map has 0:1. ans +=1. 
+
+Add current_count mod 2 =1 mod2 =1. count_map {0:1, 1:1}.
+
+Second element:
+
+current_count =2. mod_value = (2 -1) mod2 → 1 mod2=1. count_map has 0:1, 1:1. ans +=1. (now ans is 2). 
+
+Add current_count mod2 = 2 mod2 =0. count_map[0] is 2.
+
+Third element:
+
+current_count =3. mod_value =3-1=2 mod2 → 0. count_map has 0:2 (from previous steps), 1:1. ans +=2. (ans becomes 4).
+
+Then add 3 mod2 =1. count_map[1] becomes 2.
+
+So total ans is 4. Let's check the actual subarrays:
+
+All subarrays:
+
+[1] → cnt=1 → 1 mod2 =1 → yes. 
+
+[1,1] → cnt=2 → 2 mod2=0 → not equal to k=1. So not counted. 
+
+[1,1,1] → cnt=3 mod2=1 → yes. 
+
+[1] → same as first. 
+
+[1,1] → same as before. 
+
+[1] → same as first. 
+
+Wait, how many subarrays?
+
+Wait, the subarrays are:
+
+Indices:
+
+[0] → 1 → cnt=1 → yes. 
+
+[0-1] → cnt 2 → 2 mod2 =0 ≠1 → no.
+
+[0-2] → cnt 3 → 3 mod2=1 → yes. 
+
+[1] → cnt 1 → yes. 
+
+[1-2] → cnt 2 → no. 
+
+[2] → cnt 1 → yes. 
+
+So total of 4 subarrays. Which matches the ans. So yes, code is correct.
+
+So this approach seems correct.
+
+Now, the code in Python.
+
+But need to be careful with the mod operation. For example, when (current_count -k) can be negative? Let me check.
+
+In Python, the % operator returns a non-negative result. For example, (-1) % 2 → 1. So (current_count -k) can be negative, but mod is handled correctly.
+
+Now, code:
+
+We need to loop through nums, for each element, check if it satisfies nums[i] % modulo ==k. 
+
+But since modulo can be up to 1e9, and nums[i] can be up to 1e9, but that's okay. 
+
+Now, the code:
+
+Initialize count_map as a defaultdict(int), perhaps. Or a regular dictionary. 
+
+But to start, count_map has {0:1}.
+
+current_count =0
+
+ans =0
+
+For each num in nums:
+
+    if num % modulo ==k:
+
+        current_count +=1
+
+    mod_value = (current_count -k) % modulo 
+
+    ans += count_map.get(mod_value, 0)
+
+    current_mod = current_count % modulo 
+
+    count_map[current_mod] = count_map.get(current_mod, 0) +1 
+
+Wait, but for the first step, after processing the first element, current_count is 1, mod_value is (1 -k) mod modulo. Then we add to count_map the current_count mod modulo. 
+
+Yes. 
+
+But let me think: the count_map is tracking the prefix sums mod modulo. Because for the current_count (prefix[i+1]), we are adding its mod to the count_map. So for the next steps, when we compute the required mod_value, we can look up in the count_map. 
+
+But the count_map is built as follows: for the prefix sum up to j, where j ranges from 0 to i, which is the current index. 
+
+So the code is correct. 
+
+But wait, for the first step, the count_map starts with 0:1. Then, after processing the first element, we add the mod of current_count to the count_map. So in the first step, when we check for mod_value, the count_map contains the prefix[j] for j up to 0 (the initial 0). 
+
+Yes. 
+
+So code is correct.
+
+Now, let's code this. 
+
+But in Python, we need to use a dictionary. 
+
+But since the initial count_map is {0:1}, we can initialize it as a defaultdict(int) and set count_map[0] = 1. 
+
+But in Python, defaultdict is from collections. 
+
+So code steps:
+
+from collections import defaultdict
+
+class Solution:
+    def countInterestingSubarrays(self, nums: List[int], modulo: int, k: int) -> int:
+        count_map = defaultdict(int)
+        count_map[0] = 1
+        current_count = 0
+        ans = 0
+        for num in nums:
+            if num % modulo == k:
+                current_count +=1
+            mod_value = (current_count - k) % modulo
+            ans += count_map.get(mod_value, 0)
+            current_mod = current_count % modulo
+            count_map[current_mod] +=1
+        return ans
+
+Wait, but let me check the example 2. 
+
+In example 2, when processing the first element (3):
+
+current_count becomes 1. 
+
+mod_value = (1 - 0) mod 3 → 1. 
+
+count_map has 0:1. So count_map.get(1, 0) is 0 → ans +=0. 
+
+Then current_mod is 1 mod3 =1. count_map[1] becomes 1. 
+
+Yes. 
+
+But what about the case where (current_count -k) is negative?
+
+Take modulo = 5, k = 3. Suppose current_count is 2. 
+
+mod_value = (2 -3) mod5 = (-1) mod5 = 4. 
+
+Which is correct. 
+
+So the code handles this.
+
+But wait, in the code, (current_count -k) could be negative, but the mod is handled correctly in Python. 
+
+So the code is correct. 
+
+Let me test example 1:
+
+In code, for nums [3,2,4], modulo 2, k=1.
+
+Processing 3:
+
+current_count =1.
+
+mod_value = (1 -1) mod2 = 0. 
+
+count_map has 0:1. ans +=1. 
+
+current_mod =1 mod2 =1. count_map[1] =1.
+
+Processing 2:
+
+num%2 = 0 !=1. current_count remains 1. 
+
+mod_value = (1-1) mod2 =0. count_map has 0:1, 1:1. So ans +=1 (total 2). 
+
+current_mod =1 mod2 =1. count_map[1] becomes 2.
+
+Processing 4: same as 2. current_count remains 1. 
+
+mod_value = (1-1) mod2 =0. count_map has 0:1. So ans +=1 (total 3). 
+
+current_mod =1 mod2 =1. count_map[1] becomes 3.
+
+So the answer is 3. Correct. 
+
+So the code seems correct. 
+
+But wait, in the code, when we process the current_count, the count_map is updated after adding to ans. 
+
+Yes, because for the current_count (prefix[i+1]), when we check for mod_value, the count_map contains all previous prefix[j] (j from 0 to i). Because the count_map was updated after processing the previous elements. 
+
+Yes. 
+
+But let's see the first step. 
+
+count_map initially has 0:1. 
+
+Processing the first element:
+
+After processing the element, we add the current_count mod modulo (1) to the count_map. 
+
+So the count_map for next steps includes prefix[1] (current_count). 
+
+So the code is correct.
+
+Thus, the code is as written above.
+
+But let's check the example 2 again. 
+
+In example 2, the answer is 2. 
+
+Let me see what the code returns.
+
+count_map starts as {0:1}, current_count =0.
+
+Processing 3:
+
+current_count becomes 1.
+
+mod_value = (1 -0) mod3 =1 → count_map.get(1) is 0 → ans +=0. 
+
+current_mod =1%3=1. count_map[1] =1.
+
+Processing 1:
+
+current_count remains 1. mod_value = (1-0) mod3 =1. count_map has 0:1, 1:1. So ans +=1. 
+
+current_mod =1%3=1. count_map[1] becomes 2.
+
+Processing 9:
+
+current_count becomes 2. mod_value = (2-0) mod3 =2. count_map has 0:1,1:2. So count_map.get(2) is 0 → ans remains 1. 
+
+current_mod =2 mod3=2. count_map[2] becomes 1.
+
+Processing 6:
+
+current_count becomes 3. mod_value = (3-0) mod3 =0 → count_map has 0:1, so ans +=1 (total 2). 
+
+current_mod =3 mod3=0. count_map[0] becomes 2. 
+
+Thus, the answer is 2. Correct. 
+
+So the code is correct. 
+
+But what about the case where k is zero and modulo is 1. 
+
+For example, nums = [1,1], modulo=1, k=0. 
+
+Each num %1 is 0. So current_count is 2. 
+
+Processing first 1:
+
+current_count becomes 1. 
+
+mod_value = (1-0) mod1 =0. 
+
+count_map has 0:1. So ans +=1. 
+
+current_mod =1 mod1=0. count_map[0] becomes 2. 
+
+Processing second 1:
+
+current_count becomes 2. 
+
+mod_value = (2-0) mod1 =0. 
+
+count_map has 0:2. ans +=2. 
+
+total ans is 3. 
+
+Which is correct.
+
+So the code works.
+
+Now, the code is written. 
+
+But wait, in the code, the count_map is a defaultdict. 
+
+But for the first step, count_map[0] is initialized as 1. 
+
+Yes.
+
+So the code should work.
+
+Another test case: nums = [1], modulo = 1, k=0. 
+
+The answer should be 1. 
+
+The code returns 1.
+
+Another test case: nums = [1, 2], modulo = 2, k=0.
+
+Which elements satisfy nums[i] % modulo ==k?
+
+nums[0] %2 =1 !=0 → no. 
+
+nums[1] %2 =0 → yes. 
+
+current_count is 0, then 1.
+
+Processing first element:
+
+current_count is 0. mod_value = (0-0) mod2 =0. count_map has 0:1. ans +=1. 
+
+Then current_mod is 0 mod2=0. count_map[0] becomes 2. 
+
+Processing second element: current_count becomes 1. 
+
+mod_value = (1-0) mod2 =1 → count_map has 0:2. ans +=0. 
+
+current_mod is 1 mod2=1. count_map[1] =1. 
+
+Total ans is 1. 
+
+But let's see the actual subarrays:
+
+subarrays:
+
+[1], cnt is 0 (no elements that satisfy). 0 mod2 =0 ==k=0 → yes. 
+
+[1,2]: cnt is 1. 1 mod2 =1 !=0 → no. 
+
+[2]: cnt is 1. 1 mod2 =1 !=0 → no. 
+
+So the answer is 1. 
+
+But according to the code, during processing the first element, ans +=1. Which is correct. 
+
+Yes. 
+
+So the code works. 
+
+Another test case: nums = [2], modulo = 2, k=0. 
+
+nums[0] %2 =0 → yes. current_count =1. 
+
+mod_value = (1-0) mod2 =1. 
+
+count_map has 0:1. So ans += count_map.get(1, 0) → 0. 
+
+Then add current_count mod2=1 → count_map[1] =1. 
+
+But the answer should be 0. Wait, because cnt is 1. 1 mod2 =1, but k is 0. So the subarray is [2], cnt is 1, which mod2=1 !=0. So answer is 0. 
+
+But according to code, the code will return 0. 
+
+But why? Because during the processing of the first element, the code computes mod_value as (1-0) mod2=1. 
+
+count_map is {0:1}, so count_map.get(1) is 0. So ans +=0. 
+
+So the code returns 0. Which is correct.
+
+Yes.
+
+Thus, the code is correct.
+
+So I think this is the correct solution.
+</think>
+
+To solve this problem, we need to count the number of interesting subarrays in a given array. A subarray is considered interesting if the count of elements in it that satisfy a specific modulo condition meets another modulo condition.
+
+### Approach
+1. **Understanding the Problem**: A subarray `nums[l..r]` is interesting if the count of elements in it that satisfy `nums[i] % modulo == k` (let's call this count `cnt`) meets `cnt % modulo == k`.
+
+2. **Prefix Sum Insight**: We use a prefix sum approach to keep track of the count of elements that meet the condition `nums[i] % modulo == k` as we iterate through the array. This helps us efficiently determine the count of valid subarrays ending at each index.
+
+3. **Modulo Arithmetic**: For each prefix sum, we compute the required modulo value to check how many previous prefix sums would make the current subarray interesting. This is done using the equation derived from the problem's condition: `(prefix[r+1] - prefix[l]) % modulo == k`, which can be transformed to find the number of previous prefix sums that meet the condition.
+
+4. **Hash Map for Counting**: We use a hash map to keep track of the frequency of each modulo value of the prefix sums encountered so far. This allows us to efficiently query how many times a specific modulo value has occurred, which is crucial for maintaining an O(n) time complexity.
+
+### Solution Code
+```python
+from collections import defaultdict
+from typing import List
+
+class Solution:
+    def countInterestingSubarrays(self, nums: List[int], modulo: int, k: int) -> int:
+        count_map = defaultdict(int)
+        count_map[0] = 1  # Initialize with prefix sum 0
+        current_count = 0
+        ans = 0
+        
+        for num in nums:
+            if num % modulo == k:
+                current_count += 1
+            # Calculate the required mod_value
+            mod_value = (current_count - k) % modulo
+            ans += count_map.get(mod_value, 0)
+            # Update the count_map with the current prefix sum's mod value
+            current_mod = current_count % modulo
+            count_map[current_mod] += 1
+        
+        return ans
+```
+
+### Explanation
+1. **Initialization**: We start with a hash map `count_map` initialized to `{0: 1}` to handle the prefix sum starting at index 0.
+
+2. **Iterating Through Array**: For each element in the array, we check if it meets the condition `nums[i] % modulo == k` and update the `current_count` accordingly.
+
+3. **Modulo Value Calculation**: For each updated `current_count`, we compute the required modulo value `(current_count - k) % modulo`. This value helps us determine how many previous prefix sums would make the current subarray interesting.
+
+4. **Updating Answer**: We use the hash map to quickly find how many times the required modulo value has occurred, which directly gives us the count of interesting subarrays ending at the current index.
+
+5. **Updating Hash Map**: After processing each element, we update the hash map with the modulo value of the current prefix sum to be used in subsequent iterations.
+
+This approach ensures that we efficiently count the interesting subarrays in linear time, making it suitable for large input sizes as specified in the problem constraints.

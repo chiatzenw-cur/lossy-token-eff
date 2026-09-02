@@ -1,0 +1,397 @@
+<|channel|>analysis<|message|>We need to produce solution.
+
+Given n cells, each can be black or white. Operation: choose any consecutive segment of length k and set to white. You are to remove all black cells (optionally converting black cells elsewhere). There is no constraint about overlapping segments; overlapping allowed. We want minimal number of operations.
+
+Observation: In each operation, we may paint a segment of length k to white. So the bitset of black cells in final state (all white) is after operations. The goal: cover all black cells by segments of length k. Overlap allowed, each segment moves slice. All black cells must be covered by at least one operation; we must choose minimal number of such segments. This is like covering set of points (positions with B) with intervals of length k. Equivalent to find minimal number of intervals of length k to cover all B positions.
+
+This is a Codeforces problem "Removing Black Cells" maybe. But we just need minimal number.
+
+This is typical greedy: sweep left to right. Suppose we have an array of positions where s[i]=='B'. For each position encountered, we consider the earliest index not yet covered. If we found a B and it's not covered by previous operations, we will perform one operation covering from this position to position + k -1 (including). That will cover all remaining black cells within that position to that+ k -1. But we also need to ignore white cells that might be inside. Equivalent to minimize number of segments.
+
+But we need to consider we can paint any substring of length k, not necessarily starting at B or something akin to covering using sliding. I'd think greedy for covering points where start at earliest uncovered B. That will produce minimal operations because each segment of length k covers as many as possible ahead at that point.
+
+Thus algorithm: maintain variable i=0/t pointer to position. count l=0. While i < n: we start any segment we consider starting at i; but if s[i]=='B', i is uncovered. After performing operations of length k we pick segment.
+
+We need to choose minimal number of steps. Classic approach: iterate the string; maintain current used coverage. For each i from 0 to n, x = i. If s[i]=='B', we might apply operation: if r = i+k-1 (not exceed n-1). But we need that the event ends at r+1. Since we fill from i to i+k-1. So we can use dr = 0: we mark coverage: we can use track of last apply? Actually we want minimal number of segments; we can treat as we need to find minimal number of intervals whose union covers all m positions. Since each segment covers length k. The greedy is: start at smallest uncovered position p; choose earliest segment that covers p: start at p; but that may reduce to covering as many consecutive B's as possible. The optimal segment should start at some index <= p such that segment length >= k. But to minimize number of segments, we want to shift start to the right? Let's analyze.
+
+If a segment of length k starting at pos x covers [pos x, pos+k-1). Since each segment's coverage is contiguous ascii. So starting at earliest uncovered B, we are forced to cover at least that B. If we start at that B, we may decrease ability to cover further B back. But we choose the segment that covers B and others to the right. Since we start from earliest B (p). This gives maximum coverage to the right. Should we possibly start earlier to cover more? Starting earlier would cover a B earlier but we might waste length. Since we must cover p, we start from i = p; because we cannot start earlier, but later because start index must be within limit such that segment includes p. If we start at position p-1, then we cover up to p-1+k-1 = p+k-2; still covers P, but we wasted one cell for p-1? That's fine. So maybe we can shift start to the right and still cover p, but not earlier. c choose start position = p; this extends to p+k-1. But we might choose start to the right if p <= start <= p, actually start can be at most p. But if p >= 0. Hmm.
+
+Maybe easier approach: we maintain a set of black positions; we need to pick minimum i such that we cover all positions. Because we can use simple removal if it's similar to "multiple covering with intervals of size k" like selecting segments contributions.
+
+Is there any better solution? Let's analyze with logic. Suppose we want to eliminate all black cells. Equivalent: fill the string with white; any length k segment must be chosen. Equivalent r of number of times s[i]=='B' we can choose to cover them. We also need to use remainder minimal.
+
+But there may be possibility of using overlaps with existing black cells? Not needed.
+
+This is like "cutting" solution as minimal-by-scan: greedy: for each time we see we choose a contiguous segment to cover as many white cells as possible. Implementation matches typical Codeforces problems, e.g.
+
+Solution: For each index i from 0 to n-1: if s[i] == 'B', we count operation, and start covering covering i ... i+k-1 inclusive. Actually we can fill in this interval by shifting pointer to i+k. Because we are scanning left to right; we can enforce that we cannot extend beyond n-1 to finish scanning.
+
+But we need to confirm that this greedy yields minimal number. It may be typical: For each uncovered b, for any other coverage maybe we can remain but not start earlier. But is there guarantee of optimal? Let's attempt to algorithmically reason: Suppose we break the line into segments of consecutive B's with gaps of white. Among these contiguous B groups, we can apply any crossing segments that may cross group boundaries. For a group A of length L, we can cover it with ceil(L/k) segments. If L > k, we may need sequential overlapping. But example: with separated B groups of length L1 and L2 separated by white length g. We may cover them with segments individually. For minimal number, we'd treat each group separately.
+
+We must also consider that we might have overlapping segments that cover a B's from two groups if k is large enough. Let's test with L1=R, L2=R, gap 2. Suppose k=3, L1=1, L2=1, gap=1. A= B W B; k=3 and we can cover positions 0-2? Actually we can choose start at 1, covering cells 1-3 -> includes B at 0? no; start at 0 covering covers B at 0-2: includes B at 2? If b at 2? Wait B at 0 and B at 2? Let's example: pattern B at positions 0 and 2. Gap 1: cell 1 white. n=3. If k=3, we can choose start =0 covering [0,2], which covers both B. That's minimal 1 segment; but our algorithm for each uncovered B will start at 0 for first B (0), then skip to i=3; B at 2 is already covered -> skip. Good.
+
+But if a B appears earlier in the group but we might choose start offset bigger than 0 to cover both B when k> group size? But to cover B we could start at i=Bpos-? Suppose B at 0, B at 2, gap=1; if we choose start at 0 as we did, we cover both. So algorithm works.
+
+Simpler: Use direction: After processing an operation starting at index i, we simulate painting area i..i+k-1, then set i = i+k. We essentially use start from leftmost to rightmost. Wait what if there is a black cell that appears earlier but then alphabetically not covered after we skip? After we scan, we don't revisit earlier cells, but re using pointer j? It will be fine because we skip to i+k; if none of those cells were black but maybe they were already considered earlier. But algorithm ensures we didn't skip any black cells inside that segment. Because if we encounter a black cell that is inside [i, i+k-1], we will ignore it because it's not at the i location. Actually scanning will always reach the start of block of blacks. For a B at 2, we might earlier still not have visited i, we would consider it. Suppose we shift pointer to i=0. s[0]==B', we start, chunk at (0,1,2). k=3. We skip to i. after operation, i increments. At that step, so after, we scan starting at i=3. If there is any black at 3 etc., they'd categorize. Good.
+
+But if we have black at 2 but not at 0? Suppose s[0]='W', n=2? Let's ignore.
+
+Ok I think greedy works.
+
+Edge case: Suppose s string "B" n=1. k=3? Can't. But k <= q.
+
+Observation: The algorithm uses pointer j to iterate after performing operation. But when we choose starting index i, we do not necessarily start at that B but also we may shift some earlier segment? I adopt algorithm: iterate all positions; if s[i]=='B' and i not marked as visited, then i details inc. The operation increments result counter by 1, and set j = i+1; while j <= i+k-1 and j<n: j++. Actually we need to skip beyond segment length. But we also need to not mark earlier positions. So we will treat variables "idx" each loop. Implementation akin to iterating through string.
+
+Pseudo:
+
+ans = 0
+i = 0
+while i < n:
+    if s[i] == 'B':
+        ans += 1
+        while i < i + k and j < n: j++? Wait used to skip within i segment?
+
+Better: while i < n:
+    if s[i] == 'B':
+        ans += 1
+        j = i + k - 1
+        while i <= j and i < n:
+            i++ (string index)
+        # after j = i+? Implementation earlier.
+    else:
+        i += 1
+
+But we need to handle reading s; but we can treat each call: Use pointer i.
+
+However maybe simpler: in python, we can do linear scanning: while i < n and s[i] == 'W': i += 1; ans = 0; if i==n: done else array i. Then for each start j: ans = 0; i = 0; while i < n:
+    if s[i] == 'B':
+        ans += 1
+        i = i + k
+    else:
+        i += 1
+
+Yes.
+
+But note this fails: Suppose we start at i=0; 0 is B (cover). After operation we set i = i+k. So we skip all indices 0..i+k-1. But q may number of B's inside those indices 0..i+k-1 may include large number of B's but they are removed as we had advancing all counts. So good.
+
+But we must ensure that at i we confirm that we haven't mis- oversaw that there may be a B? In the process, we skip from i to i+ k, but we skip them regardless of whether they were B or W because we already painted them white. Good. So algorithm works.
+
+Let's test with sample 1.
+
+Test 1:
+Input:
+n=6, k=3
+WBWWWB
+Indices: 0 W,1 B,2 W,3 W,4 B,5 W. We'll process.
+
+i=0: W -> i+=1
+i=1: B, ans=1, i+=3 => now i=4.
+immediate i=4: B ans=2, i+=3 => i=7 > n. loop ends. ans=2.
+
+Matches.
+
+Test 2:
+n=7, k=3
+WWBWBWW
+Indices: 0 W,1 W,2 W? Wait we need B at 2? Actually string: "WWBWBWW". Let's check: 0 W,1 W,2 B,3 W,4 B,5 W. Actually 2 B; string: W W X B W B? Wait we have positions: 0 W,1 W,2 B,3 W,4 B,5 W,6 B? Wait original string: "WWBWBWW" -> row length 7, W, W, B, W, B, W, W? Actually "WWBWBWW" has 7 chars: W W B W B W W. So after position 2 B, index3= W, index4=B, index5=W, index6=W. This pattern has B at 3? Let's look again: 'WB'? anyway 'MW'. 3? need to ignore. We'll just use algorithm: a B at 2 -> we start at 3? Wait front: i=0 W; i=1 R -> step; i=2 B; ans=1; i+=3 -> outskirts: 5; i=5 W; j>=; y. i=5 W -> i=6; i=6 W ok. End. number 1. Output 1. Let's compare with sample.
+
+The sample outputs: 1. Good.
+
+So algorithm works. Let's test with first test: n=5, k=2, pattern BWBWBBBB. Actually but BWBWBBBB? Wait pseudo code "BWBWBBBB" they indicated 8 2: BWBWBBBB. That's 4 first at 0 B,3 B? Let's analyze.
+
+Our algorithm: i=0 B -> ans++ -> i=2. i=2 B? Actually index3? Wait B at 2? Let's check: indices: 0 B,1 W,2 B,3 W,4 B,5 B,6 B? Let's check: B W B W B B B B? Actually we mis. Let's straightforward: BWBWBBBB (4 B's in first and last). Start: i=0 B ans 1 i=2. i=2 B ans 2 i=4. i=4 B ans 3 i=6. i=6 B ans 4 i=8. Wait array length 6? Let's check: n=8; indices 0 B,1 W,2 B,3 W,4 B,5 B,6 B,7 B? Let's add 7 bits: B W B W B B B B -> values 0,1,2,3,4,5,6,7. Good. After action: i=0 B -> i=2. i=2 B -> i=4. i=4 B -> i=6. i=6 B -> i=8. ans=4 -> matches sample output 4. Good.
+
+Edge test: n=5,m=4 k=5? Wait sample: dataset: 5 4 BWBWB. But note n=5,m=4? Actually we want to just evaluate; as proof they show output 2. Let's compute for 5 4: BWBWB. Let's run algorithm: i=0 B ans 1 i=4 (i=0+4). i=4 B ans 2 i=8. ans=2. matches.
+
+Time complexity: We only iterate once, each step increments i by at least 1; worst-case n. That's fine.
+
+Let's test some corner cases: n=5,m=1 d: BBBBB 5 5 5 -> algorithm: i=0 B ans 1 i=5. ans=5? Wait but I selected k=5, d's: n=5, k=5. For "BBBBB", we think we can cover all with one operation where all 5 consecutive cells contain all 5 black cells. So answer should be 1. Our algorithm: i=0 -5; j=5; ans=1. correct.
+
+Edge: n=5,m=1 pattern BWBWB. We'll ignore.
+
+Ok final note: Since sum of n <= 2e5, we can process each test case with 0/1 updating.
+
+Now the code: read t. For each test case:
+
+ read n, m? Actually k. After splitting: n, k. Use s. Then compute ans to string; print.
+
+Implementation details:
+
+import sys
+
+def solve().
+
+Return.
+
+Need to input reading: t = int(input()).
+
+But careful: sample lines with blank lines.
+
+But we can read entire lines.
+
+Hence:
+
+with sys.stdin as strings or use read().
+
+We'll use:
+
+import sys
+
+def solve():
+    import sys
+    data = sys.stdin.read().strip().split()
+    it = iter(data)
+    t = int(next(it))
+    out_lines = []
+    for _ in range(t):
+        n = int(next(it))
+        m = int(next(it))
+        s = [next(it) for _ in range(1)]? Wait s is one string; we can't use str. So iterate next(it). But we can compute:
+
+    s = next(it)
+    remaining?
+
+Ok.
+
+Edge: We can read tokens; our string contains no spaces: "WBWWWB" etc. So we can call s = next(it)
+
+Thus:
+
+get n, m = int(next(it)), int(next(it))
+
+s = next(it)
+
+Now algorithm:
+
+ans = 0
+i = 0
+while i < n:
+    if s[i] == 'B':
+        ans += 1
+        i += m
+    else:
+        i += 1
+
+But should be i += m? Actually we can just set i += m. But careful: our algorithm earlier defined i += m but when we used variable k we used as m. In algorithm we used i += m. So we maintain pointer i.
+
+But we may have difference: starting at i+m. But if we choose the next index a more than m? Let's test: n=5, k=4, pattern BWBWB. i=0 B ans=1 i+=4 => i=4; i=4 B ans 2 i=8 (over). So answer 2. Good.
+
+Edge: There is 0 B's: s = "WWW" n=3 s[3] no B not used; algorithm will skip each char; result 0. Good.
+
+Edge: Suppose s is B. n=1 k=1. i=0 B ans=1 i=1 -> exit. Works.
+
+Edge: Good.
+
+Now complexity trivial.
+
+Let's produce final answer.
+
+But the input sample includes lines accordingly: all testcases large. Example shows printing each answer line. Provide explanation.
+
+Now produce final Python program: we can include all requested functions.
+
+Now present final message: Provide script and explanation.
+
+Alright produce final answer.
+
+<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every cell of the strip we have a character
+
+* `B` – black  
+* `W` – white
+
+In one operation we may choose any consecutive `k` cells and turn all of them
+white.  
+The task is to make all cells white while using at most as few operations as
+possible.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Greedy
+
+Look at the strip from left to right.
+
+*   If the current cell is white, nothing has to be done.
+*   If it is black, we must cover this necklace – otherwise it remains black.
+    Is it ever useful to start a segment to the **left** of this cell?  
+    No, because the origin of the segment does not matter.
+    The only thing that is important is that the *segment contains this cell*
+    and that it tries to cover as many following black cells as possible.
+    Therefore we should start the segment **exactly on the current cell**.
+
+After starting a segment on position `i` we may skip + `k` cells –
+the segment already turned them all white.
+
+Consequently
+
+```
+answer = 0
+while i < n:
+        if s[i] == 'B':  # a new block of black not yet covered
+                answer += 1
+                i += k        # skip all cells that become white
+        else:             # white cell
+                i += 1
+```
+
+The loop scans the whole line only once.
+The greedy choice is optimal because each operation is
+used to cover a leftmost uncovered black cell, after which
+every cell up to `i+k-1` is already white, no later operation
+can reduce that number of moves.
+
+--------------------------------------------------------------------
+
+#### 2.  Correctness Proof  
+
+We prove that the algorithm outputs the minimum number of operations.
+
+---
+
+##### Lemma 1  
+When the algorithm reaches a position `i` with `B`,
+position `i` is not contained in any earlier chosen segment.
+
+**Proof.**
+
+The algorithm processes the strip at increasing indices.
+If we had already painted an already‑previous segment that covers `i`,
+then `i` would have moved out of the loop of that interval.
+Each time we perform the operation we jump `k` positions ahead,
+hence a segment never overlaps elements that were already processed.
+∎
+
+
+
+##### Lemma 2  
+Let `i` be the first index of the current unprocessed part of the strip
+if `s[i] == 'B'`.  
+Any optimal solution uses at least one operation that uses a segment
+starting at some position `p ≤ i+1`.
+
+**Proof.**
+
+To remove the black cell at position `i` it cannot be empty,
+so at least one segment must contain it.
+The leftmost possible start of such a segment is `i-k+1`,
+but the algorithm can start at `i` which is obviously different from `p`
+only if `p ≤ i > i-k < i`.  
+Therefore, the earliest start of a segment that covers `i`
+is `i-k+1` and is always `≤ i`. By shifting an arbitrary optimal
+segment that contains `i` toward the prefix, we keep the covering
+size while never extending the segment’s right boundary, therefore it
+remains valid inside the optimal solution. ∎
+
+
+
+##### Lemma 3  
+For every step of the algorithm the number of operations used
+equals the minimum number of operations that are necessary to cover
+some prefix of the strip that ends at the current index.
+
+**Proof by induction over the loop.**
+
+*Base*
+
+*Before the first iteration (`i==0`)*
+  the covered prefix is empty, no operation is necessary.  
+  So the claim holds.
+
+*Induction step*
+
+Assume the claim holds:
+for the first `i` processed `f` operations are minimal.
+
+Let `A(token)` be the step of the algorithm
+when it processes the current `i` with `s[i] = 'B'`.
+
+Consider the prefix up to `i+1`.  
+There are two possibilities of Lemma&nbsp;2.
+
+*If the algorithm would skip the `B` cell (`i` is white)*  
+  it does nothing.
+  The resulting block of black cells still exists,
+  therefore we continue to the next index, having not increased
+  the number of operations – we still have *minimal* operations.
+
+*If the algorithm performs an operation*  
+  The operation starts at `i` and covers up to `i+(k-1)` (inclusive).
+  Therefore after this operation the prefix up to `i+k-1` is completely
+  white.\  
+  Any optimal solution must contain at least one operation covering
+  positions `i…c` where `c≤i+k`.  
+  By Lemma&nbsp;2 we can shift the operation to start at `i` without
+  increasing the number of operations (cost stays the same).
+  Hence the algorithm cannot use more operations than an optimal solution
+  without needing more than the minimal number of operations for the
+  prefix to that point.
+
+Thus the induction hypothesis holds.
+
+∎
+
+
+
+##### Theorem  
+For every test case the algorithm outputs the
+minimum possible number of operations needed to turn the whole strip
+white.
+
+**Proof.**
+
+After the loop terminates, the whole strip has length `n`
+and the old “current index” is `n`.  
+By Lemma&nbsp;3 we have produced exactly the minimum number of
+necessary operations for this whole strip.
+Thus the algorithm is optimal. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 3.  Complexity Analysis
+
+For each test case we process each cell once –  
+`O(n)` time, `O(1)` additional memory.
+
+With the constraint  
+`∑ n ≤ 2·10^5` total runtime is below `10⁴`·ms on modern hardware.
+
+--------------------------------------------------------------------
+
+#### 4.  Reference Implementation  (Python 3)
+
+```python
+import sys
+
+def solve() -> None:
+    data = sys.stdin.read().strip().split()
+    it = iter(data)
+    t = int(next(it))
+    out_lines = []
+
+    for _ in range(t):
+        n = int(next(it))
+        k = int(next(it))
+        s = next(it)
+        i = 0
+        ops = 0
+        while i < n:
+            if s[i] == 'B':
+                ops += 1
+                i += k       # the segment turns these cells white
+            else:
+                i += 1
+        out_lines.append(str(ops))
+
+    sys.stdout.write("\n".join(out_lines))
+
+if __name__ == "__main__":
+    solve()
+```
+
+The program follows exactly the algorithm proven correct above
+and is fully compliant with the required input / output format.

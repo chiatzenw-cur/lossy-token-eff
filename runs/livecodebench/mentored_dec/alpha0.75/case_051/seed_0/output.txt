@@ -1,0 +1,312 @@
+<|channel|>analysis<|message|>We need to find minimal number of operations to change all B to W. Operation: choose any contiguous segment of length k, and set all cells to W. That's like we can "erase" a segment, but it might cover some B's.
+
+Essentially we need to cover all 'B' cells with minimum number of segments length exactly k? But may be segments can be placed anywhere, overlapping allowed, doesn't matter because we only care about the count of operations needed to eliminate all B's. Since we can choose any k consecutive cells, we can cover all B's by selecting windows of length k to cover. All positions of B may be covered, but we might have to overlapping segments to cover B's in tight positions. But is it equivalent to the classic "minimum number of intervals of length k to cover all B's"? Equivalent to the explanation: we need to choose intervals of length k, each operation removes all values inside. Overlaps allowed.
+
+So minimal operations to cover all B's with intervals of length k. Since each interval can be placed anywhere. So essentially we need to find minimum number of such intervals such that every B index is inside at least one interval. This is essentially a covering problem and we can solve greedily: choose leftmost uncovered B, then place interval covering from that position to position+ k -1? Wait we need to pick interval that covers that leftmost uncovered B; best to pick earliest start to maximize coverage. Because we can pick interval covering from leftmost uncovered B anywhere, but if we shift start earlier, earlier covered area may help, but we only need to cover max to right. So algorithm: iterate over positions from 0 to n-1; maintain used intervals. For each position i, if s[i] is 'B', we need to cover it. So we can choose interval [i, i+ k-1] (or [i-k+1, i] if that may extend left?). Actually choose interval of length k starting at i? But what if i is near end, we can't extend beyond n; but the explanation may allow start at i - k + 1? Hmm but operation selects any k consecutive cells; can start anywhere as long as range fits. So we can choose the rightmost position that covers i. So we choose a segment that starts at i if i <= n-k else start at n-k? Let's think.
+
+Strategy: we want to cover as many B's as possible with each interval. This is similar to standard "cover points with minimum number of intervals of fixed length" - greedy: sort points ascending. For each uncovered point, we pick interval covering from that point to point + k -1. This is optimal because if we take any solution covering that point, we can shift interval to the right until it covers [point, point+k-1] or at last position). Since length fixed, to cover from that point, you may start later? But early start would not reduce number of intervals. But we can use a variant: from leftmost uncovered point, choose interval that starts at that point + k -1 (to right?), but that's used for covering points (for crossing intervals). However we can choose interval to cover the point and extend right to the maximum. The earliest point can't be covered by a segment that starts after the point. So we have to start at <= point. So among all intervals covering point, choose one that extends rightmost: choose start = point. Then interval covers [point, point+k-1], which is farthest right. So that's optimal.
+
+But we also need to consider we might be able to pick earlier start that could extend right? Starting earlier cannot extend further to the right because length fixed. Actually start earlier leads to right endpoint start + k -1 < point + k -1? Wait earlier start reduces right endpoint, so not better. So best to choose  start = point. But that means we might not be able to cover when point is near end, where point+k-1 > n-1. But still we can choose interval that extends beyond n; we cannot, so we can't start at point. We need to shift interval leftwards to fit within [0, n-k] if given that point > n-k.
+
+Let's think elegantly: we can maintain pointer i scanning from left to right. We'll process each index i. If s[i]=='B' and there's no active coverage from previous intervals. We'll need to start a new segment at i. Then we mark coverage from i to i+k-1 inclusive. We can use a variable last_covered = -1. If i > last_covered, we need to create new interval covering from i to i+k-1. Increase count; set last_covered = i + k-1. Works. Since we start at i to maximize coverage, we will cover all subsequent B's within that interval.
+
+Edge case: If i is near end, for last coverage maybe we would have to start at i but it might exceed n. But if we start at i, the segment is [i, i+k-1] which may not fit. But algorithm would have to choose a valid segment of length k. If i <= n-k, fine. Otherwise we cannot fit full segment starting at i (exceeds n). But we can choose interval that starts at i-k+1?? Actually if we have B at i and can't start a full segment at i, then we need to start at some earlier position that ensures covering i. The furthest right possible interval covering i is starting at n-k. Since all intervals length k, and end must be within n. So best is start at n-k, and then last_covered = n-1. But we cannot start at i if i> n-k. So we need to adjust start position to min(i, n-k). But that may shift earlier; but we would want to cover i and extend rightwards but <= n-1. Starting at i is not possible; starting at n-k would give coverage for i to n-1. So we set start = min(i, n-k). But i may be greater than i-k+1? Wait we want start = i - k + 1? Sorry confusion.
+
+We want to cover point i. The interval can be [start, start + k -1], start in [0, n-k]. For that interval to contain i, must have start <= i <= start + k -1. That equivalently start <= i <= start + k-1. So the maximum start is i, but if i>n-k, we cannot choose start > n-k; max start is n-k. That still ensures coverage of i if start <= i, adjust. So the interval start = min(i, n-k). That ensures segment covering i and furthest right.
+
+Thus if our i is > last_covered, we set start = min(i, n-k). new segment covers [start, start + k -1]. Then update last_covered = start + k -1. That ensures coverage of i. This might include earlier cells already covered by other intervals, but that's fine. However we may need to consider if i is already covered by earlier segment (the previous last_covered). Since we only start when i>last_covered, that's correct. That ensures minimal intervals.
+
+Implementation: For each test case:
+
+- Read n, k.
+- Read string s
+- Count operations: maintain last_covered = -1
+- For i in 0..n-1:
+   if s[i]=='B' and i > last_covered:
+       start = min(i, n-k)
+       last_covered = start + k -1
+       ops +=1
+
+Complexities O(n). Works.
+
+Edge case: if k==0? not allowed; k>=1.
+
+Test sample quickly: Example 1: n=6, k=3, s="WBWWWB". Let's simulate: last_covered = -1
+i=0: s[0]=W so skip
+i=1: s[1]=B? Wait string indices: 0 W,1 B,2 W,3 W,4 W,5 B. s[1]=B, i>last_covered -> start=min(1,3)=1; last_covered=1+3-1=3. ops=1
+i=2: s[2]=W no.
+i=3: s[3]=W no.
+i=4: s[4]=W no.
+i=5: s[5]=B; i>last_covered=3 => start=min(5,3)=3; last_covered=3+3-1=5. ops=2
+works.
+
+Second sample: 7 3, s="WWBWBWW". i=0-1: W, skip
+i=2: B ; start=min(2,4)=2 => last_covered=4. ops=1
+i=3: W
+i=4: B ; but i=4 <= last_covered=4 => skip. i=5: W,6: W. So 1.
+
+Third sample: 5 4 BWBWB. s=0 B,1 W,2 B,3 W,4 B. n=5 k=4. last_covered=-1
+i=0: start=min(0,1)=0 ; last_covered=3; ops=1
+i=1 W
+i=2 B but i=2 <= last_covered=3 => skip.
+i=3 W
+i=4 B i>last_covered=3 start=min(4,1)=1 ; last_covered=1+3=4? wait + 4-1=1+3=4 => last_covered=4 => ops=2. matches.
+
+Edge: n=4, k=1, s="BBBB". last_covered = -1. Each B index > last_covered => start = min(i,3)=i; last_covered=i; ops++ = 4.
+
+Edge: n=3 2 s="WWW" : ops=0.
+
+Edge: n= 1 1 s="B": last_covered=-1; i=0, start= min(0,0)=0; last_covered=0; ops=1. Good.
+
+Edge: n=1, k=1 s="W": no B, ops=0.
+
+Edge: n=2, k=3 cannot because k <= n <= 2e5, but k <= n. So fine.
+
+Edge: n=5, k=5 s="BBBBB": start= min(0,0)=0; last_covered=4; ops=1. Works.
+
+Complexity: O(total n). Need to read t up to 1000.
+
+Implement parsing: read lines and split.
+
+Will include main function reading sys.stdin.read() and splitting maybe.
+
+Edge: handle potential whitespace; s may have trailing newline.
+
+Ok.
+
+Also note that sample input includes "8\n\n6 3\n\nWBWWWB\n\n..." But typical reading stops. We'll robustly ignore blank lines.
+
+Use sys.stdin.read().split() gives tokens separated by whitespace. Format: first token integer t. Then for each test case: read n,k, s. Because s may contain multiple lines? but string is single token due to whitespace, no spaces. So token reading will work.
+
+Implementation.
+
+Ok produce final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every test case we have a line of `n` cells
+
+```
+s[0] s[1] … s[n-1]      (   s[i] = 'B'  or  'W' )
+```
+
+One operation chooses any `k` consecutive cells and makes them all white.
+The task is to erase all black cells with the minimum possible number of
+operations.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* An operation only removes black cells – it never creates any.
+* After a sequence of operations, the set of black cells can be regarded as
+  a set of indices.
+* A single operation is simply a *segment* (interval) of length `k`
+  `[l , l+k-1]` that covers some of these indices.
+* The goal is to cover all indices where `s[i] = 'B'`
+  with the smallest number of length‑`k` segments.
+
+So the problem becomes a classic “cover points with a fixed‑length segment
+interval” problem.
+
+--------------------------------------------------------------------
+
+#### 2.  Greedy strategy  
+
+Consider the indices of black cells sorted increasingly.  
+Take the leftmost uncovered black cell `x`.  
+If we know we need to cover it, placing an interval
+
+```
+[x , x+k-1]          (the leftmost possible interval that covers x)
+```
+
+is always the best (it reaches the farthest right, therefore it covers
+the most cells that may be forced to be covered later).  
+If `x` is too close to the right border (`x + k-1 > n-1`)  
+the interval has to be placed at the leftmost valid position, i.e.
+at `n-k`.
+
+The greedy rule can be written in one pass:
+
+```
+last_covered = -1
+for i = 0 … n-1
+        if s[i] == 'B' and i > last_covered          # new black cell not covered
+                start = min(i, n-k)                  # leftmost real start of the interval
+                last_covered = start + k - 1
+                answer += 1
+```
+
+Why is this optimal?
+
+* Suppose after processing a prefix `0 … i-1` the greedy choice is optimal.
+  When we encounter the next uncovered black cell `x`,
+  every solution must use at least one interval covering `x`.
+  The interval that starts at `x` (or at `n-k` if `x > n-k`) is the
+  rightmost possible interval that covers `x`.
+  Replacing any other interval that covers `x` by this one cannot increase
+  the number of intervals and may only extend the coverage to the right,
+  therefore it cannot harm the optimality.
+  Thus after processing `x` the greedy remains optimal.
+
+By induction the greedy algorithm is optimal.
+
+--------------------------------------------------------------------
+
+#### 3.  Algorithm
+For every test case
+
+```
+read n, k
+read string s
+ans = 0
+last_covered = -1
+
+for i in 0 … n-1:
+        if s[i] == 'B' and i > last_covered:
+                start = min(i, n-k)
+                last_covered = start + k - 1
+                ans += 1
+
+output ans
+```
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm outputs the minimum possible number of
+operations.
+
+---
+
+##### Lemma 1  
+When the algorithm processes a position `i` with `s[i] = 'B'` and `i > last_covered`,
+placing an interval starting at `start = min(i, n-k)` covers `i` and
+no other interval that covers `i` can cover more positions to the right of
+`start + k - 1`.
+
+**Proof.**
+
+The interval must start at some index `l` with `0 ≤ l ≤ n-k` and `l ≤ i ≤ l+k-1`.  
+The right end is `l + k - 1`.  
+It is maximal when `l` is maximal.  
+If `i ≤ n-k`, then `l = i` is the maximum possible and the right end is
+`i + k - 1`.  
+If `i > n-k`, then `l = n-k` is the largest possible start and
+the right end is `n-1`.  
+Thus `start = min(i, n-k)` gives the maximum possible right end value. ∎
+
+
+
+##### Lemma 2  
+Let after processing the first `i` positions (`0 … i-1`) the algorithm has
+used `a` operations and covered all black cells in that prefix.
+For any optimal solution that uses `opt` operations, we have `a ≤ opt`.
+
+**Proof.**
+
+By induction on `i`.
+
+*Base `i=0`*: before any step the claim holds (`0 ≤ 0`).
+
+*Induction step*: assume statement true for `i`.
+Consider position `i`.
+
+*If `s[i] == 'W'`*  
+the algorithm does nothing.
+Any optimal solution also does not need to add an operation at this position,
+therefore `a` keeps the same value, and `opt` stays optimal: `a ≤ opt`.
+
+*If `s[i] == 'B'`*  
+- If `i ≤ last_covered`, the current black cell is already covered,
+  thus no additional operation is needed – the algorithm keeps the
+  invariant, `a ≤ opt`, because every optimal solution
+  can also skip an operation.
+
+- If `i > last_covered`, the algorithm starts a new interval covering `i` as well as
+  the farthest right possible positions (Lemma&nbsp;1).  
+  Any optimal solution must also use at least one interval covering `i`,
+  and since the interval chosen by the algorithm is as right‑covering as
+  possible, removing it from the optimal solution still leaves `opt-1`
+  operations that can cover a suffix of the string.
+  Therefore after the algorithm adds one operation, its count `a` is
+  at most `opt`. ∎
+
+
+
+##### Lemma 3  
+After the algorithm terminates, all black cells are covered.
+
+**Proof.**
+
+The algorithm only adds an interval when it encounters an uncovered black
+cell.  
+Thus every black cell is covered by the moment it is processed.
+The loop scans the entire string, so all black cells are covered. ∎
+
+
+
+##### Theorem  
+For each test case the algorithm outputs the minimum possible number of
+operations.
+
+**Proof.**
+
+Let `A` be the number of operations performed by the algorithm and
+`OPT` the number of operations of an optimal solution.
+
+*By Lemma&nbsp;3* the algorithm covers all black cells, hence `A` is a feasible
+number of operations.
+
+*By Lemma&nbsp;2* applied to the whole string, `A ≤ OPT`.
+
+Therefore `A` is the optimum and the algorithm outputs it. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+For each test case the algorithm processes `n` positions once.  
+Time complexity: **O(n)** per test case.  
+Memory usage: **O(1)** besides the input string.
+
+The sum of `n` over all test cases is at most `2·10^5`, thus the program
+comfortably meets the limits.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+import sys
+
+def solve() -> None:
+    data = sys.stdin.read().split()
+    it = iter(data)
+    t = int(next(it))
+    out_lines = []
+    for _ in range(t):
+        n = int(next(it))
+        k = int(next(it))
+        s = next(it)
+        last_covered = -1
+        ops = 0
+        limit_start = n - k          # maximum possible start index
+        for i, ch in enumerate(s):
+            if ch == 'B' and i > last_covered:
+                start = i if i <= limit_start else limit_start
+                last_covered = start + k - 1
+                ops += 1
+        out_lines.append(str(ops))
+    sys.stdout.write("\n".join(out_lines))
+
+if __name__ == "__main__":
+    solve()
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required input/output format.

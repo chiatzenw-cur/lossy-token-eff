@@ -1,0 +1,502 @@
+<|channel|>analysis<|message|>We need to understand definition: subarray "alternating" defined as:
+
+- length m > 1
+- s1 = s0 + 1. That is first step diff +1
+- For i >=1: s_i - s_{i-1} = (-1)^i? Wait check: s2 - s1 = -1, s3 - s2 = 1, s4 - s3 = -1,... The example given: s[0], s[1] = s0+1; s2 - s1 = -1 = (-1)^2? The rule is (−1)^i perhaps starting from i=1? Let's evaluate:
+
+Indices: i starting 0 for first element. Let difference d[i] = s[i] - s[i-1]. For i>=1, d[i] = (-1)^i? Let's test i=1: d[1] = s1-s0 = 1. (-1)^1 = -1 not 1. So maybe d[i] = (-1)^i * (-1)? Let's test another formula: d[i] = (-1)^i * 1? For i=1: (-1)^1= -1 => mismatched. Maybe d[i] = (-1)^(i-1)? For i=1: (-1)^(0)=1. i=2: (-1)^(1)=-1. i=3: (-1)^(2)=1. So d[i] = (-1)^(i-1). That matches: s2-s1 = -1, s3-s2 = 1, etc. So pattern: d[1] = +1; d[2] = -1; d[3] = +1; etc. Equivalent to: alternating +1, -1 pattern starting with +1.
+
+Also "In other words, s_1 - s_0 = 1, s_2 - s_1 = -1, s_3 - s_2 = 1, s_4 - s_3 = -1, and so on up to s[m - 1] - s[m - 2] = (-1)^m." Wait last expression: They say up to s[m - 1] - s[m - 2] = (-1)^m. Let's test: Suppose m=4, then m-1=3. s[3] - s[2] = (-1)^4 = 1. But according to pattern earlier, s[3]-s[2]=+1. So consistent? Wait earlier we had s[3]-s[2]=1. Good. For m=4, (-1)^m = (+1). For m=5, s[4]-s[3] = (-1)^5 = -1; pattern expects -1. So formula consistent: difference equals (-1)^m? Wait m? Example with m=5: we need s[4]-s[3] = -1. That matches (-1)^5 = -1. But if we use m overall, not index difference. For i=m-1, difference is (-1)^m. Good.
+
+Thus alternating subarray defined: consecutive differences follow +1, -1, +1, -1 alternating starting with +1 at index 1.
+
+OK, we need the longest contiguous subarray of nums that satisfies this alternating pattern.
+
+Constraints: length <= 100. So brute force over all subarrays O(n^2) possible with condition check O(n). That's fine. But we can do linear scanning. Let's design algorithm:
+
+We can scan and maintain current 'alternating' increasing or decreasing pattern. Equivalent to difference sequence of 1 and -1 alternating. We must start with diff=+1 between positions i and i+1. So any subarray must have that.
+
+We can iterate through indices i=0 to n-2, compute diff = nums[i+1] - nums[i]; only if diff=1 or diff=-1? Actually pattern requires diff sequence of +1, -1, +1. But diff can be something else: patterns fails. So we want to track where a valid alternating subarray can start: we need first diff=+1. After that, subsequent diffs must alternate sign and equal ±1.
+
+Thus algorithm: we iterate with pointer start = i. We'll maintain the expected difference sign. Another approach: We can treat each pair (i,i+1) as a starting point if nums[i+1]-nums[i]==1 (starting diff). Then we extend as far as possible following pattern: alternating diff ±1. We maintain prevDiff = 1, nextExpectedDiff = -1 etc. Implementation:
+
+max_len = -1
+for i in range(n-1):
+    if nums[i+1]-nums[i]==1:
+        # starting a subarray at i
+        length=2
+        prev_diff=1
+        j=i+1
+        while j+1 < n:
+            curr_diff = nums[j+1]-nums[j]
+            expected = -prev_diff  # alternate sign
+            if curr_diff==expected: 
+                # Also require abs(curr_diff)==1? Actually for alternation we need diff magnitude 1? Problem statement says s_1 - s_0 =1. But subsequent diff defined as -1, +1 etc. So yes magnitude 1 always.
+                if abs(curr_diff)!=1: break   # Actually diff should be ±1 anyway as expected ±1
+                length+=1
+                prev_diff=curr_diff
+                j+=1
+            else:
+                break
+        max_len=max(max_len,length)
+Return max_len (if still -1, return -1).
+
+But we also might have subarray that starts not at i but at i where diff=1 but then fails. This algorithm covers that.
+
+Complexity: O(n^2). n up to 100, fine.
+
+Edge cases: Only pattern of length 1 -> not valid -> -1. For array [1,2] diff=1 => length 2; second diff no further.
+
+Check sample: [2,3,4,3,4]
+Indices:
+0-1 diff=1 (start 0): length 2; next elems: j=1 diff=1? Wait 4-3=1? Actually j=1? Let's compute: subarray starting at 0: [2,3] diff=1. Next j=1 (current element is 3). Next diff: 4-3=1. But expected -1. So fails. length=2.
+
+Start at 1: nums[1]=3, nums[2]=4 diff=1. length=2. Next j=2 diff=3-4 = -1. expected=-1; match. length=3; prev_diff=-1; next j=3 diff=4-3=1. expected=1; match; length=4; j=4 end. max_len=4. Works.
+
+Sample 2: [4,5,6]
+i=0 diff=1 start length 2; j=1 diff=6-5=1 expected -1; fails => length 2.
+
+i=1 diff=6-5=1 start length 2; no next diff. -> length 2. max=2.
+
+Edge: Suppose array [4,5,4,5,4,5] -> start at 0 diff 1, continue: 4-5=-1 -> good, length 3; 5-4=1 -> good length 4; 4-5=-1 -> length5; 5-4=1 -> length6. So maximum 6.
+
+Edge: array [1,3] diff=2 -> not start; no alternating subarray => -1.
+
+Edge: array with long diff but not ±1: e.g., [2,3,5,4] starting at 0 diff=1 length 2; j=1 diff=5-3=2 expected -1 fails. So only length2.
+
+Edge: What about [3,4,5] difference: 1,1; start at 0 diff=1; j=1 diff=5-4=1 expected -1 fails -> length2. But subarray [4,5] diff=1 -> length2. So max=2.
+
+Edge: [3,5,4,5] diff: 2,-1,1. No start at 0 diff=2. start at 1 diff=-1 not 1. start at 2 diff=1 length2. return 2.
+
+Edge: [1,2,1,2,1] expected longest length5. Let's test: start at 0 diff=1; j=1 diff=1-2=-1 expected -1 -> good; j=2 diff=2-1=1 expected 1 -> good; j=3 diff=1-2=-1 expected -1 -> good. length 5. Works.
+
+Now confirm negative numbers? Not possible because nums>=1.
+
+We also need to handle case where length >1 but due to pattern fails. So algorithm good.
+
+Now propose final function.
+
+Implementation details:
+
+class Solution:
+    def alternatingSubarray(self, nums: List[int]) -> int:
+        n = len(nums)
+        max_len = -1
+        for i in range(n-1):
+            if nums[i+1] - nums[i] == 1:
+                length = 2
+                prev_diff = 1
+                j = i+1
+                while j+1 < n:
+                    curr_diff = nums[j+1] - nums[j]
+                    expected = -prev_diff
+                    if curr_diff == expected:
+                        length += 1
+                        prev_diff = curr_diff
+                        j += 1
+                    else:
+                        break
+                max_len = max(max_len, length)
+        return max_len
+
+Edge: if there is no starting diff 1: return -1 (already handled). Complexity fine.
+
+But check example: [3,4,3,4]: starting at 0 diff=1; j=1 diff=3-4=-1 expected -1: ok, length=3; j=2 diff=4-3=1 expected 1: ok -> length=4; j=3 no next; Done.
+
+Now double-check with pattern for even length: Suppose max length may be 2 because we could start at i where diff=1 but not extend. Works.
+
+Edge: What about subarray [1,2,3,...] difference 1 all way? Starting at 0 length 2; j=1 diff=3-2=1 expected -1 fails. So length 2. So maximum 2.
+
+Edge: Additional nuance: Should we also consider subarray that begins with diff = -1? No: definition requires s1 = s0 +1, so first diff must be +1. So starting diff must be +1.
+
+Edge: Suppose multiple alternating subarrays overlapping. Our scanning finds maximum.
+
+Alternate simpler approach: iterate through array, maintain alternating state: Only if diff=1 indicates potential new subarray starting. Keep a variable length that resets when pattern breaks.
+
+We can maintain current length of current subarray (starting at last_start). While scanning differences between consecutive indices, we check difference sign. Let's design:
+
+We go from index 0 to n-2. Keep track of current_length. When we find a diff=1, we can set current_length=2 and also track prev_diff=1 and maybe start= i. Then for subsequent j at i+1, we compute next diff, and if it matches -prev_diff, we increment current_length and set prev_diff accordingly. If diff is not expected, we need to maybe reset: If the current diff itself is 1, we can start a new subarray at j: because that diff could be start of new subarray. But need to check earlier index j's diff. So we can simply else: if diff==1 we start new subarray length=2; else set current_length=0. But careful: we also need to update prev_diff to diff. So iterative solution.
+
+Implementation:
+
+max_len=-1
+current_len=0
+prev_diff=0
+for i in range(n-1):
+    diff = nums[i+1]-nums[i]
+    if current_len==0:
+        # not inside subarray
+        if diff==1:
+            current_len=2
+            prev_diff=1
+        else:
+            continue
+    else:
+        expected = -prev_diff
+        if diff==expected:
+            current_len+=1
+            prev_diff=diff
+        else:
+            if diff==1:
+                current_len=2
+                prev_diff=1
+            else:
+                current_len=0
+    max_len=max(max_len,current_len)
+
+Return max_len.
+
+Edge: For example [2,3,4,3,4]:
+i=0 diff=1: current_len=2 prev=1 max_len=2
+i=1 diff=1: expected -1; diff!=expected; diff==1 -> start new subarray at i=1: current_len=2 prev=1 max_len=2
+i=2 diff=-1: expected -1; diff==expected: current_len=3 prev=-1 max_len=3
+i=3 diff=1: expected 1; diff==expected: current_len=4 prev=1 max_len=4
+i=4 diff? none.
+
+Ok.
+
+Edge: [3,4,5]
+i=0 diff=1: current_len=2 prev=1 max_len=2
+i=1 diff=1: expected -1; diff!=expected; diff==1 -> new subarray: current_len=2 prev=1 (same)
+max_len stays 2
+Return 2.
+
+Edge: [1,3,2,1]
+i=0 diff=2 > currently 0, diff!=1, skip
+i=1 diff=-1 currently 0, diff!=1 skip
+i=2 diff=-1 currently 0, diff!=1 skip => no subarray => max_len stays -1.
+
+Edge: [5,6,5,6,5,6]:
+i=0 diff=1 => curr_len=2 prev=1 max=2
+i=1 diff=-1 expected -1 -> curr_len=3 prev=-1 max=3
+i=2 diff=1 expected 1 -> curr_len=4 prev=1 max=4
+i=3 diff=-1 expected -1 -> curr_len=5 prev=-1 max=5
+i=4 diff=1 expected 1 -> curr_len=6 prev=1 max=6 => works.
+
+Edge: [5,6,5,6,7] array: i=5 diff=1? Wait index list: [5,6,5,6,7]
+differences: 1,-1,1,1
+Processing:
+i=0 diff=1 start len=2 prev=1 max=2
+i=1 diff=-1 expected -1 -> len=3
+i=2 diff=1 expected 1 -> len=4
+i=3 diff=1 expected -1? Since prev=1, expected -1. Diff=1 not expected. diff==1 -> start new subarray len=2 prev=1 max remains 4. So longest 4. That subarray [5,6,5,6] length 4. Good.
+
+Edge: [5,6,7] diff:1,1. i=0 diff=1 start len=2; i=1 diff=1 not expected; diff==1 -> start new subarray len=2; max=2.
+
+Edge: [1,2,3,2,1,2] differences:1,1,-1,-1,1. start at i=0 diff=1 -> len=2; i=1 diff=1 not expected; diff==1 -> new len=2; i=2 diff=-1 expected -1 -> len=3; i=3 diff=-1 expected 1 -> diff!=expected; diff!=1; current_len=0; i=4 diff=1 start len=2; max remains 3. So longest 3 maybe [2,3,2] but [2,3,2] is length 3. Wait [1,2,3,2,1] differences: 1,1,-1,-1. Actually not alternating pattern: first diff 1 (ok), second diff also 1 not allowed. So [2,3,2] is indeed alternating length 3; others maybe [1,2] length 2 etc.
+
+So algorithm correct.
+
+Complexities: O(n)
+
+Edge: According to constraints n>=2. So we can always loop upto n-1.
+
+We should handle case where no subarray found, return -1.
+
+Let's produce final code with imports etc.
+
+Sure.
+
+Now return function.
+
+The final message: Provide reasoning and final code.
+
+Let's write final solution:
+
+```
+class Solution:
+    def alternatingSubarray(self, nums: List[int]) -> int:
+        n = len(nums)
+        max_len = -1
+        current_len = 0
+        prev_diff = 0
+        for i in range(n-1):
+            diff = nums[i+1] - nums[i]
+            if current_len == 0:
+                if diff == 1:
+                    current_len = 2
+                    prev_diff = 1
+                    max_len = max(max_len, current_len)
+                # else remains 0
+            else:
+                expected = -prev_diff
+                if diff == expected:
+                    current_len += 1
+                    prev_diff = diff
+                    if current_len > max_len:
+                        max_len = current_len
+                else:
+                    # the current diff might start a new subarray
+                    if diff == 1:
+                        current_len = 2
+                        prev_diff = 1
+                        if current_len > max_len:
+                            max_len = current_len
+                    else:
+                        current_len = 0
+        return max_len
+```
+
+Let's test quickly mentally: works.
+
+Edge: Suppose after failure diff==1 and you had current subarray length 0. But after resetting we treat new subarray properly. Good.
+
+Edge: if we had current_len > 0, but diff != expected; but diff==1 will start new subarray. But we didn't check that we might have longer subarray that still continues from previous but skipping intermediate? No because pattern fails at this diff; new subarray cannot include previous elements because pattern not satisfied. So resetting is fine.
+
+Edge: Suppose array [1,2,3,2,1,2,3] - we expect longest alternating subarray maybe [2,3,2,1,2] length 5? Let's test algorithm: Starting at 0 diff=1 len=2; i=1 diff=1 not expected; diff==1 new len=2; i=2 diff=-1 expected -1 len=3; i=3 diff=-1 expected 1, fail diff!=1 -> current_len=0; i=4 diff=1 new len=2; i=5 diff=2? Wait diff=3-2=1? Actually sequence: 1,2,3,2,1,2,3 => diffs:1,1,-1,-1,1,1. We would find longest len=3 maybe [2,3,2] or [1,2,3]? Let's check proper alternating subarray: [1,2,3] not; pattern fails because diff +1,+1. The only alternating subarrays: [2,3,2] length3; [1,2,3] not; [2,3,2,1] lengths 4? but last diff -1 expected +1; fails. Actually [2,3,2,1] differences: 1,-1,-1 expected reverse? pattern: 1,-1,1? Because after start +1, next -1, then 1, but ours -1 -> fails. So 3 is correct. Good.
+
+Algorithm returns 3. Good.
+
+Edge: Subarray starting in middle must have diff=1. So algorithm includes all.
+
+Let's produce final answer.
+
+Requirement: Provide solution code and explanation.
+
+Edge: We might consider other nuance: The rule "s_1 - s_0 =1" ensures first difference 1. And subsequent differences one by one follow +-1 pattern. But we also need to ensure signs alternate exactly? Our algorithm ensures expected diff = -prev_diff. That's fine if prev_diff always ±1. But we didn't explicitly check that diff magnitude must be 1. However our expected diff will be ±1. If diff magnitude is not 1, diff==expected fails; we won't extend. So fine.
+
+Testing [1,2,4,3,2]: diffs: 1,2,-1,-1. Starting at 0 diff=1 len=2; i=1 diff=2 expected -1 fails diff not 1; current_len=0. Start new at index 2 diff=-1 fails; but diff not 1 -> no start. So no subarray found? Wait [2,4,3,2] maybe has alternating starting diff? Actually we need +1 starting diff. In this arr, maybe [3,2] diff -1 fails; [4,3] diff -1 not start; [1,2] diff 1 -> length2. So output 2. Our algorithm: after i=0 diff=1 start len=2; i=1 diff=2 not expected; diff!=1 -> reset current_len=0; i=2 diff=-1 !=1; no start; etc. So max_len remains 2. Works.
+
+Ok.
+
+Now produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For an array `nums` we have to find the longest *contiguous* subarray  
+`[s0 , s1 , … , s(m‑1)]` that satisfies
+
+* `m > 1`
+* `s1 – s0 = 1`
+* for every `i ≥ 1`  
+  `s[i] – s[i‑1] = (-1)^(i-1)`  
+
+That means the successive differences are  
+
+```
++1 , -1 , +1 , -1 , ...
+```
+
+( the first difference is `+1`, afterwards the sign alternates ).
+
+The task is to return the length of the longest such subarray
+(or `-1` when no subarray of length > 1 exists).
+
+--------------------------------------------------------------------
+
+#### Observations
+
+* A subarray can start **only** where the first difference is `+1`.
+* While walking along the array we only need to know  
+  *the length of the current alternating subarray*  
+  and *the last difference* that we accepted (`+1` or `-1`).
+
+If at the current position the required difference is not obtained,
+the running subarray must be dropped.
+If the difference is exactly `+1` we may start a new subarray
+starting at the current element.
+
+Because the input length is at most `100`, an `O(n)` scan is more than sufficient.
+
+--------------------------------------------------------------------
+
+#### Algorithm
+```
+max_len = -1               // answer, -1 if none found
+curr_len = 0               // length of the subarray we are currently building
+prev_diff = 0              // last difference we accepted (+1 or -1)
+
+for i = 0 .. n-2:          // examine every pair nums[i], nums[i+1]
+    diff = nums[i+1] - nums[i]
+
+    if curr_len == 0:      // we are not inside a subarray yet
+        if diff == 1:
+            curr_len = 2
+            prev_diff = 1
+            max_len = max(max_len, curr_len)
+    else:                  // we are inside an alternating subarray
+        expected = -prev_diff
+        if diff == expected:                // correct alternation
+            curr_len += 1
+            prev_diff = diff
+            max_len = max(max_len, curr_len)
+        else:                               // alternation breaks
+            if diff == 1:                 // start a new subarray here
+                curr_len = 2
+                prev_diff = 1
+                max_len = max(max_len, curr_len)
+            else:                         // cannot start here
+                curr_len = 0
+
+return max_len
+```
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the required longest length.
+
+---
+
+##### Lemma 1  
+When the algorithm sets `curr_len` to `2`, the subarray consisting of
+the elements `nums[i]` and `nums[i+1]` is a valid alternating subarray.
+
+**Proof.**  
+`curr_len` becomes `2` only when `diff == 1`, i.e.  
+`nums[i+1] - nums[i] = 1`.  
+A subarray of length `2` with this property satisfies all conditions,  
+therefore it is alternating. ∎
+
+
+
+##### Lemma 2  
+During the execution of the loop, whenever `curr_len > 0` and
+the algorithm has processed the pair ending at index `j`
+(`nums[j]`, `nums[j+1]`), the subarray `nums[start … j+1]`
+(`start` is the index where the current subarray began)
+is alternating.
+
+**Proof by induction over the pairs processed.**
+
+*Base:*  
+Before the first pair processed `curr_len = 0`.  
+When the first pair with difference `+1` is found, by Lemma&nbsp;1
+the statement holds for `j = 1`.
+
+*Induction step:*  
+Assume the statement holds after pair ending at index `j-1`.
+Now consider pair ending at index `j`.
+
+* If `diff == expected` (`expected = -prev_diff`), the algorithm
+  extends the current subarray by one element, keeping the alternating
+  pattern intact.  
+  Therefore the statement holds for index `j`.
+
+* If `diff != expected`, two cases:
+  * `diff == 1` – a new subarray of length `2` is started; by
+    Lemma&nbsp;1 it is alternating.
+  * `diff != 1` – the algorithm resets `curr_len` to `0`,
+    so the invariant is vacuously true.
+
+Thus the statement holds after every iteration. ∎
+
+
+
+##### Lemma 3  
+Every alternating subarray of the input array is considered by the
+algorithm, and its length is compared to `max_len`.
+
+**Proof.**  
+Take any alternating subarray `S = nums[p … q]` (`q > p`).
+Because it is alternating, `nums[p+1] – nums[p] = 1`.
+When the loop processes the pair `(p, p+1)` the algorithm
+creates a subarray of length `2` starting at `p`.  
+By Lemma&nbsp;2 it will extend exactly as long as `S` is alternating,
+hence the algorithm will reach `q` and set `curr_len = q-p+1`.  
+Immediately `max_len` is updated if this length is larger.  
+Thus the length of `S` is considered. ∎
+
+
+
+##### Lemma 4  
+`max_len` is never larger than the length of the longest alternating
+subarray in the input.
+
+**Proof.**  
+`max_len` only stores a value that has been written to `curr_len`,
+hence it is the length of some alternating subarray
+(Lemma&nbsp;3).  
+Therefore it cannot exceed the optimum. ∎
+
+
+
+##### Lemma 5  
+If the input contains at least one alternating subarray,
+`max_len` equals the length of the longest one.
+
+**Proof.**  
+From Lemma&nbsp;3 the length of *every* alternating subarray is
+considered, so `max_len` is at least that of the optimum.
+From Lemma&nbsp;4 it is at most the optimum.
+Hence they are equal. ∎
+
+
+
+##### Theorem  
+The algorithm returns
+
+* the maximum length of an alternating subarray of `nums`
+  when such a subarray exists,
+* `-1` otherwise.
+
+**Proof.**  
+If the array has at least one alternating subarray,
+by Lemma&nbsp;5 the algorithm returns its maximum length.
+If no such subarray exists, `curr_len` is never set to a positive
+value, consequently `max_len` stays `-1`.  
+Thus the returned value satisfies the specification. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+The loop runs once for every of the `n-1` adjacent pairs,
+each step does only constant‑time work.
+
+```
+Time   :  O(n)   (n ≤ 100)
+Memory :  O(1)
+```
+
+--------------------------------------------------------------------
+
+#### Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def alternatingSubarray(self, nums: List[int]) -> int:
+        n = len(nums)
+        if n < 2:
+            return -1
+
+        max_len = -1
+        curr_len = 0   # length of the current subarray
+        prev_diff = 0  # last accepted difference (+1 or -1)
+
+        for i in range(n - 1):
+            diff = nums[i + 1] - nums[i]
+
+            if curr_len == 0:
+                # we are not inside a subarray yet
+                if diff == 1:
+                    curr_len = 2
+                    prev_diff = 1
+                    max_len = max(max_len, curr_len)
+            else:
+                expected = -prev_diff
+                if diff == expected:
+                    # continue the current alternating subarray
+                    curr_len += 1
+                    prev_diff = diff
+                    if curr_len > max_len:
+                        max_len = curr_len
+                else:
+                    # alternation breaks
+                    if diff == 1:
+                        # start a new subarray here
+                        curr_len = 2
+                        prev_diff = 1
+                        if curr_len > max_len:
+                            max_len = curr_len
+                    else:
+                        # cannot start here
+                        curr_len = 0
+
+        return max_len
+```
+
+The code follows exactly the algorithm proven correct above.

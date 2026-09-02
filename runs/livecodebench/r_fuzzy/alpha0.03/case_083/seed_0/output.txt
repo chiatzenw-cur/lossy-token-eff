@@ -1,0 +1,232 @@
+<|channel|>analysis<|message|>We need count subarrays where number of elements where nums[i] % modulo == k is congruent to k mod modulo. Let's denote indicator array a[i] = 1 if nums[i] % modulo == k else 0. Then we need subarrays where sum of a[l..r] ≡ k (mod modulo). Since a[i] are 0/1. Counting subarrays with sum modulo M equal to target value k. Classic: prefix sums mod M: prefix[0] = 0. For i from 1..n, prefix[i] = (prefix[i-1] + a[i-1]) % M. Need count pairs i<j such that prefix[j] - prefix[i] ≡ k (mod M). Which means prefix[j] ≡ prefix[i] + k (mod M). For each j, count how many i<j with prefix[i] ≡ (prefix[j] - k) mod M. So we can keep frequency array of prefix mods seen so far. Complexity O(n). But M can be up to 1e9, can't use array; use dict. Since n up to 1e5, dictionary fine.
+
+Edge: k can be large. Computation modulo. Need target = k % modulo but k< modulo already.
+
+Algorithm: freq = {0:1} because prefix 0 at start. count=0. For each idx in 0..n-1: val = nums[idx] % modulo == k ? 1:0. prefix = (prefix + val) % modulo. target = (prefix - k) % modulo. Wait formula: need i where prefix[i] ≡ prefix[j] - k (mod M). So target = (prefix - k) mod M. Add freq.get(target,0) to count. Then freq[picker] +=1.
+
+Return count. But for large modulo > 1e5, freq will have at most n unique values. Good.
+
+Edge: modulo could be 1. Then all numbers modulo 1 equal 0. k must be 0 <1. So a[i] = 1 if nums[i]%1==k => 0==0 => always 1. So count subarrays where sum mod 1 equals 0? Wait modulo=1 => any sum modulo 1 is 0. k==0. We need sum %1==0 always holds. Thus all subarrays are interesting: n*(n+1)/2. Our algorithm: a[i] always 1. prefix mod1 always 0; freq initially {0:1}. For each element, prefix=0; target = (prefix - k)%1 =0. freq[0] initially 1; at first element count +=1; freq[0] becomes 2; etc. After n elements count should be sum of freq before update: cumulative: 0,1,2,... n => total n*(n+1)/2 correct.
+
+Large values: use modulo operation careful to avoid negative: target = (prefix - k) % modulo. Use Python.
+
+Implementation in class Solution method.
+
+We should ensure correct type: return int. n up to 1e5, count may be up to n*(n+1)/2 ~ 5e10 fits in 64-bit; Python int fine.
+
+Edge: modulo may contain large prime maybe >1e5; prefix value in 0..M-1. Works.
+
+Let's produce code.
+
+Also we could note that we only need a[i] computed lazily; avoid extra array.
+
+Testing with examples:
+
+Example1: nums=[3,2,4], modulo=2, k=1
+Compute a: 3%2=1==1 =>1; 2%2=0;4%2=0 -> [1,0,0]
+prefix start 0 freq{0:1}
+i0 val1 prefix=1 target=(1-1)%2=0 freq[0]=1 => count=1; freq[1]=1
+i1 val0 prefix=1 target=0 freq[0]=1 => count=2; freq[1]=2
+i2 val0 prefix=1 target=0 norm => count=3; freq[1]=3
+Return 3 matches.
+
+Example2: nums=[3,1,9,6], modulo=3, k=0
+a: [1%3? 3%3=0==0 =>1, 1%3=1, 9%3=0=>1, 6%3=0=>1] => [1,0,1,1]
+prefix: start0 freq{0:1}
+i0 val1 pref=1 target=(1-0)%3=1 freq[1]=0 => count=0 freq[1]=0 then increment? Wait we add freq[target], but target=1, freq[1] initially 0 => count unchanged; then freq[1]++ becomes1.
+i1 val0 pref=1 target=1 freq[1]=1 => count=1; freq[1]=2
+i2 val1 pref=2 target=2 freq[2]=0 => count=1; freq[2]=1
+i3 val1 pref=0 target=0 freq[0]=1 => count=2; freq[0]=2
+Return 2 correct.
+
+Ok.
+
+Let's write final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a subarray `nums[l … r]` we need
+
+```
+cnt = number of indices i in [l , r] with nums[i] % modulo == k
+cnt % modulo == k
+```
+
+--------------------------------------------------------------------
+
+#### 1.  Reduce the problem to a prefix‑sum modulo problem
+
+Define an indicator array
+
+```
+a[i] = 1  if nums[i] % modulo == k
+        0  otherwise
+```
+
+For a subarray `[l , r]`
+
+```
+cnt = a[l] + a[l+1] + … + a[r]
+```
+
+So we need subarrays whose **sum of `a` elems is congruent to `k` modulo**
+`modulo`.
+
+Let
+
+```
+pref[0] = 0
+pref[i] = (a[0] + a[1] + … + a[i-1]) % modulo          (1 ≤ i ≤ n)
+```
+
+`pref[i]` is the sum of the first `i` indicators modulo `modulo`.
+
+For a subarray `[l , r]` (`l ≤ r`)
+
+```
+sum a[l … r] = (pref[r+1] – pref[l])  (exact integer, not modulo)
+```
+
+Modulo `modulo` it becomes
+
+```
+pref[r+1] – pref[l]  ≡  k   (mod modulo)
+⇔  pref[l]  ≡ (pref[r+1] – k)   (mod modulo)            (2)
+```
+
+Thus for every right border `r` we only have to know
+how many earlier prefixes have the value
+
+```
+target = (pref[r+1] – k) % modulo
+```
+
+--------------------------------------------------------------------
+
+#### 2.  Counting with a frequency map
+
+Scan the array once, maintaining
+
+* `cur` – current prefix value,
+* a dictionary `freq` that stores how many times each prefix value has
+  appeared so far.
+
+Initially `cur = 0` and `freq[0] = 1` (empty prefix).
+For each element `x` of `nums`:
+
+```
+    if x % modulo == k:   cur = (cur + 1) % modulo
+    else:                 cur = cur
+    target = (cur - k) % modulo
+    answer += freq.get(target, 0)
+    freq[cur] += 1
+```
+
+The complexity is `O(n)` time, `O(min(n, modulo))` memory (only at most
+`n+1` different prefix values are stored).
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns exactly the number of interesting
+subarrays.
+
+---
+
+##### Lemma 1  
+For each `r` (`0 ≤ r < n`) the algorithm adds to `answer` the number
+of indices `l` (`0 ≤ l ≤ r`) such that the subarray `[l , r]` is
+interesting.
+
+**Proof.**
+
+During the processing of element `nums[r]` the variable `cur`
+equals `pref[r+1]` (definition of prefix).  
+
+The algorithm computes  
+`target = (cur - k) % modulo = (pref[r+1] - k) % modulo`.
+
+For every earlier index `l` (`0 ≤ l ≤ r`), the recorded prefix value
+`pref[l]` is stored in `freq`.  
+The algorithm adds `f = freq.get(target, 0)` to `answer`,
+i.e. the number of indices `l` with
+
+```
+pref[l] mod modulo == target
+⇔ pref[l] ≡ pref[r+1] – k   (mod modulo)      (by definition of `target`)
+⇔ (pref[r+1] – pref[l]) ≡ k   (mod modulo)    (rearranging)
+⇔ sum a[l … r] ≡ k   (mod modulo)
+```
+
+Thus exactly the interesting subarrays ending at `r` are counted. ∎
+
+
+
+##### Lemma 2  
+Every interesting subarray of `nums` is counted exactly once.
+
+**Proof.**
+
+Take an arbitrary interesting subarray `[l , r]`.  
+When the algorithm processes element `nums[r]`
+
+* By Lemma&nbsp;1 the subarray `[l , r]` is counted (because it
+  satisfies the modular condition).
+* No earlier step counts a subarray ending after `r`, therefore this
+  subarray is counted only at the iteration `r`. ∎
+
+
+
+##### Theorem  
+`answer` returned by the algorithm equals the number of interesting
+subarrays of `nums`.
+
+**Proof.**
+
+From Lemma&nbsp;2 each interesting subarray is counted once.
+From Lemma&nbsp;1 the algorithm never counts a non‑interesting subarray.
+Hence `answer` counts exactly all interesting subarrays. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+*Time*: one pass over `n` elements → `O(n)`  
+*Memory*: at most `m = min(n+1, modulo)` distinct prefix values → `O(m)`,
+bounded by `O(n)`.
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation (Python)
+
+```python
+from typing import List
+from collections import defaultdict
+
+class Solution:
+    def countInterestingSubarrays(self, nums: List[int],
+                                  modulo: int,
+                                  k: int) -> int:
+        """
+        Counts subarrays whose number of elements congruent to k modulo
+        'modulo' is also congruent to k modulo 'modulo'.
+        """
+        freq = defaultdict(int)
+        freq[0] = 1          # empty prefix
+        cur = 0
+        answer = 0
+
+        for x in nums:
+            if x % modulo == k:
+                cur = (cur + 1) % modulo   # add indicator
+            # target prefix value needed for a subarray ending here
+            target = ((cur - k) % modulo)
+            answer += freq.get(target, 0)
+            freq[cur] += 1
+
+        # answer can be large (up to n*(n+1)/2), Python handles it
+        return answer
+```
+
+The code follows exactly the algorithm proven correct above.

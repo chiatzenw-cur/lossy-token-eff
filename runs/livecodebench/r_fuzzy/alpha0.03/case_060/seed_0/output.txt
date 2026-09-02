@@ -1,0 +1,260 @@
+<|channel|>analysis<|message|>We need find minimal possible length via removing substrings "AB" or "CD". It’s typical to view as removing pairs adjacent. We can apply removal any number of times, may create new AB or CD. Equivalent to iteratively removing those pairs.
+
+Observation is similar to string reduction problem where each removal reduces length by 2. So final distance minimal is length minus 2*k where k is max removable pairs.
+
+Want max number of operations possible.
+
+This is essentially we can repeatedly delete AB or CD. Equivalent to reduce string using a stack: push char; if top two satisfy AB or CD remove them. But we must ensure we get max deletion.
+
+Is greedy (left to right) works? For pair removal with fixed patterns, typical algorithm using stack works. Because we always delete when pattern appears adjacent. Is there scenario where not deleting at earliest results in larger later removal? Example string "ABA" => using stack: read A push A, next B push B, now top two AB? Actually stack top B and below A => pattern AB? AB refers to substring 'AB' where first char A second B. But on stack top B after A below? Let's check: final stack representation: they are in order. Suppose we treat stack with list of characters. On encountering new character c, we push c onto stack. Then check if stack[-2:] equals ['A','B']? But since we push B then stack[-2] earlier A. That pattern AB. So we delete them. So stack becomes [ ] (empty). Then last char A remains. Final length 1. But is there possibility to get more removal by not removing earlier? Suppose string "ABCD". If we remove AB first or CD first both produce length 0. But both have same length reduction. Suppose string "ABCDAB". Greedy will remove AB at positions 1-2, leaving "CDAB". Then remove "CD" -> stack: after removal "AB" remains? Actually let's simulate: start stack empty. read 'A' push. read 'B' push -> top AB so delete both. left stack empty. read 'C' push. read 'D' push -> top CD delete. stack empty. read 'A' push. read 'B' push -> top AB delete. stack empty. So length 0, maximum. Works.
+
+However, consider overlapping patterns: "ABCDB". The substrings: AB at 1-2, CD at 3-4. But AB + CD overlapping? Actually not overlapping. Suppose "ABCD" chain removal as above. Works.
+
+We need confirm if greedy stack always achieves maximum deletions. Equivalent to removing pairs AB or CD as soon as appear. By deletion we might create new pair that earlier had been overlapping? Example "ACDDB". The string: only "CD" at positions 2-3. Remove them yields "ADB". "AB" cannot because adjacent? A D B - not. So final length 3.
+
+Stack resolves similarly.
+
+Edge case: maybe there is scenario where greedy fails? Patterns are adjacent pairs not overlapping? But deletion may skip a pair that could get removed later combined across boundary. Example: s = "A B C D" -> AB deletion then CD deletion. Works.
+
+Given constraints small, we could also brute force via DFS to verify. But we can rely on stack algorithm.
+
+Alternatively, we can think of it as each character contributing to substructures. But because only adjacent pairs, stack solves.
+
+Proof: The operation is similar to reducing the string by repeatedly canceling patterns AB or CD. Since these patterns are pairwise independent, the process is confluent (no matter order of deletions, results same). Equivalent to treating as rewriting system. Since it's a Dyck-type operation, stack works.
+
+Ok produce algorithm:
+
+Initialize stack empty list.
+
+For ch in s:
+
+    stack.append(ch)
+    while len(stack) >= 2:
+        if stack[-2:] == ['A','B'] or stack[-2:] == ['C','D']:
+            stack.pop(); stack.pop()
+        else:
+            break
+
+Return len(stack)
+
+Because after removal more pairs may form at new top. So we use while loop.
+
+Complexities O(n). Works.
+
+Let's test with example.
+
+Example1: s="ABFCACDB"
+
+Process:
+
+- 'A' push
+- 'B' push -> top AB -> pop both -> stack []
+- 'F' push
+- 'C' push
+- 'A' push
+- 'C' push -> top AC not match
+- 'D' push -> top CD? last two: 'C','D' yes -> pop -> stack ['F','C','A']; Wait actual state: Let's trace: after 'F','C','A','C' stack: ['F','C','A','C']; push D -> stack ['FB'?? No] Actually 'F','C','A','C','D': top 'C', 'D' -> pop both -> stack ['F','C','A'].
+
+- 'B' pop? Wait next char 'B'? Actually string: 'ABFCACDB': last char S? The string ends with 'B'.
+
+Push B -> stack ["F","C","A","B"]: top 'A' 'B'? We have ... 'A','B' 2 last? yes 'A' and 'B': remove -> stack ["F","C"]. That's final length 2. Works.
+
+Example 2: "ACBBD": simulate, no AB/CD, final length 5.
+
+Ok.
+
+Edge: "ABAB": Step: A->stack A; B->pop AB => empty; A->push; B->pop AB => empty length 0. Works.
+
+Edge: "ABCDABCD": Should reduce fully to 0? Duplicate patterns. Works.
+
+Ok.
+
+We'll code.
+
+Also we should consider maybe using if statements early exit.
+
+Return len(stack).
+
+Implementation details.
+
+Ok.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For two specific substrings we may delete them
+
+```
+"AB"   or   "CD"
+```
+
+after a deletion the two parts of the string are glued together, therefore new
+occurrences of `"AB"` or `"CD"` can appear.
+
+The goal is to delete as many of these substrings as possible,
+i.e. obtain the **shortest possible string**.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Observations  
+
+* Deleting a substring always shortens the string by **exactly 2**.
+  So the answer is  
+
+  ```
+  length(s) – 2 · (maximum number of deletions)
+  ```
+
+* After removing a substring only its two *adjacent* characters disappear.
+  No other character is affected.
+  Therefore the deletion of a substring depends only on the two
+  characters that become adjacent right after the deletion.
+
+* The set of allowed substrings is fixed, we never create new patterns, only
+  remove them.  
+  This is a *confluent* rewriting system – the order of deletions does
+  not matter.
+
+* A stack perfectly models this process:  
+  – we read the string from left to right  
+  – push every new character on the stack  
+  – if the top two characters form `"AB"` or `"CD"` we pop them
+
+  After a pop the new top two characters could again form a removable pair.
+  Hence we keep checking until the stack top can no longer be reduced.
+
+* When the whole string is processed, the stack content is the
+  remaining string after **maximal** deletions.  
+  Because we removed a pair as soon as it appeared, no other sequence of
+  deletions could keep more characters.
+
+--------------------------------------------------------------------
+
+#### 2.  Algorithm
+```
+stack = empty list
+
+for each character ch in s:
+    push ch onto stack
+    while stack has at least 2 elements and
+          top two characters are "AB" or "CD":
+          pop the top two
+
+return length of stack
+```
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the minimum possible length.
+
+---
+
+##### Lemma 1  
+Whenever the algorithm pops the top two characters of the stack,
+those two characters form a removable substring (`"AB"` or `"CD"`).
+
+**Proof.**  
+The condition inside the `while` loop explicitly checks that the last
+`two` elements of the stack are either `['A','B']` or `['C','D']`.
+Thus the popped pair is a valid substring to delete. ∎
+
+
+
+##### Lemma 2  
+Let `R` be the string obtained after the algorithm finishes.
+`R` cannot contain any more valid substrings `"AB"` or `"CD"`.
+
+**Proof.**  
+At the end of the algorithm the `while` loop never executed,
+hence the top two characters of the stack (if at least one exists) are
+not `"AB"` or `"CD"`.  
+The stack contains the characters of `R` in order, therefore
+no adjacent pair in `R` can be `"AB"` or `"CD"`. ∎
+
+
+
+##### Lemma 3  
+For any series of valid deletions on the original string `s`,
+the number of deletions performed is at most the number of deletions
+performed by the algorithm.
+
+**Proof.**  
+Consider an arbitrary deletion sequence `D` on `s`.  
+We simulate `D` together with the algorithm:
+
+* Both start with the same empty stack.
+* Both read the same characters in the same order.
+* Whenever the algorithm deletes a pair, the deletion uses the **same
+  two characters** that currently sit next to each other in the
+  sequence processed so far.
+* If a deletion in `D` uses a pair that the algorithm has not deleted,
+  then at that moment the algorithm’s stack contains an identical pair –
+  because the algorithm never skips a deletable pair.
+  Consequently the algorithm would also delete that pair (Lemma&nbsp;1).
+
+Thus each deletion in `D` is matched by a deletion of the algorithm,
+so the algorithm can perform **at least** as many deletions as any
+other sequence. ∎
+
+
+
+##### Theorem  
+The length returned by the algorithm is the minimum possible length
+reachable by any sequence of deletions.
+
+**Proof.**
+
+*Let `k_alg` be the number of deletions the algorithm makes and
+`k_opt` the maximum possible number of deletions over all sequences.*
+
+- By Lemma&nbsp;3: `k_opt ≤ k_alg`.
+- The algorithm’s output length is `|s| - 2·k_alg`
+  (each deletion removes two characters).
+- Any other sequence can delete at most `k_opt` pairs, so its final
+  length is at least `|s| - 2·k_opt ≥ |s| - 2·k_alg`.
+
+Thus no other sequence can produce a shorter string than the algorithm,
+and the algorithm’s length is indeed minimal. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis  
+
+`n = len(s)`  
+
+Each character is pushed onto the stack once and popped at most once.
+All operations inside the loop are O(1).
+
+```
+Time   :  O(|s|)
+Memory :  O(|s|)  (worst‑case the whole string stays on the stack)
+```
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+class Solution:
+    def minLength(self, s: str) -> int:
+        """
+        Return the minimum possible length after repeatedly removing
+        substrings "AB" or "CD"
+        """
+        stack = []
+        for ch in s:
+            stack.append(ch)
+            # while the top two elements form a removable pair
+            while len(stack) >= 2 and (
+                (stack[-2] == 'A' and stack[-1] == 'B') or
+                (stack[-2] == 'C' and stack[-1] == 'D')
+            ):
+                stack.pop()
+                stack.pop()
+        return len(stack)
+```
+
+The implementation follows exactly the algorithm proven correct above.

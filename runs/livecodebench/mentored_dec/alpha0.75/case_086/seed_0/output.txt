@@ -1,0 +1,431 @@
+<|channel|>analysis<|message|>We need to count pairs (i,j) such that (xi XOR xj) + (yi XOR yj) == k. Each xi, yi up to 1e6, k up to 100. n up to 50000. Brute force O(n^2) too slow.
+
+We need trick: distances sum of two XORs. Observing that k <= 100, so small. We can use counting pairs with similar XORs. Idea: For each point, we need to find others with XOR of x and y ranging to k.
+
+We can try to precompute pairings of x and y differences using bitwise operations. But we could produce all pairs of x and y values that produce sum <= k. Let's think: Since k <= 100, we can list all possible pairs (dx, dy) such that dx+dy == k, with dx, dy non-negative integers. Compute their binary representation of XOR? Actually, we need pairs where x^x' = dx and y^y' = dy. Since dx and dy might be any 0..k, we can compute for each coordinate the list of possible values of x' that XOR to dx. This is like pattern: Given x and dx, x' = x XOR dx. For each (dx,dy), we need to count points with (x', y') with these values. So we can map each coordinate to its count. For each point (x, y), we iterate over all (dx,dy) pairs where dx+dy==k, compute x' = x XOR dx, y' = y XOR dy, and count how many points with that coordinate exist. Then we sum across points. But we need to avoid double-counting: Each pair counted twice? We'll handle by dividing by 2? Actually, for each point i, we will check for each potential match j>i; If we iterate over all points with index and pair (dx,dy) but we count all points with coordinates, then we need to ensure we don't count itself and avoid symmetrical pairs. Approach: For each point, compute matches and add to count sum. Then final count of pairs (i,j) will be half of total because each pair counted twice: once from i to j and j to i. But we also need to avoid counting self when dx==0 and dy==0? For k>0, if sum==k, dx and dy may be non-zero. For k=0, dx=0 and dy=0; that means pair of identical coordinates counts via combination formula: count choose 2.
+
+We cannot iterate over all pairs (dx,dy). But number of pairs for each k is O(k). Actually dx ranges 0..k, dy = k - dx; So there are k+1 pairs. That's <= 101 (since k <= 100). So per point we might do 101 operations, which is fine: 50000 * 101 = 5 million.
+
+We need mapping: coordinate -> count.
+
+We can store dictionary map = {(x,y): count}. Input up to 50000 unique keys. So map of up to 50k.
+
+Now algorithm: Build map.
+
+If k==0: For each point, count number of identical pairs (c choose 2). Compute sum_{coord} c*(c-1)/2.
+
+Return that.
+
+Otherwise: total=0. For each point (x,y), we process pair counts: For each (dx,dy):
+
+- compute x' = x ^ dx, y' = y ^ dy.
+- get count = map.get((x',y'),0).
+- If (x',y')== (x,y) ??? If dx==0 and dy==0, but k>0, so not possible. For k>0, when dx=0 and dy==k? Wait in such case, dx=0, dy=k, but then dx+dy=k. That gives x'=x, y'=y ^ k. So (x',y') may equal (x,y) if dy==0? If dx=0 & dy=0, then k=0. So not possible. So we don't care about self mapping.
+
+But transformation may produce a coordinate that could be the same as original if not unique? Actually if dx=0, y' = y ^ k cannot equal y unless k==0. So yes.
+
+But we still need to avoid double counting each pair of points. For each pair of points, their distance equals k. Suppose we iterate all points and for each point we consider all possible (dx,dy) that produce k. We will count pair (i,j) when we process i and output j. When we process j later, we will again count pair (j,i) because (xj XOR xi) = same dx, dy??? But will the pair produce same dx? No because from j we might generate dx' = xj XOR xi? Yes, because XOR symmetrical. For pair (i,j), the XOR differences are unique; from i we compute dx = xi XOR xj, but that's the same as xj XOR xi. So the mapping will produce same point j, counting again. So double count. For each pair, we will add 2. So we need to divide by 2 after final sum. But also we should make sure that we don't count if (x',y') equals (x,y) because duplicates? But not happen since k>0.
+
+Potential issue: we might compute for each (x,y) multiple times same j? Actually when we compute (dx,dy) for each pair, including dx=0, dy=k, there is also the pair with dx=k, dy=0 which may produce j from other point? Wait if we pair (x,y), we compute x' = x ^ dx, y' = y ^ dy. All pairs of dx,dy giving sum k. For each pair (dx,dy) produce unique target coordinate. But we also will include both symmetric transformations? Well we set dx in 0..k, dy = k-dx. That enumerates all pairs of non-negative integers summing to k. For a pair of points (i,j), we have (dx,dy) = (xi XOR xj, yi XOR yj). The two values satisfy dx+dy == k. For each pair, we will count exactly once when iterating i and when iterating j, because by swapping x,y we compute same dx,dy; but we don't iterate over pairs that produce same target coordinate. There is possibility that if there is a pair with dx=dy? Not relevant. So dividing by 2 after summing would give correct count.
+
+Edge case: bigger duplicates leading to triple counting? Suppose there are 3 points with same coordinate, the pair (i,j) is counted 3 times from each point? Wait each point with same coordinate cumulative pairs counted double. For example: we have 3 points (x,y). Suppose k=0. Then for any pair we will get k=0. But we are in branch k>0 because if k==0 separate. Let's check. For k>0, duplicate coordinates produce pair with distance = k? Suppose we have 2 identical points with same coordinate. Distance between them = (0 XOR 0) + (0 XOR 0) = 0. If k>0 then no pair. So duplicates don't matter.
+
+Thus for k>0 method, we just sum.
+
+But we also need handle map when x' and y' might be out of range? but question no restrictions. But we query dictionary anyway.
+
+Complexity: O(n +  k*n). Good.
+
+Let's test on the provided example.
+
+Example 1: coordinates: [[1,2],[4,2],[1,3],[5,2]], k=5. We'll compute.
+
+Pairs list: Map: (1,2),(4,2),(1,3),(5,2). All unique.
+
+For each point:
+
+point (1,2): compute for dx=0..5: combos: dx=0,dy=5 => x'=1^0=1, y'=2^5=7? Wait 5 in binary 101, y'=2^5=7? 2 ^ 5=7. Not present. dx=1 ay=4? Actually we mis enumerations: For each pair (dx,dy) sum=5: (0,5),(1,4),(2,3),(3,2),(4,1),(5,0). Those are 6 combos. Compute for each (dx,dy). For (0,5) x'=1, y'=2^5=7. Not present. (1,4): x'=1^1=0, y'=2^4=6? 0 not present. (2,3): x'=1^2=3, y'=2^3=1? 3? 3 not present. etc. So only pair (0,5) no. Pair (3,2): x'=1^3=2, y'=2^2=0? 2^2=0? 2^2=0? Wait 2^2=0, so coordinate (2,0) not present. So none. Good.
+
+For (4,2): we compute. We'll find pair with (1,2) diff: x XOR = 5 (since 4^1=5), y XOR = 0 (2^2=0). So dx=5, dy=0 -> included. So we count x'=4^5=1, y'=2^0=2. present. So pair counted.
+
+For (5,2) we find pair (1,3) with x XOR=4, y XOR=1: dx=4, dy=1 -> yes. So pair counted.
+
+After sum, total count will be 2, but we must divide by 2 or we might have counted each pair once? Actually the pair (4,2) and (1,2) counted from 4->2 only? Wait we compute (1,2) as starting point; for (4,2) matched only when I call for (4,2). For (5,2) matched only when I call for (5,2) but we also matched from (1,3) after (1,3) we will compute (1,3)->(5,2) matches; and we also maybe count pair (5,2) when starting (5,2) -> (1,3). So we may double count. So we will sum = 4? Let's compute:
+
+Processing (1,2): no match
+Processing (4,2): one match (x'=1, y'=2). so count +=1
+Processing (1,3): one match (x'=5, y'=2). count +=1
+Processing (5,2): one match (x'=1, y'=3)? Wait x'=5^4=1, y'=2^1=3? Wait we computed (5,2) -> (1,3). That's for dx=4, dy=1? That's (1,3). But 5^4=1 correct, y'=2^1=3 correct. So count +=1. So count=3. But we double counted pair? Wait we at (5,2) we matched - but we saw earlier we already counted pair (1,3) when processing (1,3) -> So 2 counting. So total count=3. Therefore divide by 2 gives 1.5? But we had 2 actual pairs. We incorrectly double count? Let's re-evaluate.
+
+We had two pairs: (0,1) and (2,3). Our counting produced 3 contributions; we counted pair (1,3) and (5,2) pair twice, but we counted pair (4,2) and (1,2) once. Let's compute matches properly:
+
+- For (4,2) -> (1,2). This is pair.
+- For (1,3) -> (5,2). This is pair.
+- For (5,2) -> (1,3). This is also the same pair? Wait but (5,2) is j and (1,3) is i. The pair is (1,3) and (5,2). In our enumeration, we counted both (1,3) to (5,2) and (5,2) to (1,3). So we counted pair twice.
+
+- For (1,2) and (4,2): counted once.
+
+- For (5,2) to (1,3): counted once.
+
+- For (4,2) to (1,2): counted once.
+
+So we have two pairs total: pair (1,3)-(5,2) counted twice, pair (1,2)-(4,2) counted once. So the totals: 3. We need to divide by 2 to get 1.5, but integer would be 1. So indeed we must avoid double counting by adding only when j index > i? But easier: we don't want to count pair twice; we can count while iterating; but we can process only once per unordered pair by considering count only for terms where coordinates to be matched are already seen? But we cannot maintain order? However we can compute counts by iterating over distinct coordinates and using combination counts. Another nuance: Since we are iterating over all coordinates, we should not perform division by 2; instead, we need to avoid double counting by subtracting? We can just process each point as first, then only consider points that differ. Or we can process all points but subtract self-match? Actually we had double counting because one pair recorded twice, not once. So dividing by 2 would give a wrong total due to asymmetry. However we counted (1,2)-(4,2) only once, maybe because there is a direction of some pair? Wait we didn't double count (1,2)-(4,2) because from (4,2) we matched (1,2). But from (1,2) we didn't match (4,2). Because (1,2) did not have pair with (4,2) in enumeration? Let's check: (1,2) produce x'=1 xor dx=5, y'=2 xor 0 =2: for dx=5, dy=0. This pair is included (dx=5,dy=0). Our enumeration of (dx,dy) includes (5,0). It does produce (1,2)->(5,2)? But we need (5,2) not (4,2). So we missed? Let's check: (4,2) to (1,2) is dx=5, dy=0. So symmetrical: (1,2)->(4,2) would need dx=5,dy=0. But that means (1,2) XOR (4,2) =5 and 0, yes. So we considered (dx=5,dy=0). For (1,2) target x' = 1^5=4, y'=2^0=2. So pair (4,2) would have been found. But our enumeration had 6 combos: (0,5),(1,4),(2,3),(3,2),(4,1),(5,0). Did we include (5,0)? Yes, last pair. So we should have counted (1,2) mapping to (4,2). But earlier we concluded none. That's wrong; earlier we mis-evaluated. Thus we mis-calc.
+
+Let's recompute for (1,2):
+- (0,5): x'=1^0=1, y'=2^5=7 -> not present.
+- (1,4): x'=1^1=0, y'=2^4=6 -> not present.
+- (2,3): x'=1^2=3, y'=2^3=1 -> not present.
+- (3,2): x'=1^3=2, y'=2^2=0 -> not present.
+- (4,1): x'=1^4=5, y'=2^1=3 -> not present.
+- (5,0): x'=1^5=4, y'=2^0=2 -> present. So count +1.
+
+Thus for (1,2) we have one match. For (4,2) we also might count (1,2) as one match. That gives double count again. So total count 4. So we indeed double count each pair. So correct approach: divide by 2 after total sum across all points, with each pair counted twice (except in case k>0, but we didn't count self). We will also need to handle possible duplicates when target coordinates repeated? Not issue.
+
+Let's verify that double counting equals 2*count of pairs. For any pair of distinct points with distance k: For each of the two points i, j, the algorithm will count each other when processing the pair where (x^dx, y^dy) equals combination of the other. That implies all pairs counted twice exactly. Because for any pair i,j, the differences are unique. Since (dx,dy) is symmetric, both directions cause loops to count. Thus dividing by 2 gives correct pair count.
+
+Edge-case: For some pairs where x'==x or y'==y? Example with some mismatched but still distance k. But we may count self? Suppose we have point (x,y) and target (x',y') where dx=0 and dy=k. Since x' = x, y' = y^k. That means pair (x,y') with x same coordinate. This might have duplicate coordinates that match the original? No because y' != y. So pair distinct. So still counted twice. So division works.
+
+Thus final algorithm is correct.
+
+Time complexity: O(n + n*k). Good.
+
+Implementation details:
+
+- We'll convert coordinates to list of tuples.
+
+We need to handle duplicates: there might be multiple points with same coordinates. We can't just treat each point as a node because duplicates may lead to pairs between identical coordinates if distance k>0? Actually the pair may produce identical coordinates if dist 0. But if k>0 and duplicates, we still treat them as distinct points but if distance equals k? That implies difference 0. So if k>0 then duplicates cannot yield distance k. So no pair. For k==0, we handle combination. So method fine.
+
+However our algorithm in k>0 requires enumeration of points individually. For duplicates, we need to count duplicates as distinct points but mapping coordinates to count includes duplicates. Suppose we have two points with same coordinate but we add computed pair counts: For each point, we may count again pair of identical coordinates? choose if dx=0, dy=0, which would produce k=0; but k>0, so not. So duplicates won't affect pair counts.
+
+Need to consider memory: we need mapping for up to 50k unique coordinates, each int.
+
+Edge Cases: k <= 100. For each point loops 101.
+
+Implementation:
+
+```
+def countPairs(self, coordinates, k):
+    from collections import defaultdict
+    freq = defaultdict(int)
+    for x, y in coordinates:
+        freq[(x,y)] += 1
+    if k == 0:
+        ans = 0
+        for cnt in freq.values():
+            ans += cnt * (cnt - 1) // 2
+        return ans
+    total = 0
+    for x, y in coordinates:
+        for dx in range(k+1):
+            dy = k - dx
+            x_hat = x ^ dx
+            y_hat = y ^ dy
+            cnt = freq.get((x_hat, y_hat), 0)
+            total += cnt
+    # each pair counted twice, due to self from each point
+    return total // 2
+```
+
+Let's test with sample: coordinates as above.
+Method code will produce 2. We'll compute manually: total= pairs counted twice.
+
+Let's verify: for (1,2), we had 1 pair counted; for (4,2), we counted 1 pair again; for (5,2), 1 pair counted; for (1,3), 1 pair again; total 4. After //2 = 2. Good.
+
+Edge Cases: Suppose there are identical coordinates (x,y). The algorithm will query freq for (x',y') but if (x',y') equals itself and dx==0,dy==0, then k>0 can't equal. No duplicates. For k==0, no loops.
+
+Edge: Suppose points (x,y) and (x,y) with distance k from itself? We cannot have distance zero? Wait if k=0, pairs considered equal coordinates. For same coordinate, we must treat the same distinct points but we counted only choose 2.
+
+We need to ensure we don't count pairs with indexes i<j if coordinates i and j duplicate, but we count choose two.
+
+Now think about performance: The algorithm will traverse every point for each k. For each point we just call freq.get maybe heavily. So fine.
+
+We also need to memory: dictionary mapping.
+
+We also need to handle large list of coordinates: we might use Python list of tuples; but we might also consider using list of floats.
+
+Should we restrict to index? We'll use for (x,y) points.
+
+Potential improvement: because we iterate over all points but we might also need to count pairs for duplicates; but we can just iterate over all points and use freq.
+
+Complexities good.
+
+Now implement final solution in Python.
+
+Let's test with sample 1: using quick test.
+
+Edge case: k=0 example 2: coordinates all same, k=0. freq value 5. ans=5*4/2=10. Good.
+
+Edge: k>0 but all coordinates duplicates: say coordinates [[1,1],[1,1],[1,1]] k=1. Distances all 0. Answer 0. Our algorithm: freq mapping 1, etc. total loops: For each point, we test for dx=0..1,dy=1..0; none produce k=1, maybe produce 1? However dx=0,dy=1 -> target = (1,1 ^ 1)= (1,0). not present. dx=1,dy=0 -> target=(1^1,1^0)=(0,1). Not present. So out-of unknown. So total=0. /2=0. Good.
+
+Edge: k=5 but coordinates along grid with many duplicates: we might double count across points identical coordinates multiple times. Example coordinates: 2 identical points A and B, one other point C. Suppose distance between A and C equal k, and same for B and C. Our enumeration will count each pair for A and C, and B and C. For each A, we get count of freq of C; For C we get count of freq of A: (A+B). But we will compute pair counts for A and C individually. But total for pair A-C will be counted twice? Let's compute:
+
+Map: freq[A] = 2, freq[C] = 1.
+
+In enumeration:
+For A point (index 0) -> count = freq(C) = 1. So total++.
+For A point (index 1) -> count = freq(C) = 1. total++.
+For C point -> count = freq(A) = 2. total++.
+So total=4. Divide by 2 yields 2. But actual pairs: A-C pairs: A0-C, A1-C. That's 2. So correct.
+
+Edge: Suppose we have 3 identical points both A and B, C, etc. Duplicate counts surged accordingly. That algorithm returns correct.
+
+Thus algorithm stands.
+
+Time: O(N * (k+1)). n up to 50000, k up to 101 => 5.05M => fine.
+
+Edge: Possibly large coordinates? "x_i, y_i <= 1e6", XOR might produce up to 2^20-1 ~ 1,048,575 < 2^20. So still fits.
+
+Implementation details: we should use local variables to speed.
+
+We need to handle integer overflow? Python ints fine.
+
+Implementation steps:
+
+- Import typing.
+
+- Define class Solution.
+- Implementation in method countPairs.
+
+Let's produce final code.
+
+Potential alternative: using standard library as generating list of dx from 0 to k inclusive.
+
+Potential improvement: For each point, we might compute for each dx in range(k) but we can compute using odds approach.
+
+We can optionally precompute list of dx, dy pairs in a list of tuples for efficiency. But number small.
+
+Ok.
+
+Go ahead. Let's produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For two points  
+```
+P1 = (x1 , y1)          P2 = (x2 , y2)
+```
+their distance according to the statement is
+
+```
+dist(P1 , P2) = (x1 XOR x2) + (y1 XOR y2)
+```
+
+The task is to count how many unordered pairs of indices `i < j`
+satisfy `dist( coordinates[i] , coordinates[j]) == k`.
+
+--------------------------------------------------------------------
+
+#### 1.  Observations
+
+* `k` is at most `100`.  
+  Therefore **every distance is a sum of two non‑negative integers**  
+  `dx = x1 XOR x2` and `dy = y1 XOR y2` with  
+  `dx + dy = k`,  `0 ≤ dx, dy ≤ k`.
+
+  The pair `(dx,dy)` is **fixed** once we know the point we are looking at
+  and we are searching for the other point.
+
+* For a fixed point `(x, y)` and a fixed pair `(dx, dy)`
+  the **other point** must be
+
+```
+x' = x XOR dx
+y' = y XOR dy
+```
+
+  (because `x XOR x' = dx`, the same for `y`).
+
+* Because `k ≤ 100`, there are only `k + 1` such pairs,
+  at most `101` candidates per point.
+
+* We have to count pairs of indices, not just distinct coordinates.
+  When two coordinates are the same, we have to treat them as separate
+  points.  
+  A convenient way is to first build a frequency map
+  `cnt[(x,y)] = number of times this coordinate appears`.
+
+--------------------------------------------------------------------
+
+#### 2.  The two cases
+
+| `k` | Handle differently |
+|-----|---------------------|
+| `0` | Distance is zero only if the two points are identical.  
+       Count all pairs inside each group of equal coordinates: `cnt * (cnt-1)/2`. |
+| `>0` | For every point we look at all `k+1` pairs `(dx,dy)` and
+        count how many points with the expected `(x',y')` exist.  
+        Every unordered pair is counted exactly twice:
+        once when the first member is processed and once when the second
+        member is processed.  
+        The final answer is `total // 2`. |
+
+--------------------------------------------------------------------
+
+#### 3.  Algorithm
+```
+build a frequency map freq[(x,y)] from input
+
+if k == 0:
+        ans = 0
+        for each value c in freq.values():
+                ans += c * (c-1) // 2
+        return ans
+
+total = 0
+for each point (x, y) in coordinates:
+        for dx from 0 to k:          # 0 … k inclusive
+                dy = k - dx
+                x' = x ^ dx
+                y' = y ^ dy
+                total += freq.get((x',y'), 0)
+
+return total // 2      # each unordered pair counted twice
+```
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the correct number of pairs.
+
+---
+
+##### Lemma 1  
+For `k = 0` the algorithm counts exactly the number of pairs of indices
+`i < j` with `coordinates[i] == coordinates[j]`.
+
+**Proof.**
+
+`k = 0` implies that `dist(P1, P2) = 0` ⇔ `x1 XOR x2 = 0` and `y1 XOR y2 = 0`
+⇔ `(x1, y1) = (x2, y2)`.  
+The algorithm sums over all distinct coordinates `c`: `cnt * (cnt-1)/2`
+which is precisely the number of unordered pairs of distinct indices
+with that coordinate.  ∎
+
+
+
+##### Lemma 2  
+For `k > 0` consider any pair of distinct indices `(i, j)` with
+`dist(i,j) = k`.  
+During the main loop the algorithm adds exactly `2` to `total`.
+
+**Proof.**
+
+Let ` Pi = (xi, yi)` and ` Pj = (xj, yj)`.
+
+Define `dx = xi XOR xj` and `dy = yi XOR yj`.  
+By hypothesis `dx + dy = k`.  
+`dx` and `dy` are non‑negative integers and `dx` lies between `0` and `k`.
+
+While processing point `i`:
+
+* the algorithm iterates over the pair `(dx, dy)`.
+* It computes  
+  `x' = xi ^ dx = xj` and  
+  `y' = yi ^ dy = yj`.
+* The map contains `freq[(xj, yj)] ≥ 1`, therefore
+  `total` is increased by at least `1`.
+
+While processing point `j` the same reasoning with `(xj, yj)` and
+`(dx, dy)` gives the same pair `(xi, yi)` and increments `total` again.
+
+No other iteration (different `dx` or different point) contributes the
+same unordered pair because `dx,dy` are uniquely determined by the
+pair of points.
+
+Hence exactly two increments are added to `total`. ∎
+
+
+
+##### Lemma 3  
+For `k > 0` the algorithm adds nothing to `total` for any pair of indices
+`(i, j)` with `dist(i,j) ≠ k`.
+
+**Proof.**
+
+Assume a pair with distance `s ≠ k`.  
+Let `dx,dy` be their XORs.
+For this pair, `dx + dy = s`.  
+The algorithm iterates only values where `dx + dy = k`.  
+Therefore this pair never appears in the enumeration, and `total` is
+not increased for this pair. ∎
+
+
+
+##### Theorem  
+For every input the algorithm returns exactly the number of pairs
+`(i, j)` (`i < j`) with `dist(i,j) = k`.
+
+**Proof.**
+
+*Case `k = 0`* – by Lemma&nbsp;1 the algorithm counts exactly the
+pairs of equal coordinates, which are precisely the pairs with distance
+`0`. The algorithm returns this number.
+
+*Case `k > 0`* –  
+By Lemma&nbsp;2 each unordered pair with distance `k` contributes
+exactly `2` to `total`.  
+By Lemma&nbsp;3 all other pairs contribute `0`.  
+Thus after the loop `total` equals `2·(desired count)`.
+
+The algorithm returns `total // 2`, which equals the desired count. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+*Let `n` be the number of points (`n ≤ 50 000`).*
+
+* Building the frequency map: `O(n)`
+* Main loop: for each of the `n` points we iterate over `k+1 ≤ 101`
+  pairs, each step is constant time.  
+  Complexity: `O(n · (k+1)) ≤ O(n · 101) ≈ 5·10⁶` operations.
+
+* Memory consumption: one dictionary entry per distinct coordinate,
+  at most `n` entries, each storing a pair of integers.  
+  `O(n)` memory.
+
+Both time and memory limits are easily satisfied.
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+from typing import List, Tuple, Dict
+
+class Solution:
+    def countPairs(self, coordinates: List[List[int]], k: int) -> int:
+        """
+        Count pairs of indices (i, j) with i < j such that
+        (xi XOR xj) + (yi XOR yj) == k.
+        """
+        # frequency map of coordinates
+        freq: Dict[Tuple[int, int], int] = {}
+        for x, y in coordinates:
+            freq[(x, y)] = freq.get((x, y), 0) + 1
+
+        # case k == 0
+        if k == 0:
+            ans = 0
+            for cnt in freq.values():
+                if cnt > 1:
+                    ans += cnt * (cnt - 1) // 2
+            return ans
+
+        # case k > 0
+        total = 0
+        for x, y in coordinates:
+            # enumerate all (dx, dy) with dx + dy == k
+            for dx in range(k + 1):
+                dy = k - dx
+                x2 = x ^ dx
+                y2 = y ^ dy
+                total += freq.get((x2, y2), 0)
+
+        # each unordered pair counted twice
+        return total // 2
+```
+
+The code follows exactly the algorithm proven correct above
+and conforms to the required function signature.

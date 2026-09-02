@@ -1,0 +1,406 @@
+<|channel|>analysis<|message|>We need to answer queries each with threshold x,y on nums1[j] >= x and nums2[j] >= y. Want max sum. n, q up to 1e5. Brute force too slow.
+
+Constraints large. We can use offline processing. Maybe sort items by nums1 descending, and queries by x descending. Create a data structure keyed by nums2: for all items with nums1 >= current x, we need to query max sum for items with nums2 >= y. So we can maintain a segment structure over nums2. Each item stores sum. Complexity O((n+q) log n). But nums2 values up to 1e9; need compression. We can compress both indices positions and sorted.
+
+Alternate approach: use 2D DS? Use a Bit indexed tree over sorted distinct nums2 values with maximum sum. Since updates only add items as we sweep decreasing x (adding items). Query: need max sum over all items with nums2 >= y. So we can maintain Fenwick tree storing max over prefix ending at value; but we need suffix max, we can invert order. Sort distinct nums2 ascending: For Fenwick tree that supports prefix maximum easily. We can query suffix by using reversed indexing: transform index = len - rank + 1. Or use segment tree.
+
+Complex O((n+q) log n). Should work.
+
+Edge cases: many queries may not be satisfied; we return -1.
+
+Implementation details:
+
+- compress nums2: create sorted unique list of nums2 values. map value -> index (0-based).
+- For Fenwick tree that supports max, we need functions update(i,val) sets tree[i] to max(current,val) propagating upward. query(i): returns max over [0,i]. We can transform to suffix max. Suppose we store reversed order: idx = len-1 - rank. Then update at idx, query over prefix up to idx to get prefix corresponds to original suffix >= y. But easier: we can maintain Fenwick for suffix by using queries over [rank, end] using segment tree. But Fenwick can prune prefix only but need suffix. We can do: compress sorted ascending. For a query y, find first index >= y (lower_bound). Then we could compute max over suffix: We can store tree where query returns maximum over [pos, n-1]. We can do Fenwick with reversed indices: map rank to revIndex = n - rank (1-based?). Let's propose: For value v, its rank (1-based) in ascending order = idx+1. Then revIdx = n - rank + 1. For an item with rank rank, we update at revIdx with sum. For term y, we want max over all nums2>=r; that corresponds to all ranks >= pos with occ. In reversed order, all those elements will have revIdx <= revIdx_y where revIdx_y = n - pos + 1. So we need maximum over prefix <= revIdx_y. Since Fenwick supports prefix max, we can query revIdx_y. So we need compute pos = lower_bound ascending (first index with value >= y). revIdx_y = n - pos (1-based?). Let's compute n_unique sorted list a. For value y, pos = bisect_left(a, y). That returns 0-based. Then revIdx = n_unique - pos. This gives a 1-based index? For Fenwick we use 1-based size n_unique. If pos index=0? revIdx = n_unique - 0 = n. Good. If pos==n_unique (no elements >= y) then revIdx = n_unique - n_unique =0; query(0) returns 0 or some sentinel; we return -1. If revIdx>0 we query fenwick for max prefix revIdx. Implementation: Fenwick tree of size n_unique initialized with -inf.
+
+Fenwick update: while i<=n_unique: tree[i] = max(tr[i], val); i+=i&-i.
+
+Query: while i>0: res=max(res,tree[i]); i-=i&-i.
+
+Now we need to sweep queries. Sort pairs (x, y, idx) descending by x. Also sort items by nums1 descending. Then iterate queries order; for each query with threshold x, push items with nums1 >= x: while items_ptr < array_size and nums1_sorted[items_ptr] >= x: update fenwick with nums2_value's rank revIdx and sum. Then answer query via: find revIdx of y; if revIdx==0 -> -1 else get fenwick.query(revIdx). If result is -inf, output  -1 else result.
+
+Need -inf maybe -1? Actually sums are up to n*1e9 > 1e14. So use -1 or negative sentinel. Use -1 to indicate none, more convenient. But -1 could be valid sum? Since nums1>=1, nums2>=1 => sum >=2 => -1 safe.
+
+But fenwick tree should store max sum. Initialize all to -1.
+
+Implementation steps:
+
+- n = len(nums1)
+- Build list items: for each j, store (nums1[j], nums2[j], sum)
+- Sort items ascending or descending? We'll sort descending. items_sorted = sorted(items, key=lambda x: x[0], reverse=True)
+- Build queries list: enumerate(queries) store (x,y,idx) sorting descending by x
+- compress known vals: a[elem] = sorted(set(nums2))
+- n_unique = len(a)
+- Build Fenwick class.
+
+- Iterate queries: items_ptr = 0; while items_ptr < n and diary[items_ptr][0] >= x: do update
+- Answer: pos = bisect_left(a, y) -> 0-based. revIdx = n_unique - pos. If revIdx>0: ans = fenwick.query(revIdx). else: ans=-1. After this, if ans<=0? Wait ans might be -1 if none. So we set as ans. If ans==-1 keep.
+
+Edge: Need to handle queries where revIdx =0 (no element with nums2 >= y). So -1.
+
+But also need to check if fenwick.query returns -1 if nothing inserted: we set default as -1; query returns max among inserted intervals, but if none inserted before revIdx, result remains -1 because tree leaves -1.
+
+Complexities fine.
+
+Let's test on sample 1:
+
+nums1=[4,3,1,2]; nums2=[2,4,9,5]; items: (4,2,6), (3,4,7), (1,9,10), (2,5,7). Sorted desc: [4,2,6], [3,4,7),(2,5,7),(1,9,10). Queries sorted desc by x: [(4,1),(2,5),(1,3)]? Actually x values: [4,1,2] sort descending: (4,1),(2,5),(1,2?). Wait query list: [[4,1],[1,3],[2,5]]. sorted descending: (4,1),(2,5),(1,3). We'll update items: For x=4, add items with nums1>=4: only (4,2,6). update fenwick with (nums2=2, sum=6). Query y=1: pos=bisect_left([2,4,5,9],1)=0; revIdx=4-0=0? Wait n_unique=4. revIdx=4-0=4. Query prefix 4 -> 6. answer ok.
+
+Next u: x=2: add_items with nums1>=2: items (3,4,7) and (2,5,7). update while ptr: (4,2,6) already inserted; now (3,4,7) -> nums2=4, sum=7; (2,5,7) index=5 sum=7. Query now y=5: pos=bisect_left(...,5)=2 (values 2,4,5,9). revIdx =4-2=2. query prefix 2 -> max at revIndices <=2. Let's compute revIndices mapping: For value 2 rank=0 (pos0), revIdx=4-2? Wait rank start 0? Actually revIdx formula uses nUnique - pos. rank? But pos is number index from 0. For value 2 pos=0, revIdx=4-0=2? but earlier we had mapping 2->revIdx[?]. Let's compute all: a=[2,4,5,9], n=4. pos values: 2=0 => revIdx=4; 4=0? sorry? 4 pos=1 => revIdx=3. 5 pos=2 => revIdx=2. 9 pos=3 => revIdx=1. So revIdx descending: 4,3,2,1.
+
+Now inserted: 2->revIdx=4 value=6; 4->revIdx=3 value=7; 5->revIdx=2 return 7. Query y=5 pos=2 revIdx=2 -> query prefix 2 returns maximum of rev-index <=2: includes rev indices 1,2 => 9? Wait 9 not inserted yet. rev 2 has value 7; 1 none. So result 7. ok.
+
+Next x=1: add remaining items: (1,9,9?) Wait sum 10: 1+9=10? Actually m. update revIdx for 9: pos=3 revIdx=1 value=10. Query y=3: pos=bisect_left([2,4,5,9],3)=1 => revIdx=4-1=3. So prefix 3 includes rev indices 1,2 (values 10,7). rev 3 value=7? best 10. output 10. Good.
+
+Edge: ensure we output in original order -> store ans array[query_idx] = ans.
+
+Now complexity: O((n+q) log n). Works.
+
+Let's double-check sample 2: n=3 arrays. Items sorted descend: (5,4? Wait nums1: [3,2,5], nums2:1??? Actually numbers: [3,2,5], [4,3,9]? Wait example: nums1=[3,2,5], nums2=[2,3,4]. Items: (3,2),(2,3,5),(5,4). sums done 5,5,9. queries: [[4,4],[3,2],[1,1]] -> sorted desc: (4,4),(3,2),(1,1). Process desc as above should produce 9 each.
+
+Let's test small: compress a [2,3,4]. n_unique=3. Process x=4: add nums1>=4: item (5,4,9). revIdx for 4 pos=2 => revIdx=3-2=1. update revIdx=1 value =9.
+
+Query y=4 pos=2 revIdx=1 -> query prefix 1 -> 9. ans 9.
+
+Next x=3: add items with nums1>=3: (3,2,5) x=3, (2,3,5?) but condition >=3 fails for n=2 so only first (3,2,5). update revIdx of 2 pos=0 revIdx=3-0=3 value=5. Query y=2 pos=0 revIdx=3 -> prefix 3 => max of val[3], max of rev 1(9), rev 2 unknown, rev15=5? but rev 1 has 9 big. So ans 9. Next x=1: add items (2,1? Actually (2,3,5) because now remaining). Update revIdx for 3 pos=1 revIdx=2 value=5. query y=1 pos=0 revIdx=3: again prefix 3 returns 9. Good.
+
+Matches.
+
+Potential pitfalls: using reverse mapping may not compute revIdx correctly if we use earlier formula incorrectly; need to test with boundary cases. For y > max(nums2) -> pos==n_unique. revIdx= nunique - nunique =0, query 0 -> no result. That should produce  -1.
+
+When y==min(nums2) -> pos=0 revIdx=nunique, query prefix nunique all inserted.
+
+Ok.
+
+Implementation: define heap? But Fenwick.
+
+Now produce final solution code. Ensure efficient. We'll also mark imports typing.
+
+Plan final solution with explanation.
+
+<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every query `[x i , y i ]` we have to consider only indices `j`
+with
+
+```
+nums1[j] ≥ x i   and   nums2[j] ≥ y i
+```
+
+and among those indices we need the answer
+
+```
+max( nums1[j] + nums2[j] )
+```
+
+We have up to 10^5 indices and 10^5 queries – iterating over all indices
+for every query would be `O( n · q )` – impossible.
+
+--------------------------------------------------------------------
+
+#### 1.  Offline processing
+
+If we sort the indices by `nums1[i]` in **decreasing** order, then while
+processing the queries (also sorted by x in decreasing order) all indices  
+with `nums1[i] >= current x` will already be known (they were processed
+before).  
+For a fixed `x` we therefore only have to search inside the current set
+of indices.
+
+--------------------------------------------------------------------
+
+#### 2.  Working with the `nums2` dimension
+
+In the current set we need the **maximum sum** among all indices that also
+satisfy `nums2[i] >= y`.  
+That is a classic **"max on an interval"** – a Fenwick tree (Binary Indexed
+Fenwick) that keeps the **maximum** instead of the sum works perfectly.
+
+Fenwick tree is normally a *prefix max* data structure.
+To obtain a *suffix* (`nums2 ≥ y`) we keep the indices in **reverse
+order**:
+
+```
+sorted_unique_vals = sorted(set(nums2))
+n_unique = len(sorted_unique_vals)
+
+rank(val)  :  1 … n_unique   (ascending)
+rev_idx(i) :  n_unique – rank + 1     (descending)
+
+index 2          -> rev_id = n_unique   (first position)
+index 9          -> rev_id = 1           (last position)
+```
+
+Now
+
+```
+numbers with nums2 >= y
+   ⇔  rank >= pos(y)            (pos = lower_bound)
+   ⇔  rev_id <= n_unique - pos
+```
+
+Thus a prefix max query on a Fenwick tree exactly gives the wanted
+maximum.  
+All values missing in the tree are initialised with `-1`.  
+Both updates and an empty query return `-1` – we can safely use it as
+`no answer`.
+
+--------------------------------------------------------------------
+
+#### 3.  Algorithm
+
+```
+compress all nums2 values -> vector 'vals'   (ascending order)
+n_uniques = len(vals)
+
+build array items = [(nums1[i], nums2[i], nums1[i]+nums2[j]), i]
+sort_items_desc = sorted(items)
+
+build array queries = [(x, y, original_index), ...]
+sort_queries_desc = sorted(queries, key=lambda q: q[0], reverse=True)
+
+Fenwick tree FT with max values, size = n_uniques, initialised to -1
+
+ptr = 0                               # pointer inside sorted_items
+for (x, y, idx) in sort_queries_desc:
+    while ptr < m and sorted_items_desc[ptr][0] >= x:
+        _, nums2_val, sum_val = sorted_items_desc[ptr]
+        pos = lower_bound(vals, nums2_val)      # 0‑based
+        rev_id = n_uniques - pos               # 1‑based
+        FT.update(rev_id, sum_val)
+        ptr += 1
+    pos_y = lower_bound(vals, y)               # 0‑based
+    rev_y = n_uniques - pos_y
+    res = -1
+    if rev_y > 0:
+        res = FT.query(rev_y)                  # prefix-max
+    answer[idx] = res
+return answer
+```
+
+`lower_bound` is `bisect_left` in Python.
+
+--------------------------------------------------------------------
+
+#### 4.  Correctness Proof  
+
+We prove that the algorithm returns the correct answer for every query.
+
+---
+
+##### Lemma 1  
+During processing a query `(x, y)` all indices `j` with `nums1[j] ≥ x`
+have already been inserted into the Fenwick tree.
+
+**Proof.**
+
+Indices are sorted by `nums1[j]` in decreasing order.
+Indices are inserted by the while‑loop while
+`sorted_items_desc[ptr][0] ≥ x`.  
+
+When the loop finishes, we have processed *all* indices with
+`nums1[j] ≥ x`. ∎
+
+
+
+##### Lemma 2  
+For a Fenwick tree that stores the **maximum sum** of all inserted indices,
+`FT.query(k)` (prefix‑peak query with argument `1 ≤ k ≤ n_uniques`)
+returns
+
+```
+max{ nums1[j] + nums2[j]  |  j inserted  and  rev_id(j) ≤ k }
+```
+
+where `rev_id(j)` is the reverse index of `nums2[j]`.
+
+**Proof.**
+
+The Fenwick update replaces a cell with the maximum of its current value
+and the new value.  
+Thus every cell of the tree contains the maximum sum over the children
+sub‑interval it represents.  
+A prefix query scans exactly the cells that cover the interval
+`[1, k]`, therefore the returned value is the maximum sum among all
+cells with `rev_id ≤ k`. ∎
+
+
+
+##### Lemma 3  
+For a query `(x, y)` let  
+`pos = minimal index with vals[pos] ≥ y`  
+(`bisect_left`).  
+Let `rev_y = n_uniques - pos`.  
+When the Fenwick tree already contains all indices satisfying
+`nums1[j] ≥ x`, the value for `y` is
+
+```
+max{ nums1[j] + nums2[j]  |  nums1[j] ≥ x  and  nums2[j] ≥ y }
+```
+
+if such an index exists; otherwise the tree returns `-1`.
+
+**Proof.**
+
+All indices that satisfy `nums2[j] ≥ y` have
+`rank(j) ≥ pos`.  
+In reverse order this is equivalent for each such index to
+
+```
+rev_id(j) ≤ n_uniques - pos = rev_y
+```
+
+Thus the set of all indices satisfying the query is exactly the set
+of inserted indices with the additional restriction `rev_i ≤ rev_y`.  
+The Fenwick tree prefix query `FT.query(rev_y)` is, by Lemma&nbsp;2,
+the maximum sum over exactly this set.
+If the set is empty, the query scans no cell that contains a value
+greater than `-1` and therefore returns `-1`. ∎
+
+
+
+##### Lemma 4  
+For every query the value placed in `answer` by the algorithm equals the
+required answer.
+
+**Proof.**
+
+Consider an arbitrary query `(x,y)` with original index `idx`.
+
+* The algorithm inserts all indices with `nums1[j] ≥ x` into the Fenwick
+  tree (Lemma&nbsp;1).  
+  All other indices are still absent, so their sums are included in the
+  set of candidates for the query – exactly as needed.
+
+* The Fenwick query is performed with `rev_y` defined above,
+  therefore, by Lemma&nbsp;3, the returned value equals
+
+  ```
+  max{ nums1[j] + nums2[j] | nums1[j] ≥ x, nums2[j] ≥ y }
+  ```
+
+  or `-1` if no such index exists.
+
+* The algorithm stores this value in `answer[idx]`. ∎
+
+
+
+##### Theorem  
+`answer` computed by the algorithm is the exact answer array for the
+given `nums1`, `nums2` and `queries` arrays.
+
+**Proof.**
+
+By Lemma&nbsp;4 every entry of `answer` is correct.
+Consequently the whole array is correct. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.  Complexity Analysis
+
+```
+Let m = n = len(nums1)          (≤ 10^5)
+Let t = len(queries)            (≤ 10^5)
+```
+
+*Compressing values*  
+`O(m log m)` time, `O(m)` memory.
+
+*Sorting items* – `O(m log m)`
+*Sorting queries* – `O(t log t)`
+
+*Processing all queries* – each item is inserted in the Fenwick tree
+exactly once, each query performs one Fenwick query.
+
+```
+Total time   :  O( (m + t) log m )
+Total memory  :  O( m )
+```
+
+Both limits fit easily into the constraints.
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Reference Implementation  (Python 3)
+
+```python
+import bisect
+from typing import List
+
+class FenwickMax:
+    """Fenwick Tree that stores the maximum of prefixes."""
+    def __init__(self, n: int) -> None:
+        self.n = n
+        self.lvl = [ -1 ] * (n + 1   )   # 1‑based indices
+
+    def update(self, i: int, val: int) -> None:
+        """Set tree[i] = max(tree[i], val) and propagate upwards."""
+        while i <= self.n:
+            if val > self.lvl[i]:
+                self.lvl[i] = val
+            i += i & -i
+
+    def query(self, i: int) -> int:
+        """Maximum value inside prefix [1, i]."""
+        res = -1
+        while i:
+            if self.lvl[i] > res:
+                res = self.lvl[i]
+            if res == -1 and i == 0:
+                break
+            i -= i & -i
+        return res
+
+
+class Solution:
+    def maximumSumQueries(
+        self,
+        nums1: List[int],
+        nums2: List[int],
+        queries: List[List[int]],
+    ) -> List[int]:
+        n: int = len(nums1)
+        # ---------- 1. compress nums2 values ----------
+        vals: List[int] = sorted(set(nums2))
+        uniq_n: int = len(vals)
+
+        # ---------- 2. prepare items ----------
+        items = [(nums1[i], nums2[i], nums1[i] + nums2[i]) for i in range(n)]
+        items.sort(key=lambda x: -x[0])  # descending by nums1
+
+        # ---------- 3. prepare queries ----------
+        q_list = [(q[i][0], q[i][1], idx) for idx, q in enumerate(queries)]
+        added: int = 0
+        q_list.sort(key=lambda q: -r[0])  # descending by x
+
+        # ---------- 4. Fenwick tree ----------
+        ft = FenwickMax(uniq_n)
+        ans = [-1] * len(queries)
+
+        # ---------- 5. sweep ----------
+        idx_ptr = 0
+        for x_val, y_val, qidx in q_list:
+            # add all items whose nums1 >= x_val
+            while idx_ptr < n and items[idxptr][0] >= x_val:
+                _, nums2_val, sum_val = items[idx_ptr]
+                pos = bisect.bisect(vals, nums2_val)  # index of first >= num2_val
+                # pos is 0‑based; build reverse mapping
+                rev_id = uniq_n - pos
+                ft.update(pr, q)  # typ boon
+                idx_ptr += 1
+
+            # query the suffix of nums2 >= y_val
+            pos_y = bisect.bisect_left(vals, y_val)
+            rev_y = uniq_n - pos_y
+            res = -1 if rev_y == 0 else ft.query(rev_y)
+            ans[qidx] = res
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

@@ -1,0 +1,558 @@
+<|channel|>analysis<|message|>We need to count stepping numbers between two huge numbers up to 10^100. Approach: DP over length and lexicographic constraint using digit DP counting numbers with stepping property.
+
+We need to count numbers <= high, minus count <= low-1.
+
+We need ability to compute low-1 as string. Since low can be huge, implement subtract function.
+
+DP: Let's define dp[pos][last_digit][tight] where pos is index in digits of limit, last_digit is previous digit or -1 for starting position. Because stepping property refers to adjacent digits difference =1. Implementation: we can use recursion with memoization. For each position, we choose next digit d such that if last_digit != -1, abs(d-last_digit) == 1 else any d (can't be 0 if first digit). The limit digit at current pos is limit[pos] if tight else 9.
+
+We also need to handle leading zeros: we cannot start with zero. So for first position (pos=0) we require d>=1. But we also need to consider case numbers with fewer digits: we can treat leading zeros as not allowed, but for numbers with fewer digits we handle by counting at positions gradually. We can handle by DP that counts numbers of length <= n. Use pos from 0 to n-1. The DP includes counts of numbers that have started or not? Usually we can handle by treating leading zeros as special state. Since first digit must be non-zero, we can enforce that at pos 0. For numbers with less digits, we can treat them as numbers that start at some position later. Approach: For numbers shorter than length L, we can simply count all stepping numbers of length k for k from 1 to L-1. That might be easier: we can precompute count of stepping numbers of length k (no leading zeros). Then for the limit length L, we compute count of numbers <= limit that have length L, using DP that starts at pos=0 and ensures first digit non-zero, and counts numbers with that length.
+
+But there is possibility that low has same length as high. We will compute count <= high and count <= low-1. So we need count for all lengths <= len(high). Our DP for length L can handle numbers of length L. Additionally we need to count all lengths less than L. So we precompute count_k for all k up to 100. For each k, count_k = number of stepping numbers of length k (no leading zeros). We'll use DP: dp_len[pos][digit] number of ways to complete length k from pos with previous digit. For pos 0, choose first digit 1-9. For pos>0, choose digits with difference 1.
+
+We can compute for each k by DP iterative: dp[pos][digit] = number of ways to construct remaining digits? Actually we can compute forward: dp[0][d] =1 for d=1..9. For pos>0, newdp[d] = sum over prev dprev such that abs(d - dprev) ==1. At end of length k, total = sum over dp_last[d]. That yields count_k.
+
+Ok.
+
+Now count <= N (string). We need to handle numbers with same length L as N. We'll do digit DP with state: pos, last_digit, tight. At pos 0, we must choose digit from 1..max_digit, no leading zero. For pos>0, choose digit from 0..max_digit, but must satisfy diff=1. Also we need to handle not starting earlier; but since we enforce first digit non-zero, there's no numbers with fewer digits. So we lose numbers shorter than L. But we want to count them too. So we can compute count <= N by summing counts of lengths less than L using precomputed count_k, plus DP for length L.
+
+But what about numbers ending with zero? That's allowed.
+
+Edge case: N might be 0? but constraint says low>=1. So fine.
+
+Implementation details: Determine count_leq(N). Steps:
+
+- let L = len(N)
+- ans = sum_{k=1}^{L-1} count_k
+- Use DP for length L: pos from 0 to L-1. Use recursion with memoization for (pos, last_digit, tight). last_digit can be -1 at pos 0? But we handle first digit separately. We can just start with pos=0, last_digit = -1, but we need to enforce first digit not zero. So in recursion: if pos==0: choose d from 1 to limit. else d from 0..limit. But we also need to check adjacency: if last_digit != -1: abs(d-last_digit)==1. For pos=0, last_digit == -1: no check.
+
+Memoization: Use dictionary or array of -1 for computed states. Since pos <= 100, last_digit 0-9, tight 0/1. So we can use 3D array dimension [pos][last_digit+1][tight] where last_digit index -1 -> 0. Let's use last_digit index 0-9, separate for starting state: we can store last_digit = -1 as 10. So dp[pos][last_digit_idx][tight] where last_digit_idx in 0..10. 10 corresponds to no previous digit.
+
+Ok.
+
+We also need to handle modulo 1e9+7.
+
+Compute count_leq(N) as ans = sum_{k=1}^{L-1} count_k + dp(0, -1, 1). Then return ans % mod.
+
+Edge: low -1: need to compute string decrement. We can implement function subtract_one(str). If low == "1", then low-1 = 0, but we want count <=0 =0. So if low == "1", we just return count_leq(high). But we need to subtract 1: in general we can compute low_minus1 = subtract_one(low). If low_minus1 == "0", count_leq(0) = 0.
+
+But we also need to handle the case when low==0? Not allowed.
+
+So final answer = (count_leq(high) - count_leq(low-1) + mod) % mod.
+
+Test examples: high=11, low=1. L_high=2. Precompute counts: count_1=9 (digits 1-9). count_2? Let's compute: all 2-digit stepping numbers without leading zeros. digits: first digit 1-9, second digit diff=1 => first digit a => second digit b = a+1 or a-1. So for each a, options: if a=1: 0 or 2 (but 0 allowed? yes because second digit can be 0). For a=9: 8 only. For a=5: 4,6. So total: sum of counts: For a=1: 2, a=2: 2, a=3: 2, a=4:2, a=5:2, a=6:2, a=7:2, a=8:2, a=9:1 => 15. So count_2=15. Sum_{k=1}^{1} count_1=9. Count_leq(11): need to compute DP for length 2 <=11. Let's manually estimate: numbers <=11 with length 2: 10,11? 11 is not stepping because 1-1=0. So only 10. Also 2-digit stepping numbers <=11: 10. So total <=11: 9 + 1 =10. Good.
+
+Second example: low=90, high=101. Count_leq(101). L=3. sum_{k=1}^{2} count_1=9, count_2=15; sum=24. DP for length 3 <= 101. We'll count stepping numbers of length 3 <= 101. Numbers <=101: 100,101. 100 is not stepping because 0-0=0; 101 has 1-0=1, 0-1=1 => stepping. Additional 3-digit stepping numbers <=101: 100? not. 101 only. So DP gives 1. Total 25. Count_leq(89). low-1=89. L=2. sum_{k=1}^{1} count_1=9. DP for length 2 <=89. We need to count all 2-digit stepping numbers <=89. 89 is not stepping. Let's compute: all 2-digit stepping numbers counted earlier: 15. But we need to exclude those >89: 90-99? Let's enumerate: 90 (9-0=9 -> not), 91 (9-1=8 no), 92 (7 no), 93 (6 no), 94 (5 no), 95 (4 no), 96 (3 no), 97 (2 no), 98 (1 yes), 99 (0 no). So only 98 steps. So total stepping numbers <=89: 9 + 1 =10. Hence final count = 25-10=15? Wait expected output 2. Let's compute incorrectly: We considered some numbers with 2-digit length? Wait we need to count numbers between 90 and 101 inclusive. That includes 90,91,...,101. We counted 10 stepping numbers <=89 incorrectly: 10. So step: count_leq(101) = 25. count_leq(89) =? Let's compute: 89 length 2. sum_{k=1}^{1} count_1=9. DP for length 2 <=89. We need to count all 2-digit stepping numbers <=89. Let's list all 2-digit stepping numbers: 10,12,21,23,32,34,43,45,54,56,65,67,76,78,87,89? Wait 89 diff 1? 8-9=1 yes. So 89 is stepping. But 89 is not included? low-1=89, so it is included. So we count all <=89: the full set of 2-digit stepping numbers up to 89. List them: 10,12,21,23,32,34,43,45,54,56,65,67,76,78,87,89 (16). Wait also 98? 98 >89. So count <=89: 9 (single-digit) + 16 = 25. That matches earlier combination? Let's compute: 9 + 16 = 25. But earlier we said 10. Mist. Let's re-evaluate: Count of 2-digit stepping numbers: 15 earlier. But we counted 16? Let's double-check. Our earlier count_2 gave 15. Let's list all 2-digit stepping numbers:
+
+For first digit a=1: second digit 0 or 2 => 10,12
+a=2: 1 or 3 => 21,23
+a=3: 2 or 4 => 32,34
+a=4: 3 or 5 => 43,45
+a=5: 4 or 6 => 54,56
+a=6: 5 or 7 => 65,67
+a=7: 6 or 8 => 76,78
+a=8: 7 or 9 => 87,89
+a=9: 8 only => 98
+
+So total 2+2+2+2+2+2+2+2+1 = 15. Indeed list: 10,12,21,23,32,34,43,45,54,56,65,67,76,78,87,89,98? Wait 98 counted as 1 so 15. Let's count: 10(1),12(2),21(3),23(4),32(5),34(6),43(7),45(8),54(9),56(10),65(11),67(12),76(13),78(14),87(15),89(16),98(17). That's 17? Let's recount: we double count? Let's list clearly: 
+
+1: 10
+2: 12
+3: 21
+4: 23
+5: 32
+6: 34
+7: 43
+8: 45
+9: 54
+10: 56
+11: 65
+12: 67
+13: 76
+14: 78
+15: 87
+16: 89
+17: 98
+
+So 17 numbers. Wait earlier we computed 15. Mist. Let's recompute systematically.
+
+We need to count for each a:
+
+a=1: 0 or 2 => 2 numbers
+a=2: 1 or 3 => 2 numbers
+a=3: 2 or 4 => 2 numbers
+a=4: 3 or 5 => 2 numbers
+a=5: 4 or 6 => 2 numbers
+a=6: 5 or 7 => 2 numbers
+a=7: 6 or 8 => 2 numbers
+a=8: 7 or 9 => 2 numbers
+a=9: 8 only => 1 number
+
+So total = 2*8 + 1 = 17. Yes 17. So earlier 15 erroneous. So count_2 = 17. Then compute earlier: total for length 1 (9) + length 2 (17) = 26. For length 3 <=101, it adds 1. So total 27. So count_leq(101) = 27. Now count_leq(89) = 9 + 16? Wait we need to count 2-digit stepping numbers <=89: from list, all except 98. So 16. 9+16=25. So difference 27-25=2. Good.
+
+So algorithm seems correct.
+
+Now we need to compute count_k up to 100. Complexity: DP for each k: O(k * 10 * 10) ~ 100*100=10k. Fine.
+
+Implementation details:
+
+- Precompute count_k for k=1..100.
+
+DP for length k: we can use array last[10] for number of ways ending with digit d. For k=1: last[d] = 1 for d in 1..9.
+
+For pos from 1 to k-1: new = [0]*10. For each dprev value 0-9: if last[dprev] >0: for each d next: if abs(d-dprev)==1: new[d] += last[dprev]. At end, set last=new. After loop, total = sum(last). That is count_k.
+
+Edge: for length k, digits can be 0-9 for subsequent positions, but we need to ensure leading zeros not allowed: first digit already 1-9. So fine.
+
+Now for count_leq(N):
+
+- L = len(N)
+- ans = sum_{k=1}^{L-1} count_k (mod)
+- Then DP for length L: use recursion with memoization. We'll pass pos (current index 0..L-1), last_digit (-1 or 0-9), tight (0 or 1). return count of ways to complete suffix. When pos==L, return 1 (valid number). Implementation: base case: if pos==L: return 1. But careful: if no digits yet? But we always start with pos=0.
+
+Memoization: use dict or 3D array.
+
+Implementation function:
+
+def count_leq(N: str) -> int:
+    L = len(N)
+    ans = sum(count_k[1:L]) % mod
+    memo = {}
+    def dfs(pos, last_digit, tight):
+        key = (pos, last_digit, tight)
+        if key in memo:
+            return memo[key]
+        if pos == L:
+            return 1
+        limit = int(N[pos]) if tight else 9
+        res = 0
+        for d in range(0, limit+1):
+            if pos == 0:
+                if d == 0:
+                    continue
+                # no adjacency check
+                res += dfs(pos+1, d, tight and d==limit)
+            else:
+                if last_digit == -1:
+                    # shouldn't happen after pos>0
+                    continue
+                if abs(d - last_digit) != 1:
+                    continue
+                res += dfs(pos+1, d, tight and d==limit)
+        res %= mod
+        memo[key] = res
+        return res
+    return (ans + dfs(0, -1, 1)) % mod
+
+But we used last_digit state -1 for pos=0. In recursion, at pos=0 we set last_digit to d and not check adjacency. So when pos>0 we have last_digit set.
+
+Edge: tight condition: if tight is True, limit = int(N[pos]) else 9.
+
+Now for low-1: we need function subtract_one(str). Implementation: convert to list of digits, subtract 1 with borrow.
+
+If low == "1": return "0" (representing no numbers). For low > "1", we subtract 1. We'll need to shift leading zeros? We can remove leading zeros if any.
+
+Edge: if low-1 leads to "0": we just return 0.
+
+Ok.
+
+Edge: When low > high? Not per constraints.
+
+Now complexity: For each count_leq, DP complexity O(L * 10 * 10). With L <= 100. So fine.
+
+Now produce final solution code.
+
+Let's test with examples.
+
+Test1: low=1, high=11. Precompute. count_leq(11) -> 10. low-1=0 -> count_leq(0) -> 0. ans=10. Good.
+
+Test2: low=90, high=101. low-1=89. count_leq(101) -> 27. count_leq(89) -> 25. ans=2.
+
+Edge: low=1, high=1 -> expecting 1. count_leq(1)=1? length 1 => ans=0 + dfs(0,-1,1). For pos=0, limit=1, d=1 -> pos=1->return 1. So 1. low-1=0 => 0. ans=1.
+
+Edge: high=10^100-1? We'll calculate.
+
+Now produce final answer.
+
+Also, we need to handle 0 case: In count_leq, if N = "0" meaning 0, we should return 0. Our logic may incorrectly treat 0 length 1, but we need to handle that. So if N == "0" or high < 1? but low>=1. So we only need to handle when low-1 is 0. We'll handle separately: if N == "0", return 0.
+
+Implementation: in count_leq, if N == "0": return 0.
+
+Now packaging.
+
+Let's produce final solution.
+
+Also ensure mod operations.
+
+Time complexity: O(max_len^2) ~ 10000 per call.
+
+Edge: low high up to 100 digits. Precompute counts up to 100.
+
+Ok.
+
+Let's craft final code.
+
+<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every integer `x` we write its decimal representation
+
+```
+x = d1 d2 … dk          (k = number of digits)
+```
+
+`x` is a *stepping number* iff for every `i (1 ≤ i < k)`
+
+```
+|di – di+1| = 1
+```
+
+The task is to count how many stepping numbers lie in the interval  
+`[low , high]` (`low` and `high` are huge strings, up to 100 digits).
+
+--------------------------------------------------------------------
+
+#### 1.  Counting numbers `≤ N`
+
+Let
+
+```
+cnt_leq(N)  =  number of stepping numbers 1 … N
+```
+
+The answer for the interval is
+
+```
+cnt_leq(high) – cnt_leq(low-1)
+```
+
+So we only have to implement `cnt_leq`.  
+`N` can be as large as `10^100`; we use a *digit DP*.
+
+```
+N = n1 n2 … nL          (L = len(N))
+
+count_leq(N) = #stepping numbers with length < L
+               + #stepping numbers with length = L  and  <= N
+```
+
+--------------------------------------------------------------------
+
+#### 2.  Pre‑computation of the number of length‑k stepping numbers
+
+For a fixed length `k` (no leading zero) we can count all stepping
+numbers by a simple DP.
+
+```
+dp[pos][d]   = number of ways to build the first pos+1 digits
+               whose last digit is d
+```
+
+```
+initialisation  (pos = 0, first digit 1 … 9)
+dp[0][d] = 1        for d = 1 … 9
+
+transition (pos > 0)
+dp[pos][d] = Σ dp[pos-1][p]          over all p with |p – d| = 1
+```
+
+After processing all `k` positions
+
+```
+count_k = Σ dp[k-1][d]          over d = 0 … 9
+```
+
+`k` is at most `100`, so this preprocessing is trivial.
+
+--------------------------------------------------------------------
+
+#### 3.  Digit DP for numbers with length `L`
+
+We need to count some numbers with the same length as `N`
+and no leading zero.  
+The DP state is
+
+```
+pos          – current position (0 … L-1)
+last_digit   – last digit chosen (0 … 9)   or 10 to mean “no previous digit”
+tight        – True  → the already chosen prefix equals the prefix of N
+                False → the prefix is already smaller
+```
+
+```
+dfs(pos, last_digit, tight)
+    if pos == L:                     # all digits chosen
+        return 1
+
+    limit = digit of N at pos if tight else 9
+    answer = 0
+    for d in 0 … limit:
+        if pos == 0 and d == 0:      # leading zero forbidden
+            continue
+        if pos > 0 and |d – last_digit| != 1:
+            continue
+        answer += dfs(pos+1,
+                      d,
+                      tight and (d == limit))
+    return answer  (mod 1e9+7)
+```
+
+The number of different states is `L * 12 * 2`  
+(`last_digit` can be 0–9 or 10, and `tight` is 0/1).  
+With `L ≤ 100` this is negligible.
+
+--------------------------------------------------------------------
+
+#### 4.  Subtracting one from a big integer given as a string
+
+```
+sub_one(str)
+    if str == "1": return "0"
+    process from the least significant digit, borrow as needed
+    strip leading zeros
+```
+
+If `low == "1"`, `low-1` becomes `"0"`.  
+`cnt_leq("0")` is defined as `0`.
+
+--------------------------------------------------------------------
+
+#### 5.  Correctness Proof  
+
+We prove that the algorithm returns the correct number of stepping
+numbers in `[low, high]`.
+
+---
+
+##### Lemma 1  
+For every `k ≥ 1` the preprocessing routine returns  
+`count_k` = the number of stepping numbers with exactly `k` digits and
+no leading zero.
+
+**Proof.**
+
+The DP starts with all possible first digits `1 … 9`.  
+For every next position it only appends digits that differ by `1` from
+the previous digit, thus enforcing the stepping property.
+All possibilities are counted exactly once, because the recursion
+exactly follows the construction of a number.
+After the last position the sum over all ending digits gives the
+total number of valid `k`‑digit numbers. ∎
+
+
+
+##### Lemma 2  
+For a fixed length `L` the digit DP `dfs` returns the number of
+stepping numbers of length `L` that are **not larger** than `N`.
+
+**Proof.**
+
+We prove by induction over `pos` the invariant
+
+```
+dfs(pos, last_digit, tight)
+      = number of ways to finish the suffix from position pos
+        under the conditions:
+        • the already fixed prefix is the same as the prefix of N
+          iff tight == True
+        • the digit before pos is last_digit (or none if last_digit = 10)
+        • the resulting number is a stepping number
+```
+
+*Base (`pos == L`)*  
+All positions are fixed, the number is complete and satisfies the
+stepping property.  
+The function returns `1`, which is exactly the number of such
+completions.
+
+*Induction step (`pos < L`)*  
+The function iterates over all possible next digits `d` that satisfy
+the local constraints:
+
+* `0 ≤ d ≤ limit` – `limit` is the digit of `N` at `pos` if `tight`;
+  otherwise the next digit may be any 0–9.
+* If `pos == 0`, `d ≠ 0` forbids leading zeros.
+* If `pos > 0`, the stepping property `|d – last_digit| = 1` is enforced.
+
+For each admissible `d` the recursion
+`dfs(pos+1, d, tight and d==limit)` counts the number of
+valid completions of the suffix, which by the induction hypothesis
+fulfils all conditions.  
+Summation over all admissible `d` gives exactly the number of
+valid completions for the current state.
+
+Thus the invariant holds for `pos`, and by induction for all `pos`. ∎
+
+
+
+##### Lemma 3  
+`cnt_leq(N)` computed by the algorithm equals the number of
+stepping numbers `x` with `1 ≤ x ≤ N`.
+
+**Proof.**
+
+Let `L = len(N)`.
+
+*All numbers with length `< L`*  
+By Lemma&nbsp;1 the preprocessing gives the exact amount for each
+length `k < L`.  
+The algorithm sums them, so the contribution of all shorter lengths is
+exact.
+
+*Numbers with length `L`*  
+By Lemma&nbsp;2 the digit DP returns precisely the number of
+stepping numbers of length `L` that are not larger than `N`.
+
+The algorithm adds these two non‑overlapping sets, therefore
+`cnt_leq(N)` equals the desired quantity. ∎
+
+
+
+##### Lemma 4  
+`cnt_leq(low-1)` is the number of stepping numbers strictly smaller
+than `low`.
+
+**Proof.**
+
+`low-1` is computed correctly by the subtraction routine.
+The algorithm applies `cnt_leq` to this value, and by Lemma&nbsp;3 the
+result is the number of stepping numbers `≤ low-1`, i.e. `< low`. ∎
+
+
+
+##### Theorem  
+`Solution.countSteppingNumbers(low, high)` returns
+
+```
+| { x | low ≤ x ≤ high  and  x is a stepping number } |
+```
+
+taken modulo `10^9+7`.
+
+**Proof.**
+
+Let `A` be the set of stepping numbers in `[low, high]`.  
+By Lemma&nbsp;3, `cnt_leq(high)` equals the number of stepping numbers
+`≤ high`.  
+By Lemma&nbsp;4, `cnt_leq(low-1)` equals the number of stepping numbers
+`< low`.  
+Therefore
+
+```
+cnt_leq(high) – cnt_leq(low-1)
+   = |{x | 1 ≤ x ≤ high}| – |{x | 1 ≤ x < low}|
+   = |{x | low ≤ x ≤ high}|
+   = |A|
+```
+
+The algorithm outputs this difference modulo `10^9+7`.  
+All intermediate values are reduced modulo `10^9+7`, hence the final
+value is correct. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.  Complexity Analysis
+
+Let `L = max(len(low), len(high)) ≤ 100`.
+
+*Pre‑computation*  
+`O(L^2)` time, `O(L)` memory (a few arrays of size `10`).
+
+*Count for a single bound*  
+`O(L * 10 * 2)` states, each processed in `O(1)` time →  
+`O(L)` time, `O(L)` memory.
+
+The algorithm performs the bound calculation twice,
+so the total time is `O(L)` ≈ `O(100)` and the memory consumption is
+`O(L)`.
+
+Both are easily fast enough for the given limits.
+
+
+
+--------------------------------------------------------------------
+
+#### 7.  Reference Implementation  (Python 3)
+
+```python
+import sys
+from functools import lru_cache
+
+MOD = 10 ** 9 + 7
+
+class Solution:
+    def countSteppingNumbers(self, low: str, high: str) -> int:
+        # ---------- pre‑compute counts for every length ----------
+        max_len = max(len(low), len(high))
+        count_len = [0] * (max_len + 1)   # 0 unused
+        for k in range(1, max_len + 1):
+            # dp[pos][d]   – number of ways up to pos with last digit d
+            prev = [0] * 10
+            for d in range(1, 10):          # first digit
+                prev[d] = 1
+            for _ in range(1, k):
+                cur = [0] * 10
+                for dprev in range(10):
+                    if prev[dprev] == 0:
+                        continue
+                    if dprev > 0:
+                        cur[dprev - 1] = (cur[dprev - 1] + prev[dprev]) % MOD
+                    if dprev < 9:
+                        cur[dprev + 1] = (cur[dprev + 1] + prev[dprev]) % MOD
+                prev = cur
+            count_len[k] = sum(prev) % MOD
+
+        # ---------- helper: subtract one from a big integer ----------
+        def sub_one(s: str) -> str:
+            if s == "1":
+                return "0"
+            digits = list(map(int, s))
+            i = len(digits) - 1
+            while i >= 0 and digits[i] == 0:
+                digits[i] = 9
+                i -= 1
+            digits[i] -= 1
+            # remove leading zeros
+            res = ''.join(str(d) for d in digits).lstrip('0')
+            if res == '':
+                res = "0"
+            return res
+
+        # ---------- count stepping numbers <= N ----------
+        def cnt_leq(N: str) -> int:
+            if N == "0":
+                return 0
+            L = len(N)
+            ans = 0
+            # all lengths < L
+            for k in range(1, L):
+                ans = (ans + count_len[k]) % MOD
+
+            # DP for length L
+            @lru_cache(maxsize=None)
+            def dfs(pos: int, last_digit: int, tight: int) -> int:
+                if pos == L:
+                    return 1
+                limit = int(N[pos]) if tight else 9
+                res = 0
+                for d in range(0, limit + 1):
+                    if pos == 0 and d == 0:        # leading zero not allowed
+                        continue
+                    if pos > 0 and abs(d - last_digit) != 1:
+                        continue
+                    res += dfs(pos + 1, d, tight and (d == limit))
+                return res % MOD
+
+            ans = (ans + dfs(0, 10, 1)) % MOD       # 10 means no previous digit
+            return ans
+
+        # ---------- final answer ----------
+        low_minus_one = sub_one(low)
+        ans = cnt_leq(high) - cnt_leq(low_minus_one)
+        ans %= MOD
+        return ans
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required function signature.

@@ -1,0 +1,242 @@
+<|channel|>analysis<|message|>We need to count subarrays whose pairwise absolute difference <= 2. This property is equivalent to: maximum - minimum in subarray <= 2. Since if difference 2 between any pair, that's max-min <= 2. Also, the condition says < =2: both sides satisfy the min difference.
+
+We can use sliding window: maintain deque for min and max and find longest window ending at each position where max-min <=2. For each right pointer r, we add element, update deques; then while max-min>2, need to move left pointer l++. The number of valid subarrays ending at r is (r-l+1). Sum over r.
+
+Constraints up to 1e5, so O(n). Implementation details: Use collections.deque of indices. Remove largest from max deque with decreasing order; and maintain min deque with increasing order.
+
+Will produce up to about 1e10 maybe bigger than int? With n up to 1e5, res up to ~n*(n+1)/2 ~ (1e5^2)/2 ~ 5e9 < 2^31? 5e9 > 2^31-1 (2.147e9). So need 64-bit: Python int is fine.
+
+Implement:
+
+class Solution:
+    def continuousSubarrays(self, nums: List[int]) -> int:
+        from collections import deque
+        n=len(nums)
+        maxdq=deque()
+        mindq=deque()
+        l=0
+        res=0
+        for r,val in enumerate(nums):
+            while maxdq and nums[maxdq[-1]] <= val:
+                maxdq.pop()
+            maxdq.append(r)
+            while mindq and nums[mindq[-1]] >= val:
+                mindq.pop()
+            mindq.append(r)
+            while nums[maxdq[0]] - nums[mindq[0]] > 2:
+                l += 1
+                if maxdq[0] < l:
+                    maxdq.popleft()
+                if mindq[0] < l:
+                    mindq.popleft()
+            res += r - l + 1
+        return res
+
+Edge cases: n=1 works.
+
+Let's test: For [5,4,2,4], steps: 0,1 => val 5 etc.
+
+Ok. Should produce 8.
+
+Let's craft final explanation.
+
+We need to write gcd? Wait.
+
+Will produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a subarray `nums[l … r]`  
+`| nums[i] – nums[j] | ≤ 2` for every pair `(i , j)`  
+⇔ the maximum element and the minimum element of the subarray differ by at most `2`  
+⇔ `max(nums[l … r]) – min(nums[l … r]) ≤ 2`.
+
+So we only have to maintain the current maximum and minimum while we move the
+right border of a window.
+The number of continuous subarrays that end at position `r` is the length of the
+longest segment that satisfies the condition, i.e. `(r – l + 1)`.
+
+--------------------------------------------------------------------
+
+#### Two‑deques
+
+While extending the window we need to know
+
+* the current maximum value  
+* the current minimum value
+
+The standard way to keep `max` and `min` in *O(n)* time is to maintain two
+double-ended queues (deques) that store indices **monotonically**.
+
+* `maxdq`   – indexes are *decreasing* in value      → holds the maximum element at its front  
+* `mindq`   – indexes are *increasing* in value      → holds the minimum element at its front  
+
+When a new element `nums[r]` arrives:
+
+1. Remove indices from the back of `maxdq` whose value is ≤ `nums[r]`
+   (the new element becomes the new maximum).
+2. Append `r` to `maxdq`.
+3. Analogously for `mindq` – remove indices whose value is ≥ `nums[r]`.
+
+When the window is too wide (`max(minimum) – min(minimum) > 2`) we must move the
+left border `l` forward until the condition is satisfied again.
+During this move we also remove indices that leave the window.
+
+After the loop is finished the window ends at `r` and is the longest
+valid subarray that ends at `r`.  
+All `r‑l+1` subarrays ending at `r` are valid: `nums[l … r]`,
+`nums[l+1 … r]`, …, `nums[r … r]`.
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the number of continuous subarrays.
+
+---
+
+##### Lemma 1  
+At any time, after processing index `r`,  
+`maxdq[0]` is the index of the maximum element in the current window
+`[l … r]`, and `mindq[0]` is the index of the minimum element in the
+current window.
+
+**Proof.**
+
+*Invariant of `maxdq`:*  
+The values at indices inside `maxdq` are strictly decreasing
+(because during insertion we remove all smaller or equal ones, and we only
+append at the back).  
+The index at the front is the smallest remaining index.  
+All bounded indices that may be the maximum of `nums[l … r]` are kept
+because the deque never removes an element that is larger than the new
+inserted value and its index is ≥ `l`.  
+Conversely, if a larger index is in the window, the old index is
+removed, so the new index can become the highest.  
+Thus `maxdq[0]` is exactly the index of the maximum element.
+
+*Invariant of `mindq`:*  
+Symmetric reasoning gives the analogous property for the minimum.
+
+∎
+
+
+
+##### Lemma 2  
+After the inner `while` loop (shrinking the window) terminates,
+`max(nums[l … r]) – min(nums[l … r]) ≤ 2`.
+
+**Proof.**
+
+The loop continues while the maximum (index `maxdq[0]`) minus the minimum
+(index `mindq[0]`) is strictly larger than 2.  
+When the loop ends, the condition becomes `≤ 2`.  
+By Lemma&nbsp;1, the values of
+`maxdq[0]` and `mindq[0]` are exactly the true maximum and minimum
+values of the window. ∎
+
+
+
+##### Lemma 3  
+While processing index `r`, the algorithm’s window `[l … r]` is the
+longest segment ending at `r` that satisfies the condition.
+
+**Proof.**
+
+* If the window after reasoning (Lemma&nbsp;2) was too short, we could
+increase `l` further while keeping the condition true.  
+Inserting the largest element would still keep the max–min difference
+≤ 2, so the longer window could be valid – contradicting the loop
+termination, because we removed every index that made the inequality
+false.  
+Hence the window is maximal.
+
+∎
+
+
+
+##### Lemma 4  
+The number added to `res` at iteration `r` equals the number of
+continuous subarrays that end at `r`.
+
+**Proof.**
+
+```
+res += r - l + 1
+```
+
+All subarrays of the form `nums[k … r]` for `k = l … r` are valid.
+Their count is `r - l + 1`.  
+No other subarray ending at `r` can be valid because
+it would have to start at an index `k < l`, thus containing the
+smaller interval `[k … l-1]` which already violates the
+max–min condition.
+Therefore `r - l + 1` is exactly the required count. ∎
+
+
+
+##### Theorem  
+`res` returned by the algorithm equals the total number of continuous
+subarrays of `nums`.
+
+**Proof.**
+
+By Lemma&nbsp;4, for each right end `r` the algorithm adds the number of
+valid subarrays ending at `r`.  
+Summing over all `r = 0 … n-1` gives all bounded subarrays.
+Each subarray has exactly one right end, so the counted subarrays are
+non‑overlapping and cover every continuous subarray.  
+Therefore the final value of `res` equals the required count. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+* Each element enters and leaves each deque at most once.  
+  All operations inside loops are `O(1)` amortised.  
+  ⇒ **Time** `O(n)`.
+* Two deques store at most all indices `0 … n-1`.  
+  ⇒ **Memory** `O(n)`.
+
+--------------------------------------------------------------------
+
+#### Reference Implementation  (Python 3)
+
+```python
+from collections import deque
+from typing import List
+
+class Solution:
+    def continuousSubarrays(self, nums: List[int]) -> int:
+        maxdq = deque()            # indices of decreasing elements
+        mindq = deque()            # indices of increasing elements
+        l = 0
+        res = 0
+
+        for r, val in enumerate(nums):
+            # maintain max deque
+            while maxdq and nums[maxdq[-1]] <= val:
+                maxdq.pop()
+            maxdq.append(r)
+
+            # maintain min deque
+            while mindq and nums[mindq[-1]] >= val:
+                mindq.pop()
+            mindq.append(r)
+
+            # shrink window while condition violated
+            while nums[maxdq[0]] - nums[mindq[0]] > 2:
+                l += 1
+                if maxdq[0] < l:
+                    maxdq.popleft()
+                if mindq[0] < l:
+                    mindq.popleft()
+
+            # all subarrays ending at r are valid
+            res += r - l + 1
+
+        return res
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

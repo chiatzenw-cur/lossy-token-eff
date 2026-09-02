@@ -1,0 +1,310 @@
+<|channel|>analysis<|message|>We need to decide whether we can reduce all elements to 0 by applying operation: choose any subarray of size k, decrease each element by 1. Equivalent to we can subtract 1 from any continuous block of length k. We can repeat as many times. We ask if there exist numbers of operations per index such that each index reduced to zero. Essentially we can consider differences across indices.
+
+Observation: Operation subtracts 1 from a contiguous slice of length k. Equivalent to we can increment positions via +/-? Let's transform to prefix difference. Standard approach: difference array diff, initially zero. For each operation starting at i (0 <= i <= n-k), we decrement diff[i] by 1, diff[i+k] by +1 (since after length k it returns). So each operation adds -1 to range [i, i+k-1] and 0 outside.
+
+Goal: final array equals original nums + cumulative effect should equal 0. Each index j: nums[j] + cumulative effect (sum_{ops affecting j} (-1)) = 0 => cumulative effect = -nums[j]. So we need to choose operations such that for each position j, the number of operations covering j equals nums[j]. Let's define count_j = number of operations covering j. Each operation covers exactly k contiguous positions. So we need to find a multiset of start indices such that each index j is covered exactly a_j=nums[j] times. That's like covering each position with a number equal to its requirement.
+
+This is a known schedule: each operation covers k consecutive positions and we need cover counts equal to a_j. We can greedily sweep from left to right.
+
+Classic problem "Make all zeros by subtracting one from subarray of size k" known to be solvable via greedy using a sliding window or difference array to track ongoing operations.
+
+Method: maintain difference array `diff` of size n+1 for pending decrements due to operations started earlier. Here we simulate operation counts to subtract numbers from array.
+
+Greedy: iterate i from 0 to n-1. Keep a variable `active` representing how many operations are currently affecting index i (i.e., from earlier starts that haven't ended yet). Initially active=0. We consider original nums[i]. After all previous operations subtractions, the required to reduce to 0 is (nums[i] - active). Because active operations already subtracted from this element. If this value negative -> impossibility (though should not happen because active <= nums[i] if feasible). We need to apply (nums[i] - active) operations starting at i to reduce element to zero. Those operations will also affect next positions up to i+k-1. We add this count to result (not needed). Update active += required. Also we need to schedule removal of this many operations after k positions (when their effect ends). We can store them in diff array: diff[i+k] += required (so when we pass index i+k later, we do active -= diff[i+k]). But careful: if i+k > n-1, those operations will exceed array; but that's fine as long as we don't exceed indices: actually if last positions after applying operation exceed array bounds, then inability? Let's analyze: If we start operation at i such that i+k-1 >= n, then operation would overstep array. Operation requires subarray of size k fully within array. So we can only start at indices 0 .. n-k. If i > n-k, cannot start new. Thus when processing i > n-k, we cannot add more operations. So our algorithm only must attempt starting at i <= n-k. For i > n-k, we cannot satisfy requirement unless active already covers them adequately. So algorithm: We iterate i from 0 to n-1. If i <= n-k: required = nums[i] - active. If required < 0 => early fail. else we start that many ops at i: active += required, schedule diff[i+k] += required (or only if i+k <= n). But diff array needs size n+1 to avoid bounds. else (i > n-k): we cannot start new operations; we just check if active == nums[i]. Actually active may produce more than nums[i] -> if active > nums[i] that's fine? Wait active is number of operations covering this position; each operation reduces by 1 each time. We need each position reduced to 0. So after all adjustments, the total reductions applied to j is active (the number of operations covering j). So requirement: active must equal nums[j]. Since operations subtract 1 exactly once per operation for positions in its subarray. In algorithm, we are adjusting active to match nums[i] at each step: For i <= n-k, we compute required = nums[i] - active. After adding required to active and scheduling its removal at i+k. So after update, active becomes nums[i]. So each element j when we process it we guarantee that after processing, active equals nums[j], thus will subtract exactly necessary times. This works as long as we never try to start ops for i > n-k. After finishing loop, after n-1 we don't need to check anything else because we guaranteed each element processed reduces to zero. But we must also ensure that at positions > n-k, active may drop due to previous ops removal. When we reach i > n-k, if we can't start new ops, we just verify that active == nums[i]. However, if i > n-k but active > nums[i] due to many earlier operations, we cannot reduce more; but that's okay? Wait, we need active to equal nums[i]. But active may be larger than nums[i] because earlier operations cover them too many times -> would result in negative values (over-subtracting). In greedy algorithm, we never allow active to exceed nums[i] because at position i we had active at previous step; we didn't adjust it. But active may be larger than nums[i] after previous removals no start? Let's reason.
+
+At i <= n-k, we set required = nums[i] - active. If required >=0, we add required. So after that at i, active = nums[i]. So active <= nums[i]. For next i+1, we will first subtract diff[i+1] (operations whose start index i+1-k?). Hmm. For j > i, active may drop due to operations whose subtraction period ended. So active can only go down or up. But could active exceed nums[j]? Suppose at j > i, active might be higher than nums[j] >? Because we might have many operations started earlier that still cover j. Greedy ensures we started operations exactly to satisfy earlier elements. This may cause later elements to see active > nums[j]. In that case we cannot reduce them further, so impossible. So algorithm requiring at every step: after subtracting any previously finished ops, we compute after that the active is the current coverage. If active > nums[i], impossible -> return False. If i <= n-k, we then start additional required = nums[i] - active to bring active to nums[i]. If i > n-k, we cannot start new operations; if active != nums[i] we cannot adjust, return False. Implementation: iterate i from 0 to n-1:
+- active -= diff[i] (where diff[i] recorded previous removals). For i==0 diff[0]==0.
+- if active > nums[i] -> return False (over-subtracted)
+- if i <= n-k:
+    required = nums[i] - active
+    active += required
+    diff[i+k] += required
+  else:
+    if active != nums[i]: return False
+After loop, return True.
+
+Edge cases: diff size n+1. diff[i+k] may be out of bound? diff length n+1 ensures i+k <= n. For i up to n-k inclusive, i+k <= n, so diff[i+k] index is inside 0..n. We'll never refer to diff[n+1].
+
+Now complexity O(n) time and O(n) space for diff. Space can be O(n). Possibly memory up to 100k plus.
+
+Test example:
+
+nums [2,2,3,1,1,0], k=3.
+diff init zero, active=0
+i=0, diff[0]=0, active=0 <=2, i<=3: required 2 -> active=2 diff[3]+=2
+i=1, active-=diff[1]=0 -> active=2 <=2, i<=3 so required 0 -> active=2 diff[4]+=0
+i=2, active-=diff[2]=0 -> active=2 <=3 => required=1 -> active=3 diff[5]+=1
+i=3 active-=diff[3]=2 -> active=1 <=1 => i>3? i=3 <=3? n-k=3. Since i==3, still <=. requirement =0; diff[6]+=0 (size n+1)
+i=4 active-=diff[4]=0 -> active=1 <=1? Wait active=1. but active==nums[4]=1 good. i>3 => cannot start; but we have active=1, nums[4]=1 -> ok. since i>3 and active==nums[4] -> continue.
+i=5 active-=diff[5]=1 -> active=0 <=0 good. i>3 cannot start, active==nums[5] ->0. Works.
+
+Second example: [1,3,1,1], k=2
+n=4, n-k=2
+diff size 5
+i0: active0=0 <=1, required1, active=1 diff[2]+=1
+i1: active-=diff1=0 ->1 <=3, i<=2, required=2 -> active=3 diff[3]+=2
+i2: active-=diff2=1 ->2 <=1? Wait active becomes 2 after subtract diff[2] value 1 So active=2 > nums[2]=1 => return False. Good.
+
+Edge case: large values up to 1e6, active potentially large up to 1e6 * 1e5? but manageable with 64-bit.
+
+Hence solution.
+
+Now produce final explanation and code.
+
+Potential optimization: we can use list to hold diff; pseudocode.
+
+We note: use `size = len(nums)`; diff=[0]*(size+1). active=0
+
+loop for i in range(len(nums)):
+    active -= diff[i]
+    if active > nums[i]: return False
+    if i <= size-k:
+        needed = nums[i] - active
+        active += needed
+        diff[i+k] += needed
+    else:
+        if active != nums[i]
+          return False
+
+Return True.
+
+Now produce final message with code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every operation we choose a *contiguous* block of length `k`
+and decrease each element inside it by `1`.
+
+Let  
+
+```
+cover[j] = number of operations whose block contains index j
+```
+
+After all operations the value at index `j` will be
+
+```
+nums[j] – cover[j]
+```
+
+We need this to be `0` for every index, i.e.
+
+```
+cover[j] = nums[j]
+```
+
+The task is therefore:
+
+*Is it possible to choose (multi‑set of) start positions such that every
+index `j` is covered exactly `nums[j]` times?*
+
+--------------------------------------------------------------------
+
+#### 1.  Greedy sweep (from left to right)
+
+Assume we have already decided all operations that start **before** some
+position `i`.  
+While we move to position `i` we know how many of those operations
+still affect us – let this number be `active`.
+
+* `active` (current running operations) is decreased by all operations that
+  *ended* at this index (their block length is exactly `k`).
+* After the decrease, if `active > nums[i]` we already subtracted too
+  many times – impossible.
+* If we can still start new blocks at `i` (`i ≤ n-k`),
+  we must start exactly
+
+```
+need = nums[i] – active
+```
+
+operations, otherwise the element would stay positive.
+These new operations will be active for the next `k` indexes and we
+record their *ending* at `i + k` so that later we can subtract them from
+`active`.
+
+If `i > n-k` we cannot start a new block.  
+There we only need the current `active` to equal `nums[i]`; otherwise
+the element cannot be reduced, so we fail.
+
+This greedy choice is safe because each element is forced to use
+all remaining operations that are still available (those that start
+to the left of it).  
+If we could never reach the needed count for any index, no other
+ordering of operations could fix it.
+
+--------------------------------------------------------------------
+
+#### 2.  Pre‑computation structure – difference array
+
+When an operation starts at `i` we need to
+
+```
+active += 1     (for the next k indices)
+active -= 1     (exactly k indices later)
+```
+
+Instead of touching `k` positions we store the future subtraction
+in an auxiliary array `diff` :
+
+```
+diff[i]   += 1   # start of coverage
+diff[i+k] -= 1   # end: counter becomes zero after k steps
+```
+
+During the sweep we simply add `diff[i]` to `active`.
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns `True` iff the array can be turned into
+all zeros.
+
+---
+
+##### Lemma 1  
+During the sweep, after processing position `i` the variable `active`
+equals the number of operations covering index `i`.
+
+**Proof.**
+
+*Initialization.*  
+Before the first iteration `active = 0`; no operation has started yet,
+so the lemma holds for `i = 0`.
+
+*Induction step.*  
+Assume it is true for index `i-1`.  
+When we move to `i` we first subtract `diff[i]` from `active`.
+`diff[i]` contains exactly the number of operations that ended before `i`;
+hence after the subtraction `active` equals the number of operations
+still covering `i` that started earlier.
+
+If `i ≤ n-k`, we start `need = nums[i] - active` additional operations.
+All of them cover also index `i`, so we add exactly that number to
+`active`.  
+Now `active = nums[i]` – precisely the required number of covering
+operations for index `i`.
+
+If `i > n-k`, we do not start any new operation, so the number of
+covering operations stays `active`.  
+∎
+
+
+
+##### Lemma 2  
+If the algorithm ever returns `False`, then no sequence of operations can
+make all array elements zero.
+
+**Proof.**
+
+The algorithm can fail in two places:
+
+1. `active > nums[i]` after subtracting finished operations.  
+   By Lemma&nbsp;1 we already have more operations covering `i` than the
+   value of `nums[i]`; any further operation would decrease the element
+   below zero.  
+   Therefore it is impossible to finish with all zeros.
+
+2. `i > n-k` and `active ≠ nums[i]`.  
+   Since we can no longer start new operations, the number of covering
+   operations for `i` is fixed to `active`.  
+   If this is not equal to `nums[i]`, the cell `i` cannot be reduced to
+   zero – impossible.
+
+Thus every failure means the goal is unreachable. ∎
+
+
+
+##### Lemma 3  
+If the algorithm completes the loop without returning `False`,
+then there exists a sequence of operations that turns all elements
+into zero.
+
+**Proof.**
+
+During the sweep the algorithm starts exactly
+`need = nums[i] - active` operations at every applicable position `i`.
+All these operations are counted in the difference array `diff`, hence
+they are scheduled to end after `k` positions.
+
+By construction,
+
+* for every index `i ≤ n-k` the algorithm guarantees after processing
+  it that `active = nums[i]`; therefore exactly `nums[i]` operations
+  cover index `i`, reducing it to zero.
+* for every index `i > n-k` the algorithm verifies `active = nums[i]`,
+  otherwise it would have failed.  Since we do not start any new
+  operations after this point, `active` stays constant, and again the
+  element is reduced to zero.
+
+Consequently the sequence of all started operations (which is
+finite) transforms the whole array into zeros. ∎
+
+
+
+##### Theorem  
+The algorithm returns `True` **iff** all elements of `nums` can be
+reduced to zero using the described operation.
+
+**Proof.**
+
+*If* :  
+If the algorithm returns `True`, it completed the loop without failure.
+By Lemma&nbsp;3 the corresponding operations exist, thus the goal is
+achievable.
+
+*Only if* :  
+If the goal is achievable, the algorithm can never hit a case of
+Lemma&nbsp;2, otherwise the goal would be impossible.
+Hence the algorithm never returns `False` and finally returns `True`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+*`n = len(nums)`*
+
+* Creating the difference array: `O(n)`
+* One linear sweep: `O(n)`
+* Extra memory: `O(n)` for the difference array.
+
+Both the time and memory requirements satisfy the limits
+(`n ≤ 100 000`).
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def checkArray(self, nums: List[int], k: int) -> bool:
+        n = len(nums)
+        diff = [0] * (n + 1)         # difference array: diff[i] is added to active at step i
+        active = 0                   # current number of operations covering this position
+
+        for i in range(n):
+            # operations that ended before i
+            active -= diff[i]
+
+            # overshoot: already too many subtractions
+            if active > nums[i]:
+                return False
+
+            if i <= n - k:
+                # number of new operations needed to make nums[i] become zero
+                need = nums[i] - active
+                active += need
+                # they stop affecting the array after k positions
+                diff[i + k] += need
+            else:
+                # cannot start new operations, so we must already have exact match
+                if active != nums[i]:
+                    return False
+
+        return True
+```
+
+The code follows exactly the algorithm proven correct above.

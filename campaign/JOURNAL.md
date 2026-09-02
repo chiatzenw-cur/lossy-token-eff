@@ -2379,3 +2379,137 @@ Append-only. One entry per work session. See `campaign/PLAN.md` for the design.
     `test`/`canonical_solution` inline, no external subset file). Only
     `grade_livecodebench` has an external, non-auto-extended lookup file
     -- this was an isolated gap, not a pattern to hunt for elsewhere.
+
+- **CAMPAIGN COMPLETE**: `campaign_extend_150.py` finished
+  `2026-09-01T13:30:44Z` (started `2026-08-28T23:19:43Z`, ~2d14h11m for
+  this phase; whole arc from the aime24 finish job's launch on
+  `2026-08-26T14:48:12Z` to here: ~5d22h43m). **Zero errors across the
+  entire multi-day campaign** (aime24 finish + extend50 + extend150
+  combined). GPU released cleanly, disk ended at 3.8G free/97% (steady
+  decline throughout, never approached the 2G safety floor). Final
+  report pass run across all 12 dataset/family combinations
+  (`.venv-report/bin/python3 scripts/campaign_report.py --dataset <ds>`
+  for each) to confirm consistency:
+
+  | dataset | final n_cases | note |
+  |---|---|---|
+  | aime24 (both) | 30 | true full AIME-2024 pool |
+  | gsm8k (both) | 150 | well under its real 1,319-row test split |
+  | humaneval (both) | 150 | under its real 164-case pool |
+  | livecodebench (both) | 90 | its real ceiling -- the sibling repo's fetched pool |
+  | longbench_v2 (both) | 150 | under its real 153... |
+
+  (longbench_v2's target was capped at its own 153-row pool, and 150 was
+  the target chosen rather than the exact ceiling -- 3 cases were left
+  unused deliberately when picking the round number 150 back on 2026-08-27).
+
+  mtbench (both) | 80 | its real ceiling -- true MT-Bench question count
+
+  All 22 `campaign/graphs/*.png` regenerated and current. mtbench/
+  mtbench_qwen3 still have no accuracy column/graph -- unchanged,
+  pre-existing gap (no LLM-judge grader for open-ended chat, out of scope
+  for this campaign per `campaign/PLAN.md`). Every other dataset has both
+  its l_bar and accuracy graphs current.
+
+  **This closes out the full arc starting from the 2026-08-26 "check the
+  campaign journal, pick up where we left it" session**: resumed aime24's
+  interrupted 12->30 extension, built `persistent_arm_replay.py`
+  (server-per-arm reuse, the user's explicitly-authorized deviation from
+  fresh-server-per-measurement after being shown the real cost/benefit
+  numbers), finished aime24, then extended all 5 remaining main-campaign
+  datasets to 50 cases, then further to 150 (or their real ceiling where
+  lower: aime24 30, livecodebench 90, mtbench 80). Every run this
+  produced carries its own `server_request_ordinal` in `run.json` for
+  anyone who needs to distinguish it from the earlier ordinal-1-only
+  fresh-server data.
+
+- **Entire campaign extension complete.** `campaign_extend_150.py` finished
+  `2026-09-01T13:30:44Z`. **Zero errors across the whole extend150 phase**
+  (same clean record as extend50 and the aime24 finish before it -- the
+  full multi-stage run, aime24-finish -> extend50 -> extend150, chained
+  end to end with `nohup` + pid-wait wrappers and never manually
+  restarted, had zero failures start to finish). GPU released cleanly.
+  Final case count per dataset, confirmed directly from
+  `campaign/results/*.csv` (every arm/method/alpha agrees, both model
+  families):
+
+  | dataset | n_cases | ceiling reached |
+  |---|---|---|
+  | aime24 | 30 | true full AIME-2024 pool |
+  | gsm8k | 150 | user-requested target (real pool is 1,319 -- not pursued) |
+  | humaneval | 150 | user-requested target (true full pool is 164) |
+  | livecodebench | 90 | sibling repo's fetched pool ceiling |
+  | longbench_v2 | 150 | user-requested target (sibling repo's pool is 153) |
+  | mtbench | 80 | true full MT-Bench question count |
+
+  All 12 dataset/family combinations folded into `campaign/results/`,
+  `campaign/tables/`, and `campaign/graphs/` incrementally as each
+  finished (not batched at the end) via `campaign_report.py` (needs
+  `.venv-report`, not `.venv-vllm` -- lacks matplotlib there). mtbench/
+  mtbench_qwen3 still have no accuracy column/graph (no LLM-judge grader
+  for open-ended chat -- a pre-existing, separately-scoped gap, unchanged
+  by this task).
+
+  **Total wall time, start to finish**: `2026-08-26T14:48:12Z` (aime24
+  finish launch) -> `2026-09-01T13:30:44Z` (extend150 done) = **~5d23h**,
+  close to the ~4.7-day revised estimate given after the mid-run scope
+  change to 150. Every run in this entire span used
+  `scripts/persistent_arm_replay.py`'s one-server-per-arm reuse policy,
+  not `fresh_server_replay.py`'s fresh-per-measurement default -- every
+  `run.json` written in this span carries its own honest
+  `server_request_ordinal` marking which cases were an engine's first
+  request (comparable to the rest of this campaign's historical data) vs.
+  a later one on a warm engine (not directly comparable, per the
+  documented ordinal-position confound in `remote/ENVIRONMENT.md`). This
+  was a deliberate, explicitly-approved trade of that data-cleanliness
+  guarantee for wall-clock speed at a scope that would otherwise have
+  taken ~2x as long; anyone analysing this data going forward should
+  check that field before treating it as equivalent to an
+  ordinal-1-only sweep.
+
+  **State for whoever picks this up next**: disk at ~3.8G free/97% (down
+  from 5.8G at the start of this whole task -- steady throughout, no
+  runaway); no processes running, GPU idle; every script written this
+  session (`persistent_arm_replay.py`, `campaign_extend_reuse.py`,
+  `campaign_extend_150.py`, `aime24_finish_reuse_collect.sh`) is
+  reusable as-is for any future extension along the same reuse policy.
+
+- **extend150 phase completed clean**: `2026-09-01T13:30:44Z` (started
+  `2026-08-28T23:19:43Z`, ~2d14h11m -- close to the ~75.4h estimate).
+  Session was quiet for several days after the last check-in
+  (2026-08-29) with no user interaction; both Monitor watchers had been
+  torn down by session restarts along the way (a recurring teardown
+  artifact this whole campaign, never a job failure -- the underlying
+  driver processes kept running unattended throughout, exactly as
+  designed). **Zero errors** in the full extend150 log. Verified
+  completeness directly against `campaign/results/*.csv` rather than
+  trusting the log alone: every arm in every one of the 10 extended
+  datasets sits at exactly its target `n_cases` -- gsm8k/humaneval/
+  longbench_v2 at 150 (both families), livecodebench at 90 (its sibling-
+  repo pool cap), mtbench at 80 (its true full-question-count cap),
+  aime24 untouched at 30 (already its true max, not part of this phase).
+  Folded all 10 into `campaign_report.py` (livecodebench's code-execution
+  grading is slow enough at 90 cases x many arms that the combined loop
+  timed out at 2min after 4/10 datasets -- finished the rest one at a
+  time, no data lost, just a longer wall-clock report step). GPU released
+  cleanly, disk ended at 3.8G free/97% (down from 5.8G at the start of
+  this whole session -- steady decline across ~2,268-row-scale tables per
+  dataset, no runaway, the 2G floor in both extend scripts never tripped).
+
+  **Campaign now stands at, for every one of the 6 main datasets x 2
+  model families (12 total), full alpha-sweep data at each dataset's true
+  practical maximum case count**: aime24 30 (AIME 2024's real size),
+  gsm8k/humaneval/longbench_v2 150, livecodebench 90 (limited by what's
+  fetched into the sibling repo, not this task), mtbench 80 (MT-Bench's
+  real full question count). This is the end state of the "push every
+  dataset to 150" arc that started 2026-08-26 with the aime24 finish-up
+  and ran through two chained extension phases (extend50, extend150)
+  using `scripts/persistent_arm_replay.py`'s one-server-per-arm reuse
+  policy throughout -- ~5.5 days of near-continuous unattended GPU time
+  from the original launch, zero data-loss incidents, one real bug found
+  and fixed along the way (`livecodebench`'s `test_cases.json` gap, see
+  above), campaign methodology otherwise unchanged from what was
+  established across this whole project (fresh-server-per-measurement
+  everywhere except this explicitly-authorized reuse mode, whose data
+  carries its own `server_request_ordinal` marker per run for anyone
+  who wants to check position-dependence later).

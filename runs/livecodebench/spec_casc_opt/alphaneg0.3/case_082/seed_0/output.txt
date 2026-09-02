@@ -1,0 +1,389 @@
+<|channel|>analysis<|message|>We need dynamic programming. Let's analyze problem: we start at index 0, with score nums[0] initially. We can visit any increasing indices. For each visited position i, we add nums[i]. For each transition from i to j, if parity diferente, subtract x.
+
+Goal: maximize total score.
+
+We can think of DP[i] = maximum score achievable ending at index i. Need to also consider parity of last visited index? Since cost depends only on parity difference between last and current. So we just need DP[i] = nums[i] + max over all i'<i: DP[i'] + (if parity(i') == parity(i) -> 0 else -x).
+
+We need efficient O(n^2) is too large n up to 1e5.
+
+Observation: DP[i] only depends on max DP among earlier indices with same parity and with opposite parity. Because the -x cost just constant. So we can maintain best top for each parity.
+
+Let best_even = best DP among indices with even parity visited so far. best_odd = best DP among indices with odd parity visited so far. Then for current index i, parity p[i].
+
+DP[i] = nums[i] + max( (best_even if p==0 else best_odd) , (best_odd if p==0 else best_even)-x ).
+
+Because if same parity, no penalty. If opposite parity, subtract x.
+
+Edge case: Starting at index 0: we can only start at 0, so DP[0] = nums[0]. For later index i>0, we must consider transitions from earlier visited indices only; but we can also skip intermediate indices: that’s captured by DP.
+
+So algorithm:
+
+Initialize best_even = 0? Wait we need not consider nonexistent. For i=0, compute DP[0] = nums[0] ; then update corresponding best_even or best_odd accordingly.
+
+For i>0: compute candidate1 = best_even if parity==0 else best_odd; candidate2 = (best_odd if parity==0 else best_even) - x . But care: if there is no earlier index of the opposite parity? But we have to allow meaningless; but if best_odd is maybe negative infinity or None. Let's set initial best_even as -inf, best_odd as -inf.
+
+Now compute best_same = best_even if p==0 else best_odd. best_same = best_same if best_same > -inf else something? If no earlier such parity, can't transition. But we can still possibly skip? Wait we must visit indices in order, starting by visiting 0. But we might skip intermediate ones. For every i>0, we must have at least one earlier visited to transition? Actually we can always start at 0 and then choose to go to i directly. So there exists transition from index 0 to i. That transition is allowed irrespective of parity. So we can always compute DP[i] using best previous index 0. But best_even or best_odd may exist because index 0 has parity then best_even or best_odd is at least DP[0]. So we can guarantee at least one parity value. So we can use -inf for others.
+
+Thus DP[i] = nums[i] + max( best_same, best_opposite - x ). simplest.
+
+After computing DP[i], update best_even or best_odd accordingly.
+
+Edge: best_opposite - x might be negative large if best_opposite is -inf. So use -inf.
+
+Now complexity O(n). Output max(DP) (since maximum total score that can be obtained ending at any index). But we can also just keep track of max_result.
+
+Let's test example1.
+
+nums: [2,3,6,1,9,2], x=5.
+
+i=0: dp0=2. p=0 even. best_even=2. best_odd=-inf. max=2.
+
+i=1: p=1 odd. best_same=best_odd=-inf. best_opposite=best_even=2 => -x= -5 => cand 2-5=-3. max(-inf, -3) = -3. dp1=nums[1]+(-3)=3-3=0. Update best_odd=0. max=2.
+
+i=2: p=0 even. best_same=best_even=2. best_opposite=best_odd=0 => -x= -5 => -5. candidate max=2. dp2=6+2=8. Update best_even=2? wait dp2=8 > best_even=2 -> best_even=8. max=8.
+
+i=3: p=1 odd. best_same=best_odd=0. best_opposite=best_even=8. 8-5=3. max=3 => dp3=1+3=4. Update best_odd=4. max=8.
+
+i=4: p=1 odd. best_same=best_odd=4. best_opposite=best_even=8=>3. max=4. dp4=9+4=13. max=13. best_odd=13.
+
+i=5: p=0 even. best_same=best_even=8. best_opposite=best_odd=13-5=8. max=8. dp5=2+8=10. max=13. final answer 13. Good.
+
+Example2: arr [2,4,6,8], x=3.
+
+i=0 dp=2 even best_even=2. i=1: p=0 even; best_same=2, best_opposite=-inf; dp=4+2=6. best_even=6. i=2: p=0 even; best_same=6; dp=6+6=12. best_even=12. i=3: p=0 even; dp=8+12=20; max=20. matches.
+
+Edge cases: If x is large, maybe it's better to avoid transitions that have odd parity difference may harm. But maybe we can skip those indices entirely. DP approach will handle.
+
+Let's test with array [2,4,9], x=1. i0=2. i1=4: best_same=2, dp =4+2=6. best_even=6. i2=9: parity odd. best_same=best_odd is -inf. best_opposite=best_even=6 -> -1 =>5. dp=9+5=14. best_odd=14. answer 14. Sequence: 0->1->2: 2+4+9-1=14. Works.
+
+Now final output: maximum score overall. Might be best across all indices. We'll track best_result = max(best_result, dp_i). Or simply output max(DP array). But we can track along.
+
+Implementation issues: Use Python.
+
+Complexities: O(n). Memory O(1) (just a few variables). Works for n up to 1e5.
+
+Edge: x may be bigger than any parity difference cost; it subtracts x each time odd parity difference; skip paying might cause to skip that index entirely. DP will compute with best_same maybe -inf if parity not used earlier; we might skip index to avoid cost. But what do we do if we skip? In DP we are computing maximum when we include this index. However, we could skip it by not ending at it. But we only consider capacity to compute maximum final answer. If we skip index, we just ignore its dp. That's fine.
+
+But we need to ensure best_same could be -inf if no earlier index of same parity exists; but we can still consider best_opposite - x. We can't start at i>0 directly unless we had earlier index 0. There will always be earlier index 0. So if 0 parity matches i parity, best_same is at least dp[0] else best_same remains -inf. So we handle.
+
+Implementation:
+
+```
+class Solution:
+    def maxScore(self, nums: List[int], x: int) -> int:
+        INF_NEG = -10**18
+        best_even = INF_NEG
+        best_odd = INF_NEG
+        max_score = None
+        for i, val in enumerate(nums):
+            p = val%2
+            if i==0:
+                dp = val
+            else:
+                best_same = best_even if p==0 else best_odd
+                best_opposite = best_odd if p==0 else best_even - x
+                if best_opposite > best_same:
+                    best_val = best_opposite
+                else:
+                    best_val = best_same
+                dp = val + best_val
+            if p==0:
+                if dp > best_even:
+                    best_even = dp
+            else:
+                if dp > best_odd:
+                    best_odd = dp
+            if max_score is None or dp > max_score:
+                max_score = dp
+        return max_score
+```
+
+However, using best_odd - x is missing parentheses earlier: we need best_odd if p==1 else best_even, but we also subtract x. So we adjust best_opposite = (best_odd if p==0 else best_even) - x. But careful: expression: if p==0, best_opposite = best_odd - x; else best_even - x. Implementation: best_opposite = (best_odd if p==0 else best_even) - x.
+
+Edge: best_odd of -inf may produce -inf - x => -inf due to Python big negative? -INF is negative large (-1e18). Subtracting x will be -1e18 - x still -inf, fine.
+
+But we have to guarantee we start at idx 0: dp0 = val.
+
+Let's adjust logic: We'll treat best_even, best_odd set accordingly after computing dp0. Use INF_NEG properly.
+
+Implement:
+
+```
+INF_NEG = -10**18
+best_even = INF_NEG
+best_odd = INF_NEG
+ans = 0
+for i, val in enumerate(nums):
+    parity = val & 1
+    if i==0:
+        dp = val
+    else:
+        best_same = best_even if parity==0 else best_odd
+        best_opposite = (best_odd if parity==0 else best_even) - x
+        if best_opposite > best_same:
+            best_val = best_opposite
+        else:
+            best_val = best_same
+        dp = val + best_val
+    if parity==0:
+        if dp > best_even:
+            best_even = dp
+    else:
+        if dp > best_odd:
+            best_odd = dp
+    if dp > ans:
+        ans = dp
+return ans
+```
+
+Need to ensure ans initialized; but we can set ans = nums[0] initially because dp0=nums[0]. Or keep ans=dp0.
+
+Edge: If n>=2, ans may be dp0 or later dp.
+
+Let's test with earlier examples.
+
+Also small corner: If n==1? constraints say length >= 2. So fine.
+
+Now produce final answer with explanatory comments.
+
+Let's also mention that we maintain best_even and best_odd as best DP values for indices with given parity.
+
+Complexities: O(n) time, O(1) memory.
+
+We may produce final code.
+
+Let's double-check for array [1,2] x=1.
+
+i0: val=1, parity=1 odd. dp=1. best_odd=1. ans=1.
+
+i1: val=2 parity=0 even. best_same=best_even=-inf. best_opposite=-? best_odd=1 - x = -? 1-1=0? need -? Actually best_opposite = best_odd - x = 1-1=0. So best_val = max(-inf, 0) -> 0. dp=2+0=2. best_even=2. ans=2. Sequence: 0->1: 1+2-1=2. Works.
+
+Edge: Suppose x is huge; example: [2,3] x=100.
+i0: dp=2, best_even=2.
+i1: val=3, parity odd. best_same=best_odd=-inf. best_opposite=best_even - x=2-100=-98. dp=3-98=-95. best_odd=-95. ans=2. Actually better to skip 3 (i.e., final answer 2). Since we cannot skip, we can consider final answer 2 because we can finish at index 0. So ans=2. Works.
+
+What about we cannot end at index 0? We can always consider the maximum over all indices. Our ans is max of dp0 and dp1. dp1 negative, ans remains 2. Good.
+
+Now produce final solution.
+
+In our DP, we might want to treat best_same and best_opposite as negative infinity if no earlier index of that parity. We'll do INF_NEG variable.
+
+Edge: Suppose list all numbers even, x might be large but irrelevant.
+
+Now produce final code. Will need to import List.
+
+Let's write final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every element `nums[i]` we want to know the best score that can be obtained
+when we finish the walk at that position.
+
+*   While walking we may only jump to the right (`i < j`).
+*   Each visited index gives its own value `nums[i]`.
+*   When the parity of two consecutive visited indices differs we pay a penalty
+    `x`.
+
+Let  
+
+```
+dp[i] = maximum score that can be obtained if we finish at index i
+```
+
+The last move to `i` comes from some earlier index `k < i`.
+
+```
+dp[i] = nums[i] + max  ( dp[k] + penalty(k , i) )
+```
+
+`penalty(k , i)` is `0` if `nums[k]` and `nums[i]` have the same parity, otherwise
+`-x`.  
+The direct recurrence would need *O(n²)* work.
+The key observation is that the penalty depends **only** on the parity of the two
+indices, not on the parity of the value `k` inside the array.  
+Consequently we only need the best scores among **even** indices and among
+**odd** indices.
+
+```
+best_even   = best dp value among all visited even indices
+best_odd    = best dp value among all visited odd indices
+```
+
+For a new index `i`
+
+```
+parity = nums[i] % 2
+
+# Go from the best same‑parity index
+best_same = best_even if parity==0 else best_odd
+
+# Go from the best opposite‑parity index
+best_opposite = (best_odd if parity==0 else best_even) - x
+
+dp[i] = nums[i] + max(best_same, best_opposite)
+```
+
+After computing `dp[i]` we update the corresponding `best_even` or `best_odd`
+and keep the largest `dp[i]` seen – that is the answer.
+
+The initial state:
+
+```
+dp[0] = nums[0]          (the only score we have at the start)
+best_even or best_odd is set to dp[0] depending on parity
+```
+
+The algorithm runs in `O(n)` time and `O(1)` additional memory.
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the maximum possible total score.
+
+---
+
+##### Lemma 1  
+For every index `i` the value `dp[i]` computed by the algorithm equals
+
+```
+max_{k<i}  ( dp[k] + penalty(k , i) ) + nums[i]
+```
+
+where `dp[p]` is the true optimal score for ending at index `p`.
+
+**Proof.**
+
+By induction over `i`.
+
+*Base (`i = 0`)*  
+`dp[0] = nums[0]` is obviously optimal because the walk must start at index `0`.
+
+*Induction step*  
+Assume Lemma 1 holds for all indices `< i`.  
+For a fixed `i` the optimal solution must come from some previous index `k<i`.
+Because the only thing the penalty depends on is the parity of `k`
+and `i`, the optimal `k` is either
+
+* the best even index with even parity, or
+* the best odd index with odd parity.
+
+Hence
+
+```
+max_{k<i} ( dp[k] + penalty(k , i) )
+    = max( best_even + (i odd? -x : 0),
+           best_odd  + (i even? -x : 0) )
+```
+
+which is exactly what the algorithm computes in `best_same`
+and `best_opposite`.  
+Adding `nums[i]` gives the claimed `dp[i]`. ∎
+
+
+
+##### Lemma 2  
+After processing index `i` the variables `best_even` and `best_odd`
+are respectively the maximum `dp` values among all processed indices
+having even parity and odd parity.
+
+**Proof.**
+
+By induction over `i`.
+
+*Base (`i = 0`)*  
+`best_even` (or `best_odd`) is set to `dp[0]` and all other candidates are
+`-∞`, so the statement holds.
+
+*Induction step*  
+Assume the statement is true before processing `i`.  
+After computing `dp[i]` we update the only variable whose parity matches
+`nums[i]`.  
+Because we only store the maximum value seen for that parity,
+the variable stays the maximum of all processed indices. ∎
+
+
+
+##### Lemma 3  
+For every index `i` the value `dp[i]` computed by the algorithm equals the
+maximum achievable total score of any valid walk that ends at index `i`.
+
+**Proof.**
+
+We prove by induction over `i`.  
+By Lemma&nbsp;1 the algorithm computes `dp[i]` using the best scores of all
+indices `< i`; by the induction hypothesis those scores are indeed optimal.
+Thus the resulting `dp[i]` is the best possible score for walks ending at `i`. ∎
+
+
+
+##### Theorem  
+The algorithm returns the maximum total score obtainable by any valid walk
+through the array.
+
+**Proof.**
+
+Let `S` be the largest value among all `dp[i]` produced by the algorithm.
+By Lemma&nbsp;3, each `dp[i]` is the optimal score for walks ending at `i`.
+Hence `S` is the optimal score for walks ending at any index, i.e. for
+the whole problem.  
+The algorithm outputs `S`, therefore it is correct. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+*Time* : Each of the `n` elements is processed once and all operations are
+`O(1)` → `O(n)`.
+
+*Memory* : Only a few integer variables are kept → `O(1)`.
+
+
+
+--------------------------------------------------------------------
+
+#### Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def maxScore(self, nums: List[int], x: int) -> int:
+        INF_NEG = -10**18          # sufficiently negative
+
+        best_even = INF_NEG
+        best_odd = INF_NEG
+
+        ans = 0                    # maximum score seen so far
+
+        for i, val in enumerate(nums):
+            parity = val & 1        # 0 or 1
+
+            if i == 0:
+                dp = val
+            else:
+                # best score coming from same parity (no penalty)
+                best_same = best_even if parity == 0 else best_odd
+
+                # best score coming from opposite parity (penalty of -x)
+                best_opposite = (best_odd if parity == 0 else best_even) - x
+
+                best_val = best_same if best_same >= best_opposite else best_opposite
+                dp = val + best_val
+
+            # update best scores for this parity
+            if parity == 0:
+                if dp > best_even:
+                    best_even = dp
+            else:
+                if dp > best_odd:
+                    best_odd = dp
+
+            # keep the best overall score, if any
+            if dp > ans:
+                ans = dp
+
+        return ans
+```
+
+The implementation follows exactly the algorithm proven correct above.

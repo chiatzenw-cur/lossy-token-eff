@@ -1,0 +1,513 @@
+<|channel|>analysis<|message|>We need to analyze problem. Essentially we need to decide whether target array can be zeroed by operations using subarray of size k, each operation decreases all elements by 1.
+
+This resembles a "covering subarray" problem: needs to see if we can represent each element's value as possibly overlapping subarrays. Equivalent to scheduling the number of times each element is included in subarray operations.
+
+We need to check if there exists a set of operations such that each element's value equals number of operations covering it, but operations affect contiguous subarrays of fixed size k.
+
+This is akin to making the array zero by performing operations at each position such that each element is decreased by 1 each time, like distributing allowed subarray operations.
+
+We can think of using a greedy: iterate obstacles from left to right using a queue. For each position i, we keep track of how many times we have subtracted due to operations covering i. We want to decide if current array such that after all operations, element becomes zero. Equivalent: Simulate operations: we pick subarray starting at index i where cur[i]>0. We need to decrease 1 at i. Because after we choose a subarray, we could remove 1 from the next k elements. Standard technique: use difference array or rolling sum. We can treat for each i as we can apply operations starting at i: decrease nums[i] by 1 each time. We can decide number of operations needed to reduce nums[i] to zero via operations that start at current index i. But we might also need to account for previous operations that covered i. Usually we maintain an array diff of length n+1 to keep track of which operations applied (like difference boxes). Then we maintain curr in sliding window.
+
+We can treat as: maintain cumulative sum of operations that affect current position. For i from 0 to n-1:
+
+- When we have early operations that start at index i-k, we subtract them from the current sum. Use queue.
+
+- Let currentVal = nums[i] - current_sum. If currentVal < 0, impossible -> false.
+
+- If currentVal > 0, we need to apply operations starting at i to reduce to zero. But we can only apply if i <= n-k else not possible because subarray must extend beyond size k. So if i > n-k, there is no window to reach k size; can't compute needed operations. So we need to verify that all after i > n-k, numbers[i] eventually zero. That means if (currentVal>0), we need to apply operations at i; but if i + k > n, impossible. So we cannot apply operations until i <= n-k. So we check at i > n-k: if currentVal>0: impossible, else fine.
+
+Alternatively, we can compute ops: need to apply operations at i to remove currentVal. add operationCount = currentVal. Increase current_sum by 1 for each operation; we can update diff[i+k] to subtract later.
+
+We can use an array to indicate operations at positions i: we add ops to a queue; when i >= n; we subtract.
+
+Implementation: difference array length n+1 0. For i in range(n):
+
+- if i >= k: we subtract diff[i-k] from current_sum? Wait use diff array to store number of operations that start at i, we will decrement diff[i-k] after leaving window? Actually typical sliding window approach: maintain current_sum, and for each i, we let startAt[i] = # operations to start at i. Add to current_sum. When we move to i+1, we subtract startAt[i] if i+k-1 < i? Let's think.
+
+Better: Create an array 'diff' of length n+1. For each operation starting at i, we add 1 to diff[i+k]. Actually difference between add and remove: we want current_sum = sum of ops that happen this index. For any operation that starts at position i, it affects indices i..i+k-1. So at index i we add 1 to current_sum; at index i+k we subtract 1. So diff array size n+1; Add +1 to diff[i-k]; Wait not correct.
+
+Let's use:
+
+Let apply[i] zero. We'll track using queue of runs.
+
+Simpler: variable 'diff' size n+1.
+
+Pseudo:
+
+class Solution:
+    def checkArray(self, nums, k):
+        n = len(nums)
+        diff = [0]*(n+1)
+        curr=0
+        for i in range(n):
+            curr += diff[i]  # diff contributions from earlier operations to index i
+            if curr > nums[i]: # impossible
+                return False
+            need = nums[i] - curr
+            if need > 0:
+                // we need to apply ops starting at i
+                if i + k > n: return False
+                curr += need
+                diff[i+k] -= need
+        return True
+
+But we must ensure variable 'diff' not negative. We used diff[i] negative for later ops to stop. We need when applying diff[i], it's current += diff[i] (which may be negative). We need diff array to store negative events, not positive; we add +1 for op start in curr; but we also need to subtract when we are within range. So we will update diff[i+k] -= need. However diff[i] is previous addition of the operation processed earlier? Wait we didn't add +1 to diff[i] at start; we just add need to curr within loop; we defer subtracting later? Not exactly; we need to add when we start the operation. But current_sum increases all operations that spanned i, so we increased curr when we add need. But we also must ensure that when we get to i+k index later, we subtract need, to reduce curr. So we should update diff[i+k] -= need. Also, we might need to run curr += diff[i] each time; diff[i] might be negative from previous enforcement. So we have diff array of length n+1; add -need at path i+k (makes a negative later). But we also need to add +need early at i? Actually we can just add +need to curr directly; we don't need to add diff at i because we are already there. But a standard expression:
+
+curr += diff[i]  # contributions from earlier operations that start at i - k (since diff[i] negative)
+if curr > nums[i]: return False
+if curr < nums[i]: need = nums[i] - curr
+    if i + k > n: return False
+    curr += need
+    diff[i+k] -= need
+
+But note: we also need to ensure we don't re-add need to diff[i] earlier? Not necessary. Because we are adding to curr and adding to diff[i+k] negative to discourage later. This is the typical approach. Let's test with example.
+
+nums=[2,2,3,1,1,0], k=3.
+
+n=6, diff[0..6] zeros.
+
+i=0: curr=0+diff[0]=0
+curr>nums[0]=0. need=0
+if curr<2 => wait? Actually curr=0 < 2 -> need=2, but we need subtract if curr>nums? Wait we can't have curr>nums? The algorithm would be:
+
+if curr > nums[i] -> impossible
+need = nums[i] - curr
+
+if need > 0:
+    if i+k > n: return False
+    curr += need
+    diff[i+k] -= need
+
+Let's test: at i=0, curr=0 <= 2 => need=2 >0 => i+3=3 <=6; curr=2 diff[3] -= need= -2.
+
+i=1: curr=0+diff[1]=0+diff[1]?? diff[1] 0. curr=0. need=22? no. nums[1]=2 => need=2 >0 => i+3=4 <=6; curr=2 diff[4] -=2 (now -2).
+
+i=2: curr=0+diff[2] =0. need=? nums[2] =>3, curr=2? Wait need to compute: curr currently 0? Actually curr after previous step was 2, not 0. But we did not update diff[2] by j? No diff[2] remains 0, so at i=2 we still have curr=2. But we need to subtract diff[2] for i>=2? diff[2] is 0, so curr remains 2. But we need to subtract earlier operations that started at overlapping? For i=2, cur=2. That's the sum of operations that started at index 0,1 each at +need because k=3. Our algorithm might missing some contributions. Actually function: after we set freq[2] = -2? Wait it's not necessary.
+
+Let's check: earlier operations: at i=0, we added 2 to curr and diff[3] -=2. At i=1, we added 2 to curr and diff[4] -=2. So cur after i=1: we had curr=2 (from previous step). After i=1, we did curr += need=2 => curr=4. But also we had diff[4] +2? Wait we changed diff[4] -=2. Good. So digit at i=2: we always subtract diff[2] from curr: diff[2]=0. But cur after j=1 remained 4? Wait after i=1 step we had curr=4. At i=2 we didn't subtract diff[2] because we didn't add new subtract? But ops that started at 0 and 1 cover i=2. So current value should not be 4, it should be 2*2? Wait each op that started at 0 and 1 covers 2 elements; but each op subtract 1 from 2 elements. So at index 2, first operation from 0 covers 2 indices 0+1+2=3; second operation from 1 covers 2+3 indices 1,2,3. So at index 2, both ops produce exactly 2 reductions. For each operation at i, we added +need to curr, so after 0 we added +2, after 1 we added +2, so curr=4. But we wrongly correspond to each op's effect at index 2? Wait we may be adding increments near the operation start but also at index i+1? Let's think.
+
+Our algorithm implicitly uses current_sum as increments where ops have started at earlier indices. But we maintain curr as sum of ops that started at indices i-k < i <= i. However we need to decrement curr when we reach i+k: that - need corresponds to decreased curr. So at i=0, curr -> 1? Let's re-evaluate.
+
+At i=0: curr = 0+diff[0] =0. need=2. need=2. Add 2 to curr (curr=2). diff[3] += -2? Actually we add -need at position i+k.
+
+Now for i=1: curr=2+diff[1]=0? Wait diff[1] 0. curr=2. Now need=2. Add 2 to curr (curr=4). diff[4] += -2.
+
+Now i=2: curr=4+diff[2] =0. curr=4. But some operations that started on index 0 and 1 will no longer apply after i=3? But at i=2 still apply. Should cumulative curr=4; but we still track cur=4 after applying ops that started at index 0 and 1? Let's think: For index 2, we want to subtract each op once at i=2. For each op we add 2 to curr when we start at i=0 or i=1, and we subtract 2 at i+k=3 or 4 respectively. So at i=2, we have only subtractions from earlier ops that resulted in diff[2] values. None of them. So curr=4.
+
+But we might double count? For each operation of 2, we increment 2 to curr. For index i=2, it should receive total contributions from ops that started at 0 and 1. So cumulative sum should be 4. So that matches. But wait that would be 4 operations covering index 2? But each operation reduces by 1 per element, but we are adding 2 to curr each time by "need" count. need to reflect # of operations (each operation decays by 1). If we added or subtracted 2 to curr, that means we are applying 2 operations at index 0, 1. But that's correct: at index 0 we added 2 operations; at index 1 we added 2 operations; for index 2, we must be 2 operations from index 0, and 2 operations from index 1? Wait each operation reduces by 1. So at index 2, there are 4 operations that started at 0 and 1. So yes, each operation starts at 0 and 1 each had to bring 2 operations, 2 each. So index 2 should be 4.
+
+But we also should not exceed 3? Wait numbers at index 2 is 3. The algorithm expects to reduce it to 0. But step at i=2 we have curr=4 > 3, so we would fail saying impossible. But step 2 example says possible. Actually correct outcome: 2 at index 0,1 at index 1, need to reduce 3 each time.
+
+Let's compute with example: array [2 2 3 1 1 0]. According to problem, we can reduce: subarray [2,2,3] length 3. That subtracts 1 from each, the new array [1,1,2,1,1,0]. Second, choose subarray [2,1,1] length 3 starting at index 2? Actually [2,1,1] indices 2-4? Wait after first step, array [1,1,2,1,1,0]. Next operation [2,1,1] indices 2-4 basically [2,1,1], subtract 1 from indices 2-4 => array [1,1,1,0,0,0]. Then [1,1,1] indices 0-2 again remove 1 => array [0,0,0,0,0,0].
+
+Thus each element's absolute numbers: index 0: used 2 ops (once before subarray, once after). index 1: used 2 ops (once before subarray, once after). index 2: used 3 ops: first before subarray, second after, third after subarray again. index 3: used 1 op? index 3: used 1 operation (the second subarray). index 4: used 1 operation (the second subarray). index 5: used 0.
+
+Thus each operation reduces contiguous blocks. So our algorithm earlier incorrectly considered 2 operations from index 0 and 1 as each 2 operations each (makes 4). But that's because we need to perform each operation separately. But counting operations with same effect but separate times: If have 2 operations at index 0, each covers [0,1,2]. After applying that first, we have 2 of that. At index 1, we apply 2 operations at index 1. So both contribute at index 2, but they are separate operations. So index 2 receives 4 operations. But earlier, we used 3. Wait small mismatch: Example 1: we had 3 operations on index 2? Let's see.
+
+At index 0: we had 2 operations? Subarray [2,2,3] used 1 operation. Wait we only did 1 operation at step 1 at subarray [2,2,3]. So we had arr [2,2,3], [1], [1], [2]. Wait we had presumably 1 op at index 0.
+
+But our algorithm might have chosen 2 operations at index 0 to reduce residual 2 from index 0. In example, we used 0 op at index 0 but we used 1 at index 0 later.
+
+Let's replicate algorithm state: The algorithm is not greedy but will try to subtract at each index starting at positions where needed. This algorithm yields minimal operations to zeros on left to right. Let's test with [2,2,3,1,1,0] and k=3.
+
+Counts: Steps above: at i=0: need=2; i=0+3=3 <= 6; so we add 2 to curr. So at i=0 cur count 2. diff[3] -=2.
+
+i=1: curr=2+diff[1]?? diff[1] currently 0. cur=2. need=2. Ok. Add 2 to curr: curr=4; diff[4] -=2.
+
+i=2: curr=4+diff[2] 0. cur=4. need=3? Wait nums[2] uses 3. T_final=4-4=0? Actually need=ones[2]-curr => 3-4 = -1. Not 0. That is negative.
+
+Thus algorithm fails as impossible. But actual solution would want to only use 2 opr at index 0 for 2, and 1 opr at index 1 for 1? But we determined we need 2 operations at index 0? Let's re-evaluate minimal operations.
+
+Our algorithm chooses a minimal number of operations or exactly may be minimal? Let's think: at i=0, we must reduce nums[0] to 0. Since we can only process subarrays starting at i, they will serve as operations. After operation at i, index0 will be decreased by 1, but we can't change it later. So we must have at least ops[0] = nums[0] = 2. So algorithm needs 2 operations at index 0. That is correct. Wait but example solution gave 2 operations at index 0? Actually at i=0, we had 2 operations? Wait we used 2 operations at index 0: we used step1 at index0 and step3 at index0 again? At the end, operations at index0 says: two operations. Indeed index 0 had two operations as counted earlier: first "choose subarray [2,2,3]" executed at index0; second "choose [1,1,1]" executed at index0 again. So yes 2 operations at index0.
+
+Thus algorithm performing 2 ops at index0 is correct. So algorithm wants to apply 2 operations at index0, and later 2 ops at index1 produce index4: only 2 ops at index1? Wait index1 had 2 operations at index1 too? Yes we had 2 ops at index1: first operation, second operation. So algorithm applying 2 operations at index1 also correct. So algorithm uses 4 operations total distributed across indices 0 and 1. That results in index4 total 4? Wait index2 would require 3 operations; but algorithm's 4 operations in index2 would be 4>3. Wait index2 after second step had 3 ops? Let's compute final distribution:
+
+Operations at index0: 2 ops (start at 0). Each covers [0,1,2].
+
+- operations at index1: 2 ops (start at 1). Each covers [1,2,3].
+
+Thus index 2 receives 4 operations out of 3 required. That is impossible.
+
+But algorithm might achieve 3 operations by considering that some operations at index1 overlapped partially? But if we performed 2 ops at index1, the contributions at index2 becomes 4. But we need 3. So maybe wrong.
+
+Let's check actual sequence of operations of example again: first operation at index0 (i=0). second operation at index2 (i=2). third op at index0 again (i=0). This produced at index1: only 2 ops: first at index0, second at index0 second time; second at index2? Actually [2,1,1] does not cover index1, includes index2. So index1 got only 2 ops. So algorithm should decide to produce 2 ops at i=0 and 2 ops at i=2? But we used 2 ops at index2, 1 op at index0? Wait we used 2 ops at i=0, 1 at i=2? Actually step 1 used 1 op at index0; step3 used 1 op at index0; step2 used 1 op at index2. So total ops at index0: 2. Ops at index1: 0. Ops at index2: 1. So algorithm's 2 ops at index0 and 1 op at index2 yields 3 ops at index2: index2 receives 2's from index0 ops + 1 from index2 ops. That matches requirement. So algorithm's greedy ensures we pick op at index1? Wait we gave 2 ops at i=1 which not necessary. Let's re-evaluate algorithm: At i=0 value=2. So we try to apply 2 ops at index0. But we could take 2 ops at index0 at start partially code along the algorithm; but we might think we only need 2 ops at index0? Yes.
+
+But if we attempt to apply 2 ops at index0, then at i=1 we need to reduce to sum of operations covering index1. At i=1 there are 2 ops already from index0 (since each covers [0,1,2]): So those 2 ops from index0 already reduce total 2 from index1, which equals remaining 2. Wait algorithm at i=1: curr = 2 (since we added 2 at index0) and diff[1] is 0. So need=2. Wait we still need 2 ops at index1 because we wished to reduce nums[1] from 2 to 0; but we already have 2 from index0. So we don't need to apply further ops at i=1. But algorithm incorrectly calculates need=2 again because all operations counted as 2? Wait if we previously set curr=2 from index0, after that may still be 2 operations... Wait we need not get need>0. Let's compute:
+
+At i=0: curr=2 (after adding 2). At i=1: curr = curr + diff[1] (0) = 2. So curr=2. Compare current value 2 vs nums[1] = 2. So need=nums[1]-curr=0. So we don't need to apply any ops at i=1. But algorithm earlier computed need=2 because we mis-evaluated curr=2? Wait we had mis-calc due to using diff[1] incorrectly? Hmm.
+
+Let's analyze again before we mis-sum. We step through again properly:
+
+Data: n=6, diff[0..6] = 0.
+
+curr=0
+
+i=0:
+   curr += diff[0] -> 0
+   curr <= nums[0] (2)
+   need = nums[0] - curr = 2
+   curr += need = 2
+   diff[3] -= need = -2
+
+i=1:
+   curr += diff[1] -> 0
+   curr =32? Wait diff[1] is 0. So curr += 2? Wait we need to add this term to curr? I'm moving wrongly: At i=1, we still have curr=2 from previous step, but we didn't capture diff[1]. So curr = 2 + diff[1] = 2. Wait we didn't set diff[1] to 0 (but we did). So curr=2.
+
+   needed = nums[1] - curr = 2-2 = 0.
+
+   need=0, so no investments.
+
+   diff[4] remains unchanged.
+
+No change.
+
+i=2:
+   curr += diff[2] -> 0. curr remains 2. Wait diff[2] remains 0. So curr=2.
+
+   need = nums[2] - curr = 3-2 = -1? Actually 3-2 = 1. Wait correct: 3-2=1. So need=1.
+
+   curr += need=1 -> curr=3.
+
+   diff[5] -= need? Wait i=2 + k=5 <= 6: diff[5] -= need = -1.
+
+i=3:
+   curr += diff[3] -> 0? diff[3] has -2. So curr becomes 3-2=1.
+
+   need= nums[3] - curr = 1-1 = 0.
+
+   curr += need? no.
+
+   diff[6] -= need? nothing.
+
+i=4:
+   curr += diff[4] -> 0? diff[4] is 0. So curr=1.
+
+   need= nums[4] - curr = 1-1=0.
+
+   curr += need?. skip.
+
+   diff[7] -= need? 0.
+
+i=5:
+   curr += diff[5] -> -2? Wait diff[5] = -1. So curr=1-1=0. Wait curr=1-1=0. Actually need check: diff[5] earlier set -1. Sum becomes 0.
+
+   need= nums[5] - curr = 0-0=0.
+
+   Final.
+
+So algorithm returns True.
+
+Thus earlier mis-calc arises from count of current value incorrectly. So algorithm works. Great! So the algorithm will return True.
+
+Now test on example 2: nums=[1,3,1,1], k=2.
+
+n=4, diff[0..4] zeros.
+
+i=0: curr=0, need=1, curr=1, diff[2] -=1. diff[2] = -1.
+
+i=1: curr += diff[1] (0) = 1, need=0? nums[1]=1? Wait 1? Actually there is 3. need=3-1=2, but need>0. i+=1 <= n-k=2? n-k=2, so at i=1 we can start. We add diff[1+2] = diff[3] -=2. curr=2.
+
+i=2: curr += diff[2] = -1 so curr=1. nums[2]=1, need=1-1=0. k>=2, but i=2 + j? k=2, i=2 <= n-k 2? Actually i=2 > n-k? n-k=2 -> i=2 <= n-k yes? Wait n-k=2 => i=2 <= n-k=2 (equal). So it's valid; we can use diff[2] -= need etc.
+
+But we need j=2 going across 2? Let's compute.
+
+i=2: curr=1, need=1-1=0. k=2; i+2=4 <= n-k? Wait i=2 + k=4; diff[4] -=? none.
+
+i=3: curr += diff[3] = -2? Wait diff[3] = -2 from previous step. So curr=1-2=-1. curr > nums[3]? But curr negative indicates we over-subtracted? Wait popped; we mis-coded. Initially inc at i=1 set curr to 2 then diff[3] = -2, gives output at i=3.
+
+Let's compute again carefully:
+
+i=0: curr=0; need=1; curr=1; diff[2] = -1
+i=1: curr += diff[1] (0) -> curr=1; need=3-1=2; curr += diff[2] earlier? Wait we had diff[2] from loop; but we need to accumulate diff[2] at i=1? No we haven't added diff[2] yet. Because diff[2] adds to curr after i=2? Wait diff[2] added to curr at index i=2. So at i=1 it's fine.
+
+Now i=1: curr=1. need=2. Condition: i=1 <= n-k=2? yes; so good. add diff[3] -=2; curr=1+2=3.
+
+i=2: curr += diff[2] = -1 -> curr=3-1=2. Wait diff[2] = -1; subtracting earlier? we had diff[2] = -1. So curr=2. Now need= nums[2] - curr = 1-2 = -1. Since curr > nums[2] => impossible. So algorithm returns False.
+
+Thus algorithm fails product: impossible.
+
+Hence algorithm is correct.
+
+Edge cases: n can be up to 1e5, nums up to 1e6. using int diff array works.
+
+We also need to ensure we only subtract diff[0] at start. diff array of length n+1. min diff may be negative big due to using negative values.
+
+Implementation details:
+
+Initialize diff = [0]*(n+1). Use integer variable cur=0. Loop i from 0..n-1:
+
+cur += diff[i] (so if diff[i] is negative, cur subtracts). If cur > nums[i]: return False.
+
+need = nums[i] - cur
+
+if need > 0:
+    if i + k > n:
+        return False
+    diff[i + k] -= need
+    cur += need
+
+After loop, return True.
+
+Note about indexing: diff[i] maybe zero-negative. diff array indices: i+ k <= n. So diff array length n+1 ensures out-of-range indexing.
+
+Implementation in Python:
+
+from typing import List
+
+class Solution:
+    def checkArray(self, nums: List[int], k: int) -> bool:
+        n = len(nums)
+        diff = [0]*n+1? Wait we need n+1; maybe [0]*(n+1) which is correct.
+
+        cur=0
+        for i in range(n):
+            cur += diff[i]
+            if cur > nums[i]:
+                return False
+            need = nums[i] - cur
+            if need > 0:
+                if i + k > n:
+                    return False
+                diff[i + k] -= need
+                cur += need
+        return True
+
+But check: diff array length n+1 fits index indices from 0 to n.
+
+Edge case: n=1: diff[0..1], diff[1] okay. For i=0: curr=diff[0] added; diff[0] = -1? no; apply diff = 0.
+
+If k=1: operations can choose any subarray of size 1; you can decrease each element individually: So we must check if each element can be zero individually? Since each operation decreases one element by 1: we can achieve zero by performing each operation individually. So algorithm always returns True. For k=1, optimum is all positive numbers: we can process.
+
+Let's test quickly: n=1, nums[0] = 5, k=1.
+
+diff[0] = 0; cur=0; need=5; i+1 = 1 <= n? 1 <= 1 -> diff[1] = -1? Actually diff[1] = -5; cur += need. cur=5. cur=5; after loop ends. After loop, cur doesn't note negative. So return True.
+
+Now test on example 1: 2 2 3 1 1 0. Good.
+
+Edge case: Suppose array [0,0,0], k=0? not allowed.
+
+We also need to consider large values: difference may be negative; cur may be negative? we compare cur>nums[i] else O(n). But cur ensures we never exceed used operations. Works.
+
+Now we produce final solution.
+
+Let's also produce explanation: algorithm uses big operations to cross-check.
+
+Therefore final answer: produce code.
+
+Let's craft final code.
+
+Also show test.
+
+Return bool.
+
+Also implement the reasoning section. Provide the final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every operation we choose a contiguous block of length `k` and
+decrease all its elements by 1.
+We have to decide whether we can make all elements equal to `0`.
+
+--------------------------------------------------------------------
+
+#### 1.   Observations
+
+* When we are at position `i` we already have performed some operations
+  that started at indices `i-k … i-1`.  
+  These operations already decreased `nums[i]` by `1` each.
+
+* The only way to decrease `nums[i]` further is to start new operations
+  whose left border is exactly `i`.  
+  Each such operation will also decrease `nums[i‑1] … nums[i‑k]`.
+
+* If at the moment we have to decrease `nums[i]` by `x` we never could
+  do *less* than `x` operations starting at `i`, because otherwise
+  `nums[i]` would remain positive.
+
+* Therefore the algorithm can simply greedy – process the array from left
+  to right, always decide the time needed at the current position,
+  use the operations that start there, and never look back.
+
+--------------------------------------------------------------------
+
+#### 2.   Greedy + Difference array
+
+We need to know how many of the previous operations already
+decrease the current element.
+The obvious way to obtain `x` (the number of already applied operations) is a
+dynamic prefix sum of increments, but we only need to know the change
+at positions `i` and `i+k`.  
+So we keep a *difference array* `diff` of length `n+1`:
+
+```
+diff[i]  – how many operations are affecting the current position
+           – increments are recorded at the start, decrements are recorded
+           – at the end (i+k) we subtract the same number to stop the effect.
+```
+
+During the scan we keep `cur` – the current sum of all operations that
+still influence position `i`.
+
+```
+ cur = 0
+for i = 0 … n-1
+        cur += diff[i]              // current contribution from previous ops
+        if cur > nums[i]          // impossible – already over‑subtracted
+                return False
+        need = nums[i] - cur       // how many operations must start at i
+        if need > 0
+                if i + k > n      // subarray would not fit
+                        return False
+                cur += need
+                diff[i + k] -= need   // will remove this operation later
+```
+
+If the loop finishes without contradiction, all elements become zero,
+so the answer is `True`.
+
+--------------------------------------------------------------------
+
+#### 3.   Correctness Proof  
+
+We prove that the algorithm returns `True` iff the array can be reduced
+to zero by the allowed operations.
+
+---
+
+##### Lemma 1  
+During the scan, before processing the element at index `i`,
+`cur` equals the number of operations that the algorithm has already
+started and that still affect `i`.
+
+**Proof.**
+
+*Initialization condition.*  
+For `i = 0` no operation has performed yet, so `cur = 0`.
+The formula holds.
+
+*Induction step.*  
+Assume the lemma holds for index `i-1`.  
+When we move to level `i+1` we do
+
+1. `cur += diff[i]` – all operations that started at `i-k` are
+   finished, so decrement `diff[i]` (previously stored as a negative
+   number).  
+   The new value of `cur` counts all operations that started at
+   indices `i-k+1 … i-1`.
+2. `cur += need` – if we decide `need` operations start at position `i`,
+   we add them to `cur`.  
+   Then we keep the old value of `cur` for the next larger index and
+   will subtract this amount at `i+k` later.
+
+Thus after the update `cur` again equals the number of `active`
+operations that influence position `i` – the lemma holds. ∎
+
+
+
+##### Lemma 2  
+If the algorithm terminates with `False` it is impossible to reduce
+the array to zero.
+
+**Proof.**  
+The algorithm can be `False` in two plausible situations
+
+1. `cur > nums[i]` – the current element already receives more
+   decrements than its value, i.e. we would have to subtract a non‑negative
+   number from a negative number, which is impossible.
+2. `i + k > n` after the element has a positive `need`.  
+   There is no subarray of length `k` that starts at `i`, so we cannot
+   perform the required operations that would reduce `nums[i]` to zero.
+
+Both cases prove impossible, therefore the algorithm is correct. ∎
+
+
+
+##### Lemma 3  
+If the algorithm never returns `False`, then each element is reduced
+to zero after the allowed operations.
+
+**Proof.**
+
+*Consider the element at index `i`.*  
+When the algorithm processes it, it already has `cur` decrements equal to
+the number of previous operations that make it smaller.
+If `cur == nums[i]` the element is already zero – no further operation
+exists.
+
+If `cur < nums[i]` we set `need = nums[i] - cur`.  
+The algorithm starts exactly `need` operations at position `i`
+(Lemma&nbsp;1 guarantees that enough operations are performed to limit the
+current sum to `cur`).  
+Each of these operations decreases `nums[i]` by `1`, consequently
+the element becomes `0`.  
+All other elements are affected because the algorithm also
+maintains `diff` for future indices, therefore it blocks the subarray
+effectively.
+
+Thus after the whole scan the array consists of zeros. ∎
+
+
+
+##### Theorem  
+For every input array `nums` and integer `k` the algorithm returns
+`True` **iff** the array can be reduced to zero using the allowed
+operations.
+
+**Proof.**  
+
+*If part.*  
+When the algorithm finishes without returning `False`, by Lemma&nbsp;3
+the array can be reduced to zero.
+
+*Only‑if part.*  
+Assume the array was reducible by some sequence of operations.
+We run the algorithm in parallel.  
+Because the algorithm never stops it means it never encounters a case
+that is impossible according to Lemma&nbsp;2.
+Consequently the algorithm’s operations are a valid sequence, proving
+that the array can be reduced – contradiction. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.   Complexity Analysis
+
+The loop runs once for every array element.  
+All operations inside the loop are `O(1)`.
+
+```
+Time   :  O(n)
+Memory :  O(n)  (difference array of size n+1)
+```
+
+`n ≤ 10^5`, `nums[i] ≤ 10^6`, so memory fits easily.
+
+--------------------------------------------------------------------
+
+#### 5.   Reference Implementation  (Python 3)
+
+```python
+from typing import List
+
+class Solution:
+    def checkArray(self, nums: List[int], k: int) -> bool:
+        n = len(nums)
+        diff = [0] * (n + 1)          # difference array
+        cur = 0                       # current number of active operations
+
+        for i in range(n):
+            cur += diff[i]            # --- allow previous ops to finish
+            if cur > nums[i]:
+                # we already subtracted more than the value, impossible
+                return False
+
+            need = nums[i] - cur      # how many operations must start on i
+            if need > 0:
+                if i + k > n:         # no subarray of size k fits
+                    return False
+                cur += need
+                diff[i + k] -= need   # will be removed after k positions
+
+        return True
+```
+
+The code follows exactly the algorithm proven correct above.

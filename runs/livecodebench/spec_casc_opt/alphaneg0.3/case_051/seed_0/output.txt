@@ -1,0 +1,277 @@
+<|channel|>analysis<|message|>We need to produce solution.
+
+Understanding problem: We have length n. Operation: choose any contiguous segment of length k and set all cells to white. Actually choose any k consecutive cells and make them all white. That means we can overwrite all cells in that segment to white regardless of original state (B or W). The goal to erase all black cells with minimal operations.
+
+Essentially we choose segments covering all black cells. Because turning white on already white is okay. Operation length exactly k, but can overlap etc.
+
+Thus we need minimal number of length k segments to cover all indices of 'B' cells. Overlap allowed; we just need to cover each black cell by at least one segment.
+
+This becomes: given positions of B, target is to cover them with intervals [i, i+k-1] with integer starting positions, minimize count.
+
+This is standard greedy: sort positions, iterate leftmost uncovered, choose the segment covering as many as possible? Usually we greedily choose starting at index of first uncovered B, then interval [pos, pos+k-1]. But optimal? Usually minimal number of steps to cover all B's with segments of fixed length k is achieved by greedy: take the leftmost uncovered black, place a segment covering it as far right as possible to cover more B's? Wait contiguous segment must set k cells to white; you cannot shift start location beyond B? Actually you can choose any k consecutive positions. So you can place segment such that the leftmost B is at some relative position inside the segment. But we can just place segment starting at pos of first uncovered B? But that might skip earlier B? Let's think.
+
+We can choose any k consecutive cells. To cover all B, we just need to cover them. If we move segment more to the right, might miss leftmost B. So the leftmost B must be within segment. So strategy: for leftmost uncovered B at position p, we can put segment such that p is at some offset in it; the segment might start at max(0, p-k+1?) Wait we want minimal segments: Intuition: choose segment that starts at p (the first B) and covers all following B's up to p+k-1. That may cover more B's ahead; but maybe we could shift start earlier, because covering more B's might reduce number of segments? But if we shift start earlier than p (p< start index), then segment would start at p-k+1? but that would extend leftwards to before p, covering p but also earlier cells maybe not needed but still okay. However if we shift start later than p, it will not cover p. So start must be <= p <= start+ k-1. So start ranges up to p. That means we can start at p-k+1? Wait if start = p- (k-1), i.e., earliest start that covers p but minimal left shift. But earlier start may help cover future B's? Actually starting earlier might extend leftwards but not affect covering future B's. Starting later (within range) will shift all positions rightward, covering B's that are later. So to maximize coverage to the right, we should start segment such that leftmost B is at leftmost possible? Wait it's reverse: If we set start at p, the segment covers [p, p+k-1] which goes to the rightmost possible relative to p. If we start earlier, the segment's right end is earlier (p-k+1 + k-1 = p), so less than p+k-1. So starting at p yields maximum right coverage. So greedy of placing segment starting at p covers all B's up to p+k-1, which is optimal.
+
+Thus algorithm: iterate over string from left to right; count operations. When at i start: if s[i]=='B', we perform operation covering from i to i+k-1, increment count, and set i to i+k, skip over war? We may skip cells but we still need to continue scanning. Implementation: while i < n: if s[i]=='B', ans++, i+=k, else i+=1. Because after performing operation, all cells in that segment become white, so we effectively skip over them. That yields minimal operations.
+
+Let's test on sample:
+
+1. n=6,k=3, s= WBWWWB. i=0 W skip; i=1 B -> ans=1; i+=3 -> i=4; i=4 W skip; i=5 B -> ans=2; i+=3 -> i=8 -> exit => 2; matches.
+
+Second test: 7 3, WWBWBWW. i=0 W no; i=1 W no; i=2 B -> ans=1; i=5; i=5 W no; i=6 W no; i=7 exit =>3? Wait i=2 B -> ans=1, skip to 5 (2+3). i=5 char? indices: 0 1 2 3 4 5 6. At i=5, s[5]='W', i=6, s[6] 'W', i=7 exit. ans=1 -> matches.
+
+Third: 5 4, BWBWB. i=0 B break: ans=1; i=4; i=4 B: ans=2; i=8 exit. ans=2 matches.
+
+Edge: k=1 -> each B needs separate op. Greedy: i from 0; if B, ans++ i+=1 -> counts number of B. ok.
+
+Edge: k=5, n=5, BBBBB. first B at 0 -> ans=1, i=5 exit.
+
+Edge: if there are whites in between, skip.
+
+Seems simple.
+
+Check example 8 2: BWBWBBBB. Let's run: i=0 B ans=1 i=2; i=2 B? char at index 2 is B? Wait string: B W B W B B B B. indices:0 B,1 W,2 B,3 W,4 B,5 B,6 B,7 B. i=0 B ans=1 i=2 (skip 2). i=2 B ans=2 i=4. i=4 B ans=3 i=6. i=6 B ans=4 i=8 exit. ans=4 matches.
+
+Similarly 10 2: W B B W B B W B B W? Wait string: W B B W B B W B B W. Let's compute: indices: 0 W,1 B,2 B,3 W,4 B,5 B,6 W,7 B,8 B,9 W. i=0 W skip. i=1 B ans=1 i=3. i=3 W skip. i=4 B ans=2 i=6. i=6 W skip. i=7 B ans=3 i=9. i=9 W skip. i=10 exit. ans=3 matches.
+
+4 1: BBBB: each B => ans=4. 3 2: WWW: ans=0 -> matches.
+
+So algorithm works.
+
+Proof: The greedy approach is optimal because any operation that covers the leftmost B must start at y where y <= p <= y+k-1. The rightmost possible start gives the furthest right coverage. So algorithm reduces to leftmost B each time.
+
+Complexities: O(n) per test case.
+
+Edge constraints: sum n <= 2e5; t up to 1000.
+
+Implementation: read t, loop, parse ints, read string. Use while loop.
+
+Implementation details: Since lines may have spaces at start? The sample uses blank lines? But we will read using sys.stdin.readline, strip. The formatted sample has blank lines after each test case; but the actual problem likely no blank lines. But reading robustly: while reading, skip any empty lines.
+
+We'll implement:
+
+import sys
+
+def solve():
+    data = sys.stdin.read().strip().split()
+    idx=0
+    t=int(data[idx]); idx+=1
+    outputs=[]
+    for _ in range(t):
+        n=int(data[idx]); idx+=1
+        k=int(data[idx]); idx+=1
+        s=data[idx]; idx+=1
+        ans=0
+        i=0
+        while i<n:
+            if s[i]=='B':
+                ans+=1
+                i+=k
+            else:
+                i+=1
+        outputs.append(str(ans))
+    sys.stdout.write("\n".join(outputs))
+
+Will that handle _ splits? Yes.
+
+But note large t up to 1000; n per test may be small; but reading all into list is fine.
+
+We also must consider sample input: It includes blank lines. Our splitting will skip blank spaces.
+
+Edge: n may not be used? But we can ignore.
+
+Edge: There may be trailing garbage? Not.
+
+Time complexity O(total n). Implementation done.
+
+Let's verify sample via manual mental tests: We did earlier.
+
+Thus produce final answer.
+
+We should add explanation summary. Provide final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every test case we have a paper of length `n`  
+(`s[i]` is the colour of the `i`‑th cell, `B` – black, `W` – white).
+
+In one operation we choose any `k` consecutive cells and paint **all** of them white.
+The task is to make all black cells white using the minimum possible number of
+operations.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.  Observation
+
+An optimal sequence of operations is obtained by a greedy strategy:
+
+```
+scan the paper from left to right
+while we are still inside the paper
+        if the current cell is black
+                ans += 1
+                jump k cells to the right
+        else
+                move one cell to the right
+```
+
+Why is this optimal?
+
+* Let `p` be the leftmost black cell that is still unpainted.
+* Any operation that paints this cell must start at some position `x`
+  with `x ≤ p ≤ x + k - 1`.
+  The rightmost possible start is `x = p`.  
+  Starting earlier (`x < p`) would leave our operation’s right border
+  (`x + k - 1`) before `p + k - 1`, i.e. it would paint fewer cells on the
+  right side and can never be better.
+* Therefore the best we can do is to start an operation exactly at `p`,
+  paint cells `p … p + k - 1`, and then continue scanning after that
+  block.
+* Repeating this argument for the next uncovered black cell gives the
+  greedy algorithm above.
+
+So the greedy algorithm gives the minimum number of operations.
+
+--------------------------------------------------------------------
+
+#### 2.  Algorithm
+
+For each test case
+
+```
+ans = 0
+i = 0
+while i < n:
+        if s[i] == 'B':
+                ans += 1
+                i += k          # all cells inside the operation are white
+        else:
+                i += 1
+output ans
+```
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm outputs the minimum possible number of
+operations.
+
+---
+
+##### Lemma 1  
+Let `p` be the leftmost black cell that is still unpainted.
+Any optimal sequence of operations contains an operation that
+covers `p` and whose left border is at most `p`.
+
+**Proof.**
+
+The leftmost block that covers `p` must start at some position `x`
+with `x ≤ p ≤ x + k - 1`.  
+Such an operation exists in all optimal solutions, because otherwise
+`p` could never be painted white. ∎
+
+
+
+##### Lemma 2  
+For the cell `p` described above, there exists an optimal solution that
+starts an operation **exactly at `p`**.
+
+**Proof.**
+
+Take an optimal solution that satisfies Lemma&nbsp;1.
+If the chosen start is `x < p`, replace that operation by an operation
+starting at `p`.  
+All cells that were painted before stay white, and the new operation
+covers all cells formerly covered by the old one plus additional cells
+to the right (up to `p + k - 1`).  
+Thus the new solution is still valid and cannot use more operations.
+∎
+
+
+
+##### Lemma 3  
+After the algorithm paints the block starting at `p` and jumps to
+`p + k`, the remaining part of the paper (indices `≥ p + k`) can be
+treated independently of the already processed part, and the algorithm
+will be optimal on this prefix.
+
+**Proof.**
+
+Because the operation paints everything from `p` to `p + k - 1`,
+no black cell left of `p + k` will appear later.
+Any operation that touches the left part cannot affect the right part
+and vice versa.  
+Therefore the task on the suffix `p + k … n - 1` is exactly the same
+problem as the original one but its input is smaller.
+The greedy algorithm will again apply Lemma&nbsp;2 and be optimal on
+this suffix. ∎
+
+
+
+##### Theorem  
+For each test case the algorithm outputs the maximum possible number of
+operations required to turn all cells white.
+
+**Proof.**
+
+By Lemma&nbsp;2 the algorithm chooses the same first operation as at
+least one optimal solution.
+By Lemma&nbsp;3 the remaining part of the paper is an independent
+subproblem on which the algorithm again acts optimally.
+By induction the algorithm is optimal for the whole paper. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+For each test case we scan the string once.  
+All operations are `O(1)`.  
+Hence
+
+```
+time   :  O(n) per test case
+memory :  O(1)   (apart from input storage)
+```
+
+Given the constraints `Σ n ≤ 2·10^5`, the program easily satisfies
+the limits.
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+import sys
+
+def solve() -> None:
+    data = sys.stdin.read().strip().split()
+    it = iter(data)
+    t = int(next(it))
+    out_lines = []
+
+    for _ in range(t):
+        n = int(next(it))
+        k = int(next(it))
+        s = next(it)
+
+        ans = 0
+        i = 0
+        while i < n:
+            if s[i] == 'B':
+                ans += 1
+                i += k          # whole block becomes white
+            else:
+                i += 1
+        out_lines.append(str(ans))
+
+    sys.stdout.write("\n".join(out_lines))
+
+if __name__ == "__main__":
+    solve()
+```
+
+The program follows exactly the algorithm proven correct above
+and conforms to the required input / output format.

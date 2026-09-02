@@ -1,0 +1,303 @@
+<|channel|>analysis<|message|>We need find maximum possible bitwise OR after performing at most k operations of "multiply by 2" on any element per operation. We can choose element and multiply by 2. So operation shifts left by 1. Equivalent to adding a zero bit on right. That's equivalent to increasing element by x*2. After repeated operations on same element, it becomes multiplied by 2^m where m operations. So each element can be multiplied by 2^m for 0 <= m <= k (not exceed total k across elements). So we need to choose distribution of at most k multiplications (like shifting bits) to maximize overall OR.
+
+Observation: The OR of numbers is maximized by maximizing bits set to 1 across all numbers. Multiplying by 2 shifts bits left: new bits could add new positions above highest bit. Essentially, each operation can shift a bit from some position to one more to the left. So we can potentially activate bits not present originally. The maximum OR should be all bits up to some Tmax? Since k <= 15 small; n up to 1e5. We can brute force over which element gets how many ops? But distribution matters.
+
+We need to maximize integer value of OR. Let's think: Since OR is monotonic with setting higher bits more valuable. The process of left shift can push existing bits up, maybe setting a new high bit as 1.
+
+Equivalent: Starting with some OR value initial_OR = OR of all numbers. We can choose to do operations that could set higher bits. Suppose we choose an element x and multiply by 2^m, value becomes x << m. This may set some bits at positions shift: bits of x moved to higher positions. So OR after operation: new_OR = (old_OR) OR (x << m). But some bits may already set.
+
+The problem is to decide allocation of at most k left shifts among elements to maximize OR. Since k <= 15, maybe we can brute force via DP over subsets of shifts? Each shift increments one element's shift count by 1. Equivalent to choose up to k times which element to double. Because k small, we could consider all sequences, but n up to 1e5, we cannot track each element individually.
+
+We need observation: Since k small, the best OR likely will be obtained by picking a single element and allocating all k to it? In example 2, they used all on same element. But example 1 they used 1 shift on index 1, not necessarily all on same. Let's test possibility: Suppose we have two numbers, we could shift one or shift the other. But picking some distribution might produce more higher bits. However, maybe shifting any element cannot increase the OR beyond shifting the element with the highest value and largest set of bits? Not necessarily.
+
+Consider numbers: nums=[1,2], k=1. 1 binary 1, 2 binary 10. OR=3. If we shift 1->2, array [2,2], OR=2. If shift 2->4, array [1,4], OR=5. So shifting 2 (higher) gives more. So maybe shifting the current maximum gives best? But consider [3,4], k=1. 3 (011), 4 (100). OR=111=7. Shift 3->6 (110). New OR=110|100=110|100=110 (6). Shift 4->8 (1000). New OR=3|8 =1011=11 > 7. So shift bigger element.
+
+Consider [1,8], k=1. 1 (1), 8 (1000). OR=1001=9. shift 1->2 (10), OR=1010=10 >9. shift 8->16 (10000). OR=10001=17 >10. So shift bigger.
+
+Seems shifting largest is best because shifting it creates higher new bit that wasn't set before, while shifting smaller may lose lower bits? But we only care OR, not sum. Actually shifting may lose lower bits because shifting left moves all bits up; original lower bits shift out of original positions, but OR includes them primarily if they exist in other numbers. But shifting could drop some bits that were originally set in that number, which might reduce OR, unless other numbers already have those bits. So we might want to shift elements that are not giving unique bits. So we might want to shift number that is "redundant" relative to OR.
+
+Goal: maximize OR. Equivalent to choose binary positions to set to 1. We already have OR0. We can add up to k shifts to generate new bits that may cover positions above highest bit. Each shift increases highest bit by at most 1 (if original has some highest bit). So maximum possible OR may be OR0 | (some high bits). Since k small, high bits that can be reached at most shift count of each element: we can set at most k higher bits beyond current highest? Actually if you shift an element many times, you can set bits as high as current highest bit of element + m. If element's highest bit is h_e, shifting m gives highest bit h_e + m. So across all elements, you can potentially set bits up to max(h_e + allocated operations). But those bits might not be 1 currently? But after shift, that bit will be 1 (the highest bit will be 1). So we can create high bits.
+
+Thus best OR might be OR0, and then maybe add bits from shifting high-h elements. Since shifts loss lower bits may not harm if they are already present in others.
+
+Therefore maybe best strategy: pick the element with maximum numeric value among those that contribute most unique bits? Wait.
+
+Given constraints small k, we can brute force over which element gets the m operations (0..k) and maybe some distribution. We could iterate over all pairs of elements for m1, m2? But k small but distribution can be many; but we can use DP of maximum OR achievable with j shifts used selecting among elements processed in some order. For each element we can choose to give it t shifts where t from 0..min(k, target). This is like knapsack but OR as operation.
+
+We can process each element sequentially. For each current OR value, we can upgrade to new OR after shifting x by t: new_or = current_or | (x << t). Since states number of shifts used j up to k, and OR values might be huge; can't maintain all OR values. However k<=15, n large, but OR values may be many, but we could use set of ORs? Total combinations maybe large though.
+
+But we can use bit DP: Since basically OR result will be subset of bits from all numbers shifted. But numbers up to 1e9 (~30 bits). After shift up to 15, bits up to 45 bits. The OR result will have at most 45 bits. We could consider dynamic programming by bitset representation: but OR of 45 bits is huge but we only have at most 2^45 possibilities impossible.
+
+But we can use greedy? Let's analyze.
+
+Observation: Since each shift increases magnitude but may reduce low bits. However, to maximize OR, we don't care about magnitude but about bit values high to low. Highest bits are most important. So to maximize OR, we want to set as many high bits as possible. Shifting a number gives new bit at position h_e + m. So the biggest contribution to OR is setting the highest bit that wasn't previously set. So we should use shifts for each shift to create a new high bit if possible.
+
+Consider we have list of numbers, we pick element with highest value (max). Shifting it gives new high bit (maybe "moving" high bit). After first shift, we may lose its lowest bits but the new high bit may be already set if there are other numbers? That could lead to no net benefit. But if we shift once, we might cause loss of unique bits that were previously in OR but not present elsewhere. So we may lose.
+
+Thus optimal may involve shifting elements that have no unique bits relative to current OR; they may be redundant.
+
+We could compute for each element the subset of bits that are unique to it (i.e., bits that none of the other numbers have). Because shifting it may lose these unique bits, thus OR will lose. But if those bits are present elsewhere, we can shift freely.
+
+Therefore we can consider shifting the element that has minimal impact on OR: i.e., shifting the element that either has no unique bits, or after shifting, the resulting OR will lose minimal bits. But we want maximum OR after at most k shifts; we may not need to use all k.
+
+We can try to search by k small: we could evaluate all possibilities of shifting any element by up to k times, with at most k total. For each distribution of shifts, the OR is computed. But we could cast as: we can choose a multiset of operations each chooses an element; but repeated operations on same element produce successive shifts. Equivalent to choose for each element a shift count m_e such that sum m_e <= k. OR result = OR over e of (nums[e] << m_e). So essentially we choose shift counts.
+
+We can compute the OR for a given vector m_e. Since shifting left costs, we can't brute force over all e due to n large. But we can think of: for each possible shift count t from 0..k, we compute candidate OR of array where one element is shifted by t? But we may need to shift multiple elements.
+
+But maybe the best solution uses at most 1 element to shift multiple times? Let's test counterexample: Suppose nums=[2,2], k=1. OR0=2. Shifting first 2->4, OR=6 (110). Shifting second 2->4 same. So OR=6. Could we get better by shifting first 2 (not unique) same as shifting second. So best is 6.
+
+Suppose nums=[1,4], k=1. OR0=5 (0101). Shifting 1->2: OR= (2|4)=6 (0110). Shifting 4->8: OR= (1|8)=9 (1001). 9>6. So shifting bigger.
+
+Suppose nums=[7,8], k=1. 7=111,8=1000. OR0=1111 (15). Shifting 7->14 (1110): OR=1110|1000=1110 (14). Shifting 8->16 (10000): OR=7|16=23 (10111). So better shift bigger.
+
+Suppose nums=[5,6], k=1. 5=101,6=110. OR0=111 (7). Shift 5->10 (1010): OR=1010|110=1110 (14). Shift 6->12 (1100): OR=101|1100=1101 (13). 14>13. So shifting the number with higher numeric value? 6 higher.
+
+But consider if lower number has unique higher bits? Suppose nums=[8,1], k=1. 8=1000,1=1. OR=1001. Shift 8->16: OR=1|16=10001=17. Shift 1->2: OR=2|8=1010=10. So shift bigger.
+
+It seems always shifting the largest numeric value is beneficial? Let's test with many numbers: maybe there is case where shifting a smaller number yields higher bits than shifting larger? Suppose numbers: [6 (110), 5 (101)] k=1. Largest 6, shift ->12 (1100). OR=12|5=1101 (13). Shift 5->10 (1010). OR=6|10=1110 (14). Here shifting smaller gives 14 higher. So counterexample.
+
+Numbers: 6 (110) 5 (101). OR0=111 (7). Shift 6->12=1100 OR with 5 ->1100|101 =1101=13. Shift 5->10=1010 OR with 6 ->1010|110=1110=14. So shifting smaller gave better.
+
+Thus greedy just shifting largest fails.
+
+Hence we need algorithm.
+
+k <= 15, so we can brute force over distribution of shifts among some selected elements maybe? Considering set of limited candidate numbers: maybe choose only those that have unique bits not present in others. Because shifting others will not reduce bits.
+
+We can precompute for each element whether it contributes unique bits.
+
+Let bit_positions up to 45. For each bit, count how many numbers contain it. For each number, compute set of bits that are unique to it: bits where count ==1. If a number has any unique bits, shifting it might lose those bits. But maybe we can shift and still have them set in other numbers? If they are unique, shifting will lose those bits.
+
+Thus we might consider not to shift numbers with unique bits, unless we want to sacrifice them.
+
+But maybe we still need to shift them because we lack enough k to shift other numbers? But we might choose to shift a number with unique bits partially? Wait shifting reduces all bits shift left; if we shift by 1, we lose the lowest bit. If the lowest bit among that number is unique, we lose it. For bits that remain (higher) maybe not unique. But could still be unique.
+
+But maybe best solution involves shifting only numbers without unique bits; those can be shifted arbitrarily.
+
+Edge case: all numbers have some unique bits. Then we may need to shift at least one unique bit. But we might shift others to lose lowest bits and maybe lose unique bits? But maybe we can shift them; still we lose unique bits.
+
+Thus algorithm: find all numbers that have no unique bits. They are safe to shift. For these numbers, shifting may only set new high bits without losing any in OR (since any bits they have are present in at least one other number). So we can shift any of them as many times as we want with no penalty.
+
+Thus we can focus on shifting from these safe numbers: maybe picking one such number and shift all k times to get higher bits. Because shifting multiple numbers may distribute k shifts but each shift yields a new high bit from some number. But shifting a single safe number repeatedly will produce successive high bits creating 1 at each new position? For one number x, shifting by m results in bits at positions bits_of_x shifted up by m. So the OR of original x | (x << 1) | (x << 2)|...? but we only keep the final after all shifts. But if we choose shifting same number multiple times, only final shift matters: final value is x << m. So we lose the bits that were shifted out, but they might be present elsewhere? If x is safe, shifting won't lose unique bits; but shifting may lose some bits that are shared with others? Actually if x had a bit that appears also in others, shifting that bit will still be present in others, so same bit in OR remains. So OR after shifting will still have those bits from other numbers. So OR after shifting safe number remains same (OR0) OR new bits. So safe numbers are good: shifting them will not lose any bits from OR0. So OR after shifting safe number by m is OR0 | (x << m). But if x share with others, the OR may change only at new high bits.
+
+Thus we can just consider shifting a single safe number by maximum m = k? But wait: After shifting safe number by m, we might also shift others to produce other new bits at different positions? But we have only k operations overall; we could shift multiple safe numbers more moderately. Suppose we have many safe numbers; shifting each by 1 could set multiple distinct new bits, possibly better than shifting one number by k? Let's test.
+
+Example: nums=[1,2], safe? bit counts: bit0 present in 1, bit1 present in 2. Each unique? Yes. Shifting safe numbers? There are none safe. So can't apply this.
+
+Example: nums=[3,3] two identical numbers. Bits: bit0 occurs twice etc. So each number has no unique bits. They are safe. OR0=3. Suppose k=1: shift either number by 1 -> value 6 (110). OR=3|6=111=7. Suppose k=2: Option A: shift same number twice: shift 3 -> 12 (1100). OR=3|12=1111=15. Option B: shift two numbers each by 1: array becomes [6,6]; OR=6. Option C: shift one by1 and other by1? that's same as B. So shifing same number twice gives 15 (>7). So shifing multiple safe numbers might be less effective because new bits coincide and may not add new set bits. So best is to shift one number by as many as possible.
+
+Thus algorithm: find safe numbers (no unique bits). If exists, pick the one with largest value (to set highest possible new bit). Then shift it by k times. OR=OR0 | (x << k). This seems plausible.
+
+But what if no safe numbers? Then all numbers have unique bits. With k small, we need to decide shift to maximize OR. We can brute force for small n? n up to 1e5, but unique case might be many. However we can maybe apply DP with k small: we can try shift each number with t from 0..k, compute result. There are up to n * (k+1) possibilities, up to 1e5 * 16 = 1.6e6, manageable. For each shift, compute OR of all numbers after shifting that one. Wait but we also could shift more than one number: multiple numbers may all be shifted. But we can notice that shifting two numbers reduces OR because each shift may remove unique bits? Might produce less? Let's test small example: nums=[1,3], k=1. INF numbers? 1 unique, 3 unique. OR0=3. Shift 1->2 gives OR=2|3=3. Shift 3->6 gives OR=1|6=7. So better shift 3. Could shifting both? not allowed because k=1.
+
+For k=2, maybe shift both one each? For [1,3], k=2: shift 1->2, 3->6 yields OR=2|6=6. Compare with shifting 3 twice: 3->12 => OR=1|12=13. So best shift one number twice.
+
+Thus likely shifting same number multiple times gives higher new bits. So we may only shift one element? Let's attempt to prove: Suppose we have two elements a,b, each shifting by some amounts t_a, t_b with t_a + t_b <= k. The OR after shifts: (a << t_a) | (b << t_b) | OR of others unchanged. Consider shifting only one element: choose e with t_e = k. Its OR is (e << k) | OR(others). Need to compare.
+
+Hypothesis: shifting more than one element is never better than shifting a single element by total k. Because each shift applied to a different element can potentially set new high bits but may reduce lower bits unique for that element.
+
+But maybe there could be case where shifting distinct numbers yields two new high bits each, giving OR with two high bits set (positions x and y) whereas shifting one number gives only one new high bit. For example, a's highest bit at h_a, b's highest at h_b. Shifting a by k gives new high bit at h_a + k. Shifting b by k gives new high bit at h_b + k. Suppose h_a + k and h_b + k are distinct high bits. But if we shift a by k1 and b by k2 (k1 + k2 = k), we might get both high bits if k1 and k2 both >0. But shifting a by k gives only one high bit. Actually we could shift b by k1 and a by k2, still one high bit each. But OR of two gives two high bit positions. So maybe better.
+
+Let's test: Suppose a=1 (bit0), b=1 (bit0). Both have only bit0. Both unique (each unique unless there are duplicates). Wait bit0 appears twice (a and b). So unique none. So safe. Let's set k=2. Option shift one by both: a <<=2 => 4. OR=4|1=5 (101). Option shift a by1,b by1: [2,2] OR=2 (10). Not better. So not.
+
+Now different bit positions: a=2^10, b=2^20. Their bits unique? bit10=1, bit20=1. Both unique. k=2. Shifting a by 2 -> 2^12 ; OR with b=2^20 => 2^20 + 2^12. That's 2^20 + 2^12. Shifting each by1: a=2^11, b=2^21 -> OR=2^21 + 2^11. Compare. Which is larger? 2^21 + 2^11 > 2^20 + 2^12? Let's compute values approximately: 2^20 = 1048576, 2^12=4096, sum ~1052672. 2^21=2097152, 2^11=2048 sum ~2099200. So shifting each by 1 yields larger OR. So indeed can be better to shift multiple elements.
+
+But k small 2; we can shift two elements each 1. That got higher OR than shifting one by 2 (makes new highest bit 2^12 vs 2^21). So yes, shifting multiple elements produce distinct high bits which can be better.
+
+Hence we need to consider distributing shifts among elements to maximize OR. But n large; but k<=15, we can try dynamic programming over subsets of shifts? Another perspective: Each shift applied separately selects an element and increases its shift count by 1. Equivalent to each shift chooses an element. The effect on OR is linear? OR is monotonic but not additive.
+
+We can observe that the maximum OR will correspond to setting as many distinct high bits as possible. Since each shift can set at most one new high bit if we shift some number that didn't have that bit earlier. But if we shift multiple different elements, we can potentially set multiple distinct high bits. For each element, its highest bit after shift t is its original highest bit + t. So we can afford up to k shifts to selected elements. The total number of distinct new high bits we can set is at most k (since each shift adds at most one new high bit). Actually shifting element by t can potentially create at most one new highest bit (which is high). For t>1, as shift increases, it may create higher bit each step. But we only do shift operations counted per one increase. So each shift increases high bit of the chosen element by 1. So we can think of the process as starting with initial numbers, each shift we pick an element and move its highest bit up by 1. The OR's high bits are influenced by the endpoints after all shifts.
+
+We can treat each shift separately: each shift on element e will change its value from x to 2*x. The effect on bits: all bit positions shift left by 1, so original highest bit moves left; possible new bit may be introduced beyond previous highest bit. If we think of applying shift iteratively, each shift may lose lower bits but shift all bits; but OR of all numbers after each step maybe complicated.
+
+But maybe we can treat final outcome equivalently: For each element e, after t_e shifts, its final value is x_e << t_e. That is correct. So OR is OR over all e of (x_e << t_e). So indeed we are choosing t_e non-negative integers summing <= k. We need to maximize OR of these shifted numbers.
+
+Thus it's kind of a combinatorial optimization. k <= 15 small; we can maybe iterate over all subsets of shift assignments via recursion exploring possibilities of allocating shift to elements but we need to reduce search space due to n large. Observation: Since each shift only affects one element and shifts bring duplicates bits shifting left, the OR of all numbers after shifting will be at most OR0 | some set of bits that are original bits of selected elements shifted left by cumulative shift counts. The new high bits are set at positions original_high_bit_i + t_i. These bits may overlap.
+
+We can look at the set of candidate bits that could appear from shifting each element: for each element, we can generate bit position (highest_bit + m) for m=0..k. We want to choose at most k shifts, but each shift on an element increments that element's shift count by 1. So selecting a final t_i yields we used t_i shifts on that element. So the set of final positions used correspond to picking t_i positions for each element? Wait we only add one bit per element? Because after shifting, the value has bits at positions j+ t_i where j are bits originally of x. So the bits are all shifted, not just limited to highest. So the new bits introduced correspond to original bits shifted left; but some of them may be new (not previously present). We care about union OR all these bits.
+
+So we can think of this as we want to maximize OR, i.e., set bits as high as possible. For each element, shifting t times moves all bits up, giving new bits at positions j+t. For each bit position, if that bit was not set by other elements before, we may set it. But for high bits above current max, these bits indeed are new.
+
+Given limited k, the maximum we can set new high bits is at most k times the number of elements with unique bits? Not exactly.
+
+Brute Force Approach: Since k <= 15 and n <= 1e5, we can consider enumerating all possible choices of shifting for each element? That's too large. But we can consider the following DP over bit positions: Let dp[mask] be maximum OR? mask representing set of remaining shifts used? Not.
+
+Alternative approach: Since k small, we can choose at most 15 distinct elements to shift (since shifting more than k elements each by at least one would exceed k). But we may shift less than k elements multiple times. But we can consider selecting a subset S of elements to shift, and for each selected element, shift some amount t_i >=1, where sum t_i <= k. Because shifting an element by multiple times moves its highest bit and pulls other bits to higher positions; but maybe the best distribution is to shift some elements by 1, others by 1, etc. However to have each shift allocated to element that benefits the most.
+
+Observation: Shifting an element by t= s (multiple shifts) is equivalent to performing s shifts sequentially, each providing shifting all bits left by 1. So we can think of each shift individually: we choose element e and shift once. So after all shifts, each element e has been shifted exactly t_e times. The final OR is computed from x_e << t_e. So we can model each shift as a "resource" that we can allocate to elements. Each element's value depends on total number of shifts allocated to it. So we can treat it as we can allocate up to k tokens to elements, each token increases shift count for that element by 1.
+
+We can think of dynamic programming over number of tokens used and selecting which element to allocate token to. For each token, we could choose which element to put token, but the effect is not additive because giving multiple tokens to same element increases its shift count.
+
+But since k <= 15, we could enumerate all possible shift count assignments t_i within 0..k for each element? However n large. But we can note that shift counts beyond some threshold (like > a maximum) won't make sense if we only have k tokens; thus each element can have at most k tokens. But still many possibilities.
+
+But we can reduce by noticing that the only valuable elements are those with highest bits far left, because shifting them yields higher new bits. So we can focus on few top elements. Let's find the top (k+1) numbers by value? But maybe an element with small value but unique high bit could be valuable. For example, element with value 2^30 and another with 2^0 matters. The number with high bit high may still be among top by value.
+
+However, we cannot guarantee that maximum OR uses only top (k+1). But perhaps we can choose the k+1 largest numbers; because shifting defines high bits, so the largest original values have highest bit positions. So shifting smaller numbers may only produce bits that are lower than those produced by shifting larger numbers. But if we shift multiple small numbers, their new high bits may be different positions but still lower than if we shift large numbers more? Actually with k small, shifting a moderate high number by 1 may bring new high bit equal to its original high bit +1. That could surpass all new high bits from shifting many smaller numbers by smaller amounts? But we just shift by 1 each.
+
+Let's attempt a more formal DP: Since k <= 15, we could consider enumerating all subsets of elements we might shift by at least 1. Because we might shift at most k elements if each gets at least 1 shift. The number of subsets up to size k from n can be huge; but we can pre-select candidate elements that are promising to shift: perhaps we can limit to top L elements by value, where L = 20 (since k <= 15). Because any other element if not among top L, its value is significantly smaller; shifting it produces new high bit maybe lower than top element's high bit. So we can ignore. Let's test worst case: Suppose numbers 1, 2^30-1, 2^30-2, etc. Worker.
+
+Maybe we can consider dynamic programming where we consider iterating over all elements and maintaining dp[mask] of bits? Not.
+
+We need to produce correct solution though.
+
+Alternative: Since k <= 15, we can brute force all distributions of shift counts among all elements but we can reduce to considering that only at most (k+1) elements' shift counts may be non-zero? But total token may be distributed across any number of elements, but at most k. Since each element used at least 1 token to get a shift. So number of used elements <= k. So we can pick up to k distinct elements to shift at least once. This implies we can consider subsets of up to k elements. n can be large, but we can iterate over all combinations of k elements maybe using heuristics? Not feasible.
+
+But we can use search/branch and bound? Since k=15, we can attempt to try each element as potential candidate for shift, exploring assignments. The branching factor can be up to current remaining tokens. But you can use memoization with state (index in sorted list, remaining tokens) and maintain OR of selected shifts? But still high.
+
+Maybe we can transform to bit DP: Since OR is bitwise, we can evaluate bit by bit from high to low. For each bit position, we need to determine if we can set it using available shifts. Since OR is maximum, we want highest bit set if possible. For each bit descending from 60 to 0, we need to check if we can set it using some shift distribution. That is like we need to decide which element to shift occurrences to create that bit.
+
+Number of bits up to ~45. For each bit position b, we can check if b is already present in OR0. If not, we might need to shift some element to create that bit. Suppose we pick element e to shift t times to set bit b, meaning that original bit at position b - t must exist in e. Also must ensure that t <= k (remaining). Actually if we plan to set multiple bits we may use same element for multiple bits? Because shifting same element by t produces many bits from original bits shift left by t. So if we set a high bit b from element e, we must shift it t = b - original_bit_position. That may also cause other bits to shift.
+
+Thus we might treat selection per element after all operations: each element e's final shift count t_e, determines which bits of e become present: bits at positions originally j+ t_e. So from perspective of achieving OR, the set of bits contributed by element e is {j + t_e}. So we need to pick t_e to satisfy that union across elements produce maximum OR.
+
+We can think of each element providing a set of bit positions equal to its original bits shifted by t_e. This is like we need to choose t_e to maximize OR. Equivalent to each element we can choose an offset t_e (0..k). After choosing t_e, we can compute resulting OR. This is combinatorial.
+
+Since k <= 15, we can use DP over t_e up to k. But n large. Let's think about bit DP: For each number, we can compute its bitset (up to 45 bits). But we need DP over OR bitset maybe 2^45 too many.
+
+Trick: Since k <= 15, perhaps we can use meet-in-the-middle considering shift distribution among two halves? Not.
+
+We might need a greedy algorithm: among all k operations, each operation we choose an element to double that yields maximum increase of OR. We can apply greedy: each operation, we select which element to double, considering resulting OR after that single operation. Since k <= 15, we can run DFS exploring all sequences up to length k, but branching each step to n=1e5 options: too large.
+
+However, we can precompute for each element e, the benefit of applying a shift given current OR state? That depends on OR current. This seems complex.
+
+Maybe we can solve via brute force over all possible final shift counts up to k per element but limited to few elements: we can observe that shifting more than one element might not be beneficial if there exists one element that can generate multiple high bits, but we saw counterexample where shifting each by 1 produced higher OR.
+
+Thus we need to consider combinations of up to k elements each shifted at least once. But perhaps we can consider picking up to k elements (since each used at least 1 token). The total number of combinations of k elements out of n is huge, but maybe we can prune: Because we only need high bits; we might choose candidates among top (k+1) values. And maybe only need to consider combos of size <= k among these candidates: choose subsets of up to k among 20 -> manageable.
+
+Let's test: L=20. Number of subsets size <=k up to 20: sum_{i=0}^{k} C(20,i). For k=15, that's huge (~ 10^5)? C(20,15)=15504, plus smaller. Sum up to 15 maybe ~ 133k. Which is fine. For each subset we might need to consider various shift allocations among them. But shift allocation among subset can be enumerated by distributing k tokens across selected elements. Number of integer compositions of k into ≤ |S| parts is C(k + |S| -1, |S| -1). For |S| up to k up to 15, may be large. For k=15, |S|=15, #compositions = C(29,14)= maybe 155,117,520 large.
+
+Thus brute force over all compositions is impossible.
+
+Need better approach.
+
+We can use DP over elements but with knapsack-like: For each element, we can consider giving t shifts (0..min(k, something)). The state index is index of element. But n up to 1e5; we cannot iterate all elements each time. But we can compress to only candidate elements maybe 20.
+
+We could use a two-phase: we can sort candidate elements by value. Then we perform DP with bitmask of used shifts? Wait we need to track total operations count. Since we only care about final OR, we could precompute for each element the resulting value after each t shift: v[e][t] = nums[e] << t.
+
+We need to compute OR of the chosen values across elements (including those with 0 shift). Initially OR0 = OR of all elements. But we will modify some elements by shifting: replacing its original value with v[e][t]. So new OR = OR0 | (v[e][t] - nums[e])? That difference not simple. Instead we just recompute OR across set of all elements with shifted values. Since #candidates small, we can compute OR repeatedly.
+
+Thus we can do DP over compositions of shifts across candidate elements. For each candidate, we choose t from 0 to min(k, remaining). Update OR by computing OR of all numbers after shifting that element to t. That re-evaluates OR each time. Complexity: Number of states: for each element we try t choices leading to recursion depth maybe up to k. Since n small we can recursion over at most L candidates. But branching factor up to k. For k=15, worst-case branching 16^15 huge.
+
+But we can prune: we only consider contributions of high bits; many t may result in same OR maybe? But not trivial.
+
+Need better insight.
+
+Maybe we can model as each shift operation is independent and always beneficial to apply? Since at most k, we might apply all k if they improve OR, else not. So we can search for best OR after up to k shifts. It's akin to exploring all sequences but maybe we can use dynamic programming by full enumeration of shift sets? Since k <= 15, the number of possible final shift counts per element is limited.
+
+But maybe we can interpret each shift as simply adding +1 to shift count but OR is linear with those counts? Not.
+
+Could we formulate as maximizing integer after OR of numbers shifted by t_e? Since OR is bitwise, we can treat each bit separately: We want to maximize binary number, i.e., want the highest bit set if possible. Highest bit can be set by shifting an element that has some bit at position p originally. For bit position high (say 44), we need some element to have some bit at pos p <= high, and shift so that p + t = high, with t <= k. So there exists an element with bit at pos p and we shift by high - p. Since we may need to shift the same element for multiple bits? Not necessary: each element's shift count t is same across all its bits. So if we want to set two different high bits from same element with single shift count, the only way is if it has two original bits at positions p1 and p2 that both shift to high positions? But high positions differ by t: t1 = high1 - p1, t2 = high2 - p2. If t1 != t2, can't use same t for both. So a single element can only produce a set of new high bits that are all offset by same t. So the future OR after shifting element e by t adds bits at positions {j + t}. So all new high bits relative to the element have same offset t. So we can set only those bits that are shift of original set by t. So we can produce multiple high bits if element's original bits are multiple positions lower by same amount difference: e.g., element has bits at positions 10, 12. shifting by 5 yields new bits at 15, 17. So we can set two high bits separated by 2. So an element can produce multiple high bits.
+
+Thus, maybe the best to use a single element with maximum number of bits? But we cannot guarantee.
+
+Better idea: Since k <= 15, we can iterate over all combinations of shift counts per element but we can restrict to elements where shift count >0. Let's denote we will consider up to k elements.
+
+We can attempt to evaluate all possibilities via branching over assigning shift to any element each time. Since k small, maybe we can branch on 1 operation at a time: Choose any element to double (shift one). For each such choice, we generate new array, and recursively choose next operation. However, branching factor is n, which is huge. But we could prune: we only consider elements that will lead to different OR results. Since many elements duplicates produce same result.
+
+We could observe that shifting an element that has same value as another yields same effect. So we can group by value and consider distinct values only. But still may be many.
+
+Alternative: Use heuristic via priority queue: Pick element that currently yields highest possible new OR when shifted? We can compute candidate OR after shifting each element by one. Then choose best. After that, we shift again maybe on same or other element. With k <= 15 we can do this greedily. But greedy may not be optimal.
+
+Let's evaluate potential counterexample to greedy. Suppose nums=[2,4], k=2. 2(10) 4(100). OR0=110 (6). Greedy: compute OR after shift each: shift 2->4: OR=4|4 = 4 (100) OR? Wait shift 2 to 4, array [4,4] OR=4. Shift 4->8: array [2,8] OR=10 (1010). Best is shift 4. Choose shift 4. Now k=1 left. Now recompute OR after shifting each (current array [2,8]): shift 2->4 gives [4,8] OR=12 (1100). shift 8->16 gives [2,16] OR=18 (10010). Choose shift 8? That yields OR=18. But actual optimum maybe shift 2 twice: shift 2->4, array [4,4], OR=4 (worse). Shift 4 twice: shift 4->8, array [2,8], OR=10; shift 8->16, array [2,16], OR=18. So optimum same.
+
+Let's search for counterexample: maybe greedy might miss synergy: example earlier with two big numbers 2^10 and 2^20 with k=2. Greedy chooses at each step best OR after shift. Initially OR0 = 2^10 + 2^20 = 2^20 + 2^10 (~1,048,576+1024). OR0=1,049,600.
+
+Compute shifting each by 1: shift a (2^10) to 2^11: OR=2^20 + 2^11 = 1,048,576 + 2048 = 1,050,624 (increase). shift b (2^20) to 2^21: OR=2^21 + 2^10 = 2,097,152 + 1024 = 2,098,176 (increase). So best is shift b. So choose shift b. Now array [2^10, 2^21] OR=2^21 + 2^10. Next step: compute shifting each by one more:
+
+Option shift a again: array [2^11, 2^21] OR=2^21 + 2^11 = 2,097,152 + 2048 = 2,099,200.
+
+Option shift b again: array [2^10, 2^22] OR=2^22 + 2^10 = 4,194,304 + 1024 = 4,195,328.
+
+Greedy chooses shift b again -> OR=4,195,328. But optimum we found earlier by shifting a once and b once gives OR=2^21 + 2^11 = 2,099,200? Wait earlier we saw shifting each once: a=2^10 to 2^11, b=2^20 to 2^21 -> OR = 2^21 + 2^11 = 2,099,200. That's less than greedy result 4,195,328. So greedy produced even better (shifting only one element twice). So greedy effective here.
+
+Let's attempt to find counterexample where greedy fails: where sharing bits across elements might help? Example with overlapping bits: consider nums=[6(110),3(011)] k=1. initial OR=111=7. shifting 6->12(1100): OR=1100|011=1111=15. shifting 3->6 OR=110|110=110=6 but actually OR=110=6? Wait 3(011) shift -> 6(110). Array [6,6] OR=110=6. So shifting 6 yields better. Greedy picks 6. Works.
+
+Let’s try numbers: a=5 (101), b=6(110), k=1. initial OR=111=7. shift a->10(1010): OR=1010|110=1110=14. shift b->12(1100): OR=101|1100=1111=15. Greedy picks b, yields 15. optimum? Maybe shifting both? can't.
+
+Thus far no counterexample.
+
+I suspect greedy works: repeatedly choose shift that increases OR the most. Since k <= 15, we can do this greedy with recomputation each step. Complexity: Each step we consider n candidates shift, compute OR, O(n log(n)) which is fine with k <=15 and n up to 1e5. But we need efficient OR computation for each candidate shift.
+
+We can compute current OR of array. For each element i, if we shift nums[i] to nums[i]*2, the new OR is (cur_or & ~nums[i]) | (nums[i]*2) ? Wait cur_or uses the original element, but if we shift that element, we need to remove its contribution from OR only if it was unique. So we need to compute new OR after replacing element i with v=nums[i]*2. We can compute new OR as: new_or = (cur_or | (v)) & ~(mask of bits that were unique to nums[i] and lost). Trying to derive formula: new_or = (cur_or | v) but we may also need to remove bits lost due to shifting? But OR can't remove bits: OR of set of numbers will never lose bits as we only replace one number with potentially different bits. But the other numbers may contribute missing bits. However original element contributed bits that may be lost if no other number has them. In OR, if you remove an element that was the only provider of a bit, that bit disappears. So new_or must be recomputed from scratch as OR of all numbers after shift: use all elements but with replaced value.
+
+We cannot easily update from old OR: we need to know if some bits were solely from nums[i]. We can compute freq array of bit counts: countHow many numbers have bit j. We have current counts. When we shift element i, we will remove those contributions + add new contributions. We can efficiently compute new OR if we maintain count array and current_or. For each shift candidate we need to compute new OR quickly.
+
+Approach: Precompute bit counts: counts[j] of numbers having bit j. Also cur_or. For each element i, we want to compute new_or after moving it to v = nums[i] << 1. We will remove contributions of bits of nums[i], but bits that other numbers also have remain in counts. Let's compute: For each bit j that is set in nums[i], the count decreases by 1. For each bit j that is set in v, the count increases by 1? But increasing count may add new bit if count becomes 1.
+
+So new_or = (cur_or) cleared bits that become absent: those bits j where nums[i] had bit j and counts[j] == 1 (i.e., only this number had it). After removing, those bits may disappear. Also we add bits j where v has bit j: if count[j] after increase >=1 => OR ensures that bit is set; it could be new if counts[j] was 0 before increment.
+
+We can compute new_or = cur_or
+- for bits j set in nums[i] where counts[j]==1: cur_or & ~(1 << j)
+- for bits j set in v: add bit (OR) irrespective.
+
+We can compute with loops over bits of nums[i] and v. Bits up to 60. For each candidate we recompute counts modifications? Instead we can compute on-the-fly: we can compute new_or easily by adjusting bit counts: we need to know for each bit j, count_after = counts[j] - (nums[i] has bit j?1:0) + (v has bit j?1:0). Then bit j is present if count_after > 0. We can compute new_or = 0; for each bit j up to 63 (since maximum value can shift up to 45). But per candidate we might iterate 60 bits * n candidates -> 60 * 1e5 ~6e6 per operation, times k up to 15 => 9e7 maybe ok but borderline? 90 million operations fine in Python? Might be okay w/ PyPy? 90 million maybe heavy. But we can optimize by precomputing bit patterns for each element.
+
+But for each element we need to recompute OR after candidate shift each time we evaluate. That's heavy.
+
+Alternative: we evaluate candidate OR unsafely but we can use bright updating. Since k <=15, we can use simple approach: For each operation, we recompute everything: For each element i, compute new_or by performing full OR of all numbers after shifting i. That's O(n^2) maybe too high.
+
+Thus we need efficient selection of best element to shift. We can use incremental counts like above but compute new_or using precomputed counts arrays.
+
+We can precompute bit patterns arrays:
+
+counts[j] initial (0..60). For each candidate element i, we compute from counts: bit_set_original = bits of nums[i]. bit_set_shifted = bits of nums[i]<<1.
+
+We can compute new_or by:
+
+new_or = cur_or
+# remove unique bits from original
+for each bit j in bits_original:
+    if counts[j] == 1: new_or ^= (1<<j) # remove
+
+# add shifted bits
+for each bit j in bits_shifted:
+    # counts after increment
+    if counts[j] == 0 or (counts[j] == 1 and not original had bit j? Actually we removed counts[j] maybe previous value)
+    We need to compute if after increment counts[j] >0. Since counts[j] after subtract original bit then add shifted bit.
+    Assuming original had bit j? It cannot unless shift just moved bit; but shift can shift bits to same position if the number had 0 bits at that position? No shifting left by 1 cannot leave same bit positions.
+
+So to compute new_or, we can determine for each bit j if count_after > 0. But we can compute by checking sequentially: For bits of shifted number that were not already present in others or original.
+
+But easier: new_or = (cur_or & ~(bits unique to original)) | bits_shifted.
+
+Because any bits in cur_or that are not unique will stay set. Bits unique are removed. Bits in shifted number will be set. That's correct.
+
+Thus new_or = (cur_or & ~unique_original_mask) | shifted_mask
+
+Where unique_original_mask = bits set in original number that are unique: those bits j where counts[j]==1.
+
+But what about bits that were unique but after shift we may still have same bit? Since shift left so bit positions differ, cannot be same. So unique bits removed.
+
+We must compute unique_original_mask per element. That depends only on counts and element's bits. Good.
+
+Thus we can compute for each element its unique_mask (bits in original that unique). Also we can compute shifted_mask = (x << 1).bits. So new_or = (cur_or & ~unique_mask) | shifted_mask.
+
+We can compute unique_mask quickly: For each element we have bitset representation as int, we compute intersection of that int with unique_bits_bitmask where unique_bits_bitmask[j] = 1 if counts[j]==1. That yields unique bits for each element. But we need to compute for each element each step? Wait counts will change after we shift an element, but other elements remain same. After we shift element i by 1, counts changes but for next step we will need new counts. But for computing between next best operation we need updated counts for all elements.
+
+Thus we need to update counts after each operation anyway.
+
+Thus we can maintain counts array and current_or. For each step:
+- For each element i, compute unique_mask for that element: we can compute from counts: unique_mask[i] = original_bits[i] & unique_bitmask where unique_bitmask[j] = (counts[j]==1). But scanning all i each step would be O(n*60) per step. We can precompute original_bits as ints. For each step we can compute unique_bitmask bits once (based on counts). Count bits up to 60. So we compute unique_bitmask as integer with bits where count==1. Then for each element compute unique_mask as original & unique_bitmask. That's O(n). For each element, compute shifted_mask = using stored original numbers << 1? No we need shift of current value which might have been shifted earlier many times! But we plan to shift element once each time we choose it. If we decide to shift same element multiple times, we need current value: after each shift, its value gets multiplied by 2. So we should maintain current value per element.
+
+Simpler: Since we only shift at most k times, we can maintain array cur_val[i] updated after each shift. Initially cur_val[i] = nums[i]. Each step we compute new_or for each element if it were shifted: new_or_i = (cur_or & ~unique_mask_i) | (cur_val[i] << 1). But to compute unique_mask_i we need counts and unique_bitmask. But we also need to know bits of cur_val[i] (current value). This value may be changed by previous shifts. We can store cur_val[i] and its bitset (as int). We can compute bitset for cur_val[i] on the fly: bits = cur_val[i] (since integer). But we need to compute unique_mask: intersection of bits with unique_bitmask. But bits maybe large but still manageable.
+
+Thus for each step we can compute cur_val[i] and bitset representation. This requires scanning all elements each step: For each element we compute candidate_new_or. This is O(n) per step, each step O(n). With k<=15, that's 15*1e5=1.5M operations, each with bit operations on large ints maybe fine.
+
+We also need to compute counts for each bit. We can maintain counts incrementally after each shift: When we shift an element, bits of its old value will be removed from counts, bits of new value will add. So we update counts accordingly.
+
+Implementation details:
+- Precompute bit positions: 0-60 inclusive maybe; max value after shift: initial <= 1e9 (~2^30). after up to 15 shifts -> 1e9*2^15 ~ 3.3e13 (~2^45). So need up to 50 bits. We'll handle 64-bit ints.
+
+We will store cur_val array. Also array cur_bits maybe equal to cur_val but we can compute bits by while loops but we can just use bit operations.
+
+For each element i: bits_old = cur_val[i]; unique_mask_i = bits_old & unique_bitmask; shifted_mask_i = (cur_val[i] << 1). We'll compute new_or_i = (cur_or & ~unique_mask_i) | shifted_mask_i.
+
+We need to compute unique_bitmask quickly. At any time, we have counts array length 60. For each bit j, if counts[j]==1 => unique_bitmask has bit j.
+
+We can compute unique_bitmask by iterating bits j 0..60 and setting bit. That's O(60). Each step.
+
+We then need to evaluate new_or_i for all i. We can compute them in a loop and track max OR and element index to shift.
+
+But we also need to update when multiple elements have same OR, but we can pick any.
+
+After we decide which element to shift, we apply update: curr_val[i] <<=1 ; Update counts: For each bit j of old value (bits_old) decrement counts[j]; For each bit j of new value (bits_new) increment counts[j]; Update cur_or: We can recompute cur_or as OR of all current values? That's O(n). But we can update cur_or incrementally: new_or = (cur_or & ~unique_mask_i)

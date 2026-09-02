@@ -1,0 +1,375 @@
+<|channel|>analysis<|message|>We need understand problem. We have n boxes weights a_i. Alex can choose any k from 1 to n such that n divisible by k (loading possible). For each k, the weight of truck i is sum of a_{(i-1)*k +1.. i*k}. He wants maximum. Among all trucks, compute max absolute difference between any two trucks, i.e., max weight - min weight. He wants to maximize this value over k, choose k that gives largest difference.
+
+He wants maximum absolute difference, i.e., difference between heaviest and lightest truck (since weights positive). Equivalent to max_k (max_k - min_k). If there is only one truck, difference =0.
+
+Need algorithm: n up to 150k per test case, overall sum also 150k. For each divisor k of n: compute sums of groups quickly.
+
+We can precompute prefix sums arr length n. Sums for a k are computed by grouping: group i sum = prefix[(i+1)*k]-prefix[i*k]. For all k, compute min and max. But naive for each divisor k would be O(n * d(n)). n up to 150k. Number of divisors of n? In worst-case n= 2*3*5*7*11*13=30030, d(n) ~128. For n up to 150k, maximum divisors likely ~128 maybe ~192. But still small. However we can compute sums for each k separately reading O(n * d(n)). But n up to 150k and testcases up to 10k but sum n in total 150k. So worst-case total time O(total_n * d(n)). For n=150k, d(n) maybe up to ~240? 150k*240=36M, okay. But we may optimize further.
+
+But careful: For each k we compute group sums for each of n/k groups. That's O(n/k). For all k, sum_{k|n} n/k = n * sum_{k|n} 1/k <= n * sum_{k|n} 1/k <= n * (something small). Wait sum of reciprocals of divisors <=1 + log log n maybe. So also O(n log log n). So overall fine.
+
+Simpler: compute all divisors of n. For each k compute sums by iterating groups: for i from 0 to n-1 step k, compute sum with prefix difference. Complexity O(n for each k). That's fine.
+
+But we need also consider case k=1: each box weight=1, so min and max difference = max(a)-min(a). For k=n: one truck weight sum of all boxes; difference 0.
+
+Edge: k = n? single truck; difference 0.
+
+We want maximum across all k.
+
+But maybe largest difference occurs at k=1? Not necessarily; Example 2: n=6 and boxes [10 2 3 6 1 3], divisors:1,2,3,6. For k=1, sum = each weight: max-min=10-1=9. For k=2: groups [10,2], [3,6], [1,3]. sums:12,9,4: diff=12-4=8. k=3: groups[10,2,3], [6,1,3] sums:15,10: diff=5. So k=1 works. But they mention choose k=6 where only one truck? Wait sample: They said choose six trucks, so maximum will be 10,... Wait they said choose six trucks, so k=1? Wait they claim choose six trucks: n=6 so each truck one box. Actually they say choose six trucks therefore trucks one box each. So yes. So k=1.
+
+So likely maximum diff often at k=1. But not always? Let's test quickly: Suppose array [5,5,5,5]. k=1 diff=0. k=2 groups [5,5] sum=10 each -> diff 0. k=4 diff 0. So 0.
+
+Suppose array [5,100,5,5]. k=1 diff=95. k=2 groups [5,100,5,5] sums: first, second [5,100], [5,5]. Wait n=4, k=2 => groups: [5,100]=105, [5,5]=10 -> diff=95. same diff.
+
+In general difference with k=1 seems always >= diff with others? Let's think: For k>1, each group sum is sum of k elements. Since each group sum includes k weights. The min sum is at least k*min(a) and max sum at most k*max(a). So difference <= k*(max-min). But for k=1 it's exactly max-min. Since k>=1, k*(max-min) >= max-min. So k>1 might produce larger difference? Actually k times difference bigger could be bigger. But careful: groups may not pack extremes together. Example with 100,1,1,1: k=1 diff=99. k=3 groups [100,1,1] sum=102, [1] sum=1? Wait n=4 not divisible by 3, invalid. k=2 groups [100,1,1,1] sum=101, etc. diff=100? Wait compute: group1: 100+1=101; group2:1+1=2; diff=99. So same.
+
+But could there be scenario where k>1 produce larger difference? Let's attempt: k=2 groups [100,1,1,1] as above diff=99. k=1 diff=99. So equal.
+
+But maybe k>1 bigger? Suppose array [100,0,100,0]. k=1 diff=100. k=2 groups [100,0] sum=100, [100,0] sum=100 diff=0. So lesser.
+
+It might be that k=1 always yields maximum difference? Let's check proof: For each k, group sums are sums of consecutive k elements. The overall maximum group sum is at most sum of k largest boxes? Wait but due to consecutive constraint, it's sum of some k consecutive elements could give value. But k>1 may combine multiple boxes leading to larger difference maybe? Let's test extreme: [10,10,1,1]. k=1 diff=9. k=2 groups [10,10]=20, [1,1]=2 diff=18. So k=2 produce bigger difference! Let's check: 10,10,1,1. k=1 diff=9, k=2 diff=18. So k=2 > k=1.
+
+Thus maximum may not be k=1.
+
+Hence need compute all divisor cases.
+
+Constraints: Use list of divisors. We'll compute prefix sums and compute for each k. Need to compute sum min and max quickly. Simple loop: for start in range(0,n,k): 
+
+group_sum = prefix[start+k]-prefix[start]
+update min/max.
+
+Edge: we need handle big ints: sum up to 1e9*150k=1.5e14 fits in 64-bit. Python int unlimited.
+
+Time complexity: For each divisor, O(n/k). So we can precompute for each k.
+
+But can we precompute groups sums for all k to avoid recomputation? Not necessary.
+
+We'll design solve() reading all tests.
+
+Implementation steps:
+
+1. Read t.
+2. For each case:
+   - read n, read array a.
+   - compute prefix sums of length n+1: pref[0]=0; for i: pref[i+1]=pref[i]+a[i].
+   - compute divisors of n: get all k where k divides n. We'll produce list of divisors (including n). Use sqrt method up to int(sqrt[n]).
+   - For each k: iterate groups as described compute min_sum, max_sum. 
+     - If k==n: just single truck diff =0; skip.
+     - Compute min_sum large, max_sum small.
+     - For start in range(0, n, k):
+         s = pref[start+k]-pref[start]
+         update min/max.
+     - diff = max_sum - min_sum.
+     - ans = max(ans, diff).
+
+   - Print ans.
+
+Complexities fine.
+
+Edge when k==n? diff=0 but we can compute loops too: start=0 only one group. min=max=total. diff=0 -> no effect.
+
+Edge potentially when k=0 not dividing n.
+
+Test sample.
+
+Let's run mental test with sample 2: 6 numbers, code will compute divisors 1,2,3,6. For k=1 diff=9; k=2 diff=8; k=3 diff=5; k=6 diff=0; max=9.
+
+Sample 4: n=15 numbers; we compute all divisors: 1,3,5,15. We compute diff.
+
+The sample output says 189114. We'll trust.
+
+Now complexity: computing divisors each test: O(sqrt). Good.
+
+Implementation details:
+
+- read all ints using sys.stdin.read().split().
+
+Implementation get divisors:
+
+def divisors(n):
+    res = []
+    i=1
+    while i*i<=n:
+        if n%i==0:
+            res.append(i)
+            if i!=n//i:
+                res.append(n//i)
+        i+=1
+    return res
+
+Important to consider k=1 and k=n small; skip if k==n? It's fine.
+
+Edge case: n=1: divisors [1]. For k=1 diff=0. answer 0.
+
+We handle.
+
+We also could compute answer as max(0, min_sum_max - min_sum_min). But min_sum_max is defined per k. Good.
+
+Large sizes but fine.
+
+Let's test sample 4 manually? We'll trust.
+
+Maybe there is nuance: Alex "hates justice" wants maximum absolute difference between total weights of two trucks. So if more than two trucks, we consider difference between any two trucks. That's basically max - min. That's what we used.
+
+Edge: For given k, if k=1 all trucks each single box. For large n, difference may big. But we already computed.
+
+Ok fine.
+
+Let's produce final answer.
+
+We also need to produce final message with explanation.
+
+Corner: There might be many divisors but loops fine.
+
+Potential optimization: For each k, we just iterate groups. This is O(n * d(n)). Good.
+
+Now produce final code.
+
+Check with sample.
+
+Let's quickly implement quickly test? I will approximate.
+
+Edge cases: k=1 may produce diff 0 if all equal.
+
+Implementation details:
+
+- Use input parsing via sys.stdin.buffer.read().split().
+
+- ans = 0; for each k in divisors: min_s = INF, max_s = -INF
+
+Prefer to use large negative and positive.
+
+But we might store pref as list of ints of length n+1.
+
+Now produce final message.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every test case we are given  
+
+* `n` – number of boxes  
+* `a[1 … n]` – weights of the boxes
+
+For any chosen `k ( 1 ≤ k ≤ n )` that **divides `n`** the boxes are loaded into
+
+```
+truck 1 : a[1] … a[k]
+truck 2 : a[k+1] … a[2k]
+...
+truck n/k : a[n-k+1] … a[n]
+```
+
+All trucks must contain exactly `k` boxes, otherwise the truck size `k` is not
+allowed.
+
+For a fixed `k` we have to maximise
+
+```
+max_total     –   min_total
+```
+
+where `max_total` is the heaviest truck weight and `min_total` is the lightest
+truck weight.  
+Among all admissible `k` we have to return the largest possible value.
+
+
+
+--------------------------------------------------------------------
+
+#### Algorithm
+For one test case
+
+```
+1. read n and the array a[1 … n]
+2. build the prefix sums pref[0 … n]          // pref[0] = 0, pref[i] = a[1] + … + a[i]
+3. find every divisor k of n
+4. for every divisor k
+        min_sum =  +∞
+        max_sum =  -∞
+        for start in 0, k, 2k, …, n-k             // start is the 0‑based index of the first box in the current truck
+                cur = pref[start+k] - pref[start]   // sum of the current truck
+                min_sum = min(min_sum, cur)
+                max_sum = max(max_sum, cur)
+        answer = max(answer, max_sum - min_sum)
+5. output answer
+```
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm outputs the required maximum absolute difference.
+
+---
+
+##### Lemma 1  
+For a fixed valid `k` the algorithm computes the exact sum of every
+truck.
+
+**Proof.**
+
+The pref array satisfies  
+
+```
+pref[i] = a[1] + a[2] + … + a[i]
+```
+
+For a truck that starts at index `s` (0‑based) and contains `k` boxes
+(`s = 0, k, 2k, …`), the last box index is `s + k - 1`.  
+The sum of this truck equals
+
+```
+pref[s + k] - pref[s]          (definition of prefix sums)
+```
+
+which is exactly what the algorithm computes. ∎
+
+
+
+##### Lemma 2  
+For a fixed valid `k` the pair `min_sum_k` and `max_sum_k` returned
+by the algorithm equals respectively the smallest and the largest truck
+weight among all trucks for this `k`.
+
+**Proof.**
+
+During the processing of `k` the algorithm visits every truck once
+(Lemma&nbsp;1).  
+`min_sum` is initialised with `+∞` and updated with the minimum over all
+visited truck sums, therefore finally it is the minimum of all truck sums.
+The same reasoning holds for `max_sum`. ∎
+
+
+
+##### Lemma 3  
+For a fixed valid `k` the value `diff_k` computed by the algorithm
+equals the maximum absolute difference between the weights of any two
+trucks for this `k`.
+
+**Proof.**
+
+Let `xh` be the heaviest truck and `xl` the lightest truck for the chosen
+`k`.  
+By Lemma&nbsp;2 `max_sum_k = weight(xh)` and `min_sum_k = weight(xl)`.  
+The absolute difference between any two trucks is at most
+
+```
+|weight(xh) – weight(xl)| = max_sum_k – min_sum_k
+```
+
+because all other truck weights lie between `min_sum_k` and `max_sum_k`.
+Hence `diff_k` is exactly the maximum absolute difference for this `k`. ∎
+
+
+
+##### Lemma 4  
+Let `OPT` be the maximum absolute difference over all admissible
+truck sizes `k`.  
+The algorithm outputs `OPT`.
+
+**Proof.**
+
+The algorithm iterates over **all** divisors of `n`; a divisor `k` is
+exactly an admissible truck size (the statement defines that Alex can
+find a company with trucks of any size `k` from 1 to `n`).
+For each such `k` it computes `diff_k` (Lemma&nbsp;3) and keeps the
+maximum of these values in `answer`.  
+Consequently after the loop `answer = max_k diff_k = OPT`. ∎
+
+
+
+##### Theorem  
+For every test case the algorithm prints the maximum possible absolute
+difference between the total weights of two trucks.
+
+**Proof.**
+
+By Lemma&nbsp;4 the variable `answer` equals the optimal value `OPT`,
+and the algorithm outputs this value. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis  
+
+For one test case
+
+* `n` – number of boxes  
+* `d(n)` – number of divisors of `n`
+
+```
+building prefix sums :  O(n)
+finding all divisors  :  O(√n)
+processing all k      :  Σ_{k|n} n/k   ≤   n · Σ_{k|n} 1/k  ≤  n · (log log n + O(1))
+```
+
+The last inequality is a classical bound for the sum of reciprocals of
+divisors.  
+For `n ≤ 150 000` this is well below a few hundred thousand operations.
+
+Memory consumption is `O(n)` for the prefix array.
+
+Because the total sum of `n` over all test cases is at most `150 000`,
+the whole program easily satisfies the limits.
+
+
+
+--------------------------------------------------------------------
+
+#### Reference Implementation  (Python 3)
+
+```python
+import sys
+import math
+
+def solve() -> None:
+    data = list(map(int, sys.stdin.buffer.read().split()))
+    t = data[0]
+    idx = 1
+    out_lines = []
+
+    for _ in range(t):
+        n = data[idx]
+        idx += 1
+        a = data[idx: idx + n]
+        idx += n
+
+        # prefix sums
+        pref = [0] * (n + 1)
+        for i in range(n):
+            pref[i + 1] = pref[i] + a[i]
+
+        # all divisors of n
+        divisors = []
+        sq = int(math.isqrt(n))
+        for d in range(1, sq + 1):
+            if n % d == 0:
+                divisors.append(d)
+                if d != n // d:
+                    divisors.append(n // d)
+
+        best = 0
+        for k in divisors:
+            # one truck -> difference 0, but we still compute it
+            min_sum = 1 << 62
+            max_sum = -1
+            for start in range(0, n, k):
+                cur = pref[start + k] - pref[start]
+                if cur < min_sum:
+                    min_sum = cur
+                if cur > max_sum:
+                    max_sum = cur
+            diff = max_sum - min_sum
+            if diff > best:
+                best = diff
+
+        out_lines.append(str(best))
+
+    sys.stdout.write("\n".join(out_lines))
+
+if __name__ == "__main__":
+    solve()
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required input/output format.

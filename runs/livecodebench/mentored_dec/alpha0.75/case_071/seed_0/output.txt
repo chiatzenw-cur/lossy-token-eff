@@ -1,0 +1,844 @@
+<|channel|>analysis<|message|>We need longest concatenated string from given counts: x "AA", y "BB", z "AB" strings, no "AAA" or "BBB" substrings. We can choose any subset and order. We want to maximize length, likely use all strings or some but maybe we need to avoid triples of same char.
+
+We can think of constructing string of length up to 2*(x+y+z) but constraints may prevent: avoid 3 consecutive same char. So we need to keep runs of 'A's or 'B's length <=2.
+
+We have building blocks 'AA' length 2 'A' run, 'BB' length 2 'B', 'AB' length 1 'A' then 'B' no repeat.
+
+When we concatenate, the adjacency matters: appending will yield possible merging of sequences (e.g., last char of previous string and first char of next). We need to consider suffix/prefix.
+
+Let's analyze:
+
+- 'AA' ends with 'A', 'AA' starts with 'A'.
+
+- 'BB' starts with 'B', ends with 'B'.
+
+- 'AB': starts with 'A', ends with 'B'.
+
+So we cannot create AAA by ending with 'A', starting with 'A' and previous char is 'A' -> need to check; basically we need to avoid runs of 3 'A's.
+
+So any position where we have three consecutive 'A's means there's at least three consecutive A's across string boundaries. Similarly for 'B's.
+
+We can model as DP over counts plus last two characters? But we can think simpler: use greedy: we need to consider forming string of length up to 2M where M is total number of strings. But we may need to delete some blocks to avoid breaking rule.
+
+We can treat as building string from all tiles and then deleting some blocks to avoid 3 consecutive same char. Equivalent to we must arrange tokens such that no run of same character longer than 2.
+
+Switching tokens like 'AA' and 'BB' may cause extra same char continuity. So we might need to place some 'AB' or 'AA' between.
+
+We can think of constructing from scratch, perhaps treat as string of characters and we need to choose interleaving.
+
+Maybe we can represent as a dynamic programming on counts with last two characters state: 0: start; 1: last 'A', 2: last 'B', 3: last 'A' last 'A', 4: last 'B' last 'B', etc. Each step we choose a block; we need to ensure limit not exceeded. This DP states: dp[a][b][c][state] = max length. For each state we can try to add a block. But max counts 50 => variables 51^3 ~ 132651 states? times state 4? Actually states: 3? Let's consider last two characters and count current run length. But we can handle by choosing block type and checking if end char of block results in run ≤2. The run length depends on current run length and last character of that run. So we need to know current run length and type: last characters run.
+
+Simpler: treat as choose arrangement of tokens, just ensure no adjacency of 'AA', 'AA' with preceding char 'A', etc. That is, we cannot have pattern:
+
+- 'AA' after previous char 'A'
+
+- 'BB' after previous char 'B'
+
+- AB after consecutive 'A', or any case resulting in 3 same char.
+
+We can think of using A steps as we can control run lengths. I think we should treat problem as constructing a string with maximum number of tokens, where we can partially skip some.
+
+We need to find maximum number of tokens used, where tokens are 3 types (AA, BB, AB). Each token will contribute length=2. We can also count sequences of adjacent tokens with same char.
+
+But there are runs of 3 same char across tokens.
+
+Maybe this is similar to constructing using counts. Let's attempt approach:
+
+Let nA = 2x + z (since each 'AA' gives 2 A's, 'AB' gives 1 A). Similarly nB = 2y + z (since each 'BB' gives 2 B's, 'AB' gives 1 B). So total letters = 2x + 2y + 2z.
+
+Goal: maximize length (2*count used). Equivalent to maximizing number of tokens used, because each token length 2. So basically we want max tokens used.
+
+So we actually can use all tokens if we can arrange them. But need to avoid AAA or BBB. So the max tokens is at most x+y+z, but maybe <.
+
+ Thus the maximum length is 2*(max tokens).
+
+We can treat simpler: let we attempt to build string using all tokens. If pattern bad, we may need to cut some tokens. Suppose we consider that we can remove the minimal number of tokens to avoid 3 consecutive A or B.
+
+Let's consider forming a sequence of A's and B's letters count. We can treat each token's letters as pattern. We want to use as many tokens but not violate adjacency.
+
+Suppose we build tokens in some order, so we need to choose a sequence. Each token like 'AA' adds 2 A's. We can end with 'AA' after an 'A' maybe finishing run 3 A. So we cannot join 'AA' after a last char 'A' if there's one more 'A' consecutive. Basically we need to avoid consecutive 'AA' after a 'A'.
+
+Therefore we get restrictions: if we ended with 'AA' (last char 'A'), we cannot place 'AA' because that would create three 'A's? Wait let's examine.
+
+Let current run length of 'A' be 1 at end of previous string. If we append 'AA', the run length will be 1+2=3 -> forbidden.
+
+Similarly if end run length 2, we cannot append 'AA', because 2+2=4. So basically we cannot add 'AA' if end run length >=1.
+
+Similarly if end run is 0 (previous char 'B') we can append 'AA' (run length 2) after 'B'.
+
+Similarly for 'BB', cannot add after 'B'.
+
+'AB' starts with 'A', ends with 'B', so it can append to a previous string that ended with 'A'? Wait if previous ended with 'A', adding 'AB' will produce 'A' and 'A' next to each other: 'A' then 'A' from 'AB': that's 2 A's consecutively. That's fine. If the previous ended with length 1 'A', now we add 'A' from 'AB', that increases run length to 2, acceptable. But if previous ended with 2 'A's, then adding 'A' from AB will increase run length to 3, violating. So we cannot append 'AB' after a run length 2 of 'A'. Similarly if previous ended with 'B', we can't add 'B' from AB? Wait AB ends with 'B', so no issue for B's; but maybe after 'B' we are adding 'BB' can't.
+
+Hence we can think of DP state: we keep track of current run length (1 or 2) and the character of last run. Since we cannot exceed 2, run length can be 0 meaning "no previous char / last char is different". Actually the run length can be 0 (meaning last char of previous string is not the same as next starting char); but we just need to know the run length of last char of our current string. Let's denote last char c and run length l ∈{0,1,2}. We'll define l=0 when last char is different or we can store directly.
+
+But more natural: we can track last 2 chars together (since tokens length 2). But easier: we can store:
+- last char 'A' or 'B'
+- run length of last char (1 or 2)
+- maybe also consider that after we append 'AB', we could start a new A run each time.
+
+Simpler: compute maximum length using DP over number of each string used.
+
+We can use states DP[i][j][k][c][l] where c is last character 'A','B', or 'None' at start; l run length of last char. But counts up to 50^3 may be huge. Perhaps we can brute force over sequence using recursion with memoization? But state size still huge > 125k * states.
+
+Another approach: Because the strings only length 2, we can think of constructing string as per placeholder with 0/1: treat each 'AA' or 'BB' as block containing same characters, but we just need to avoid 3 consecutive.
+
+We could treat this as counting number of A's and B's, except arrangement restrictions: we cannot have AAA and BBB.
+
+In constructing using all tokens, we can just check if we can arrange tokens such that after all tokens you don't exceed 2. We can think: if we use all tokens, string will have nA A's and nB B's. If we arrange them such that no 3 identical consecutive, we need to have kA blocks of consecutive A's, each run <=2; similarly for B. So we need to partition the counts into runs of at most 2. This is like we can express nA as a + 2b where a is number of runs of 1 A, b of runs of 2 A. Similar for B. The length of each run is at most 2. Plus runs of type 1 and 2. We can have alternation between A and B runs.
+
+Let's model: we want to arrange string of runs of same letters, each of length 1 or 2. Each run is separated by a different letter. Since we cannot have AABAA? Wait you can have A A run length 1, then B run length 2, then A run length 1, etc. After merging we require total letters count equal.
+
+We can try to use tokens exactly (AA, BB, AB) to enforce runs lengths: an 'AA' block gives a run of length 2 of A. But if we have an 'AA' followed by 'AB' at end, that would contract? But 'AB' includes 'A' as start and 'B' as end, so 'AA' followed by 'AB' forms peak 'A' then 'A' then 'B' -> that counts as 'AAA' contiguous? Wait 'AA' ends with 'A', then 'AB' starts with 'A', giving 'A' followed by 'A' -> double A; but after that we already have two 'A's from previous, leading to 'AA' + 'AB': 2 + 1 = 3 'A's consecutively: 'AA' + 'AB' => 'AAA' from 'AA' 'A' 'A' 'B'? Wait string: "AA" + "AB" = "AAAB"? No "AA" "AB": "AAAB". That is 'AAA' substring. So you cannot have 'AA' followed by 'AB'. Similarly 'BB' followed by 'AB' would produce 'BB' + 'AB' = 'BBA'? 'BB'+ 'AB' => 'BBA' not causing triple B because B runs: 'BB' + 'AB' => 'BB' + 'A' (start of AB) results in two B's then two B? Wait 'AB' starts with 'A', so 'BB' + 'A' -> 'BBA' not 'BBB'.
+
+So restrictions might be complicated.
+
+Thus maybe DP over counts and last string type is easier.
+
+Let’s define states: dp[a][b][c][last] where last string type: 0 for none, 1 for 'AA', 2 for 'BB', 3 for 'AB'. Represent maximum length (or number of tokens). Since tokens lengths 2 each, we can store maximum tokens chosen.
+
+We want to use at most x,y,z. We can fill from initial state and take max.
+
+Transitions: We choose a string type if count available; we need to ensure that appending it to current string does not create AAA or BBB.
+
+We need to detect if appending will break. We can attempt to know only the last two characters of string. Because if the previous string ends with 'A', the last char is 'A', and maybe length of last run is 1 or 2 if the last string ends with. Actually we can rely on last 2 letters of previous string. Since the last two letters are part of previous string because each added string is length 2; but the last 2 characters of previous string may be part of the last added string or maybe not.
+
+Simpler: We can track last 2 letters of entire string (like last 2 characters of the building string). That is enough to know if adding a new string will cause triple?
+
+How to check: Suppose we know last two characters and we add a new string S of two characters. We need to check if new string S has a substring that intersects into other, such that it contains AAA or BBB. That's equivalent to checking if any 3 consecutive characters in the resulting string are the same.
+
+We can test by enumerating last 2 characters (prev) (p1, p2) and next string S of length 2 (s1,s2). We need to check if any of the 3-char sequences: p1,p2,s1; p2,s1,s2; etc. Wait overlapping: positions 1-2; 2-3; 3-4. But the string of length 2 forms new string: start with s1 (first char) then s2. We need to check if the last 3 characters of the concatenation form triple. So we can check if third char is same as first two etc.
+
+Let's define last 2 chars of the current string. After we append new string S:
+
+We've to evaluate if the last 3 characters of the new string are all same. We only need to check for the place where new string may cause triple: the triples that involve positions (last 2 of previous string plus first char of S) and (last 1 of previous string plus first two of S) maybe.
+
+Thus we need to check for any run of at least 3 in new string. Since we only have last two letters, if the new string does not contain AAA or BBB inside itself, but we also check sequences spanning boundary.
+
+So we can precompute allowed transitions for all 2-letter strings with last two chars representation.
+
+Define char1 char2 for last string: (0,0) for 'A','A'; (1,1) for 'B','B'; (0,1) for 'A','B'; and also (1,0) for 'B','A'? But we have only these combos. But last string's S may be 'AA' (0,0) 'BB' (1,1) 'AB' (0,1). The following can never be 'BA' but there might be 'BA' if string ended in 'AB'? Wait 'AB' ends with 'B', so there is no 'BA' last two letters unique. So we can just store as maybe 2 registers: last char, run length.
+
+But maybe easier: Use last two char representation.
+
+After building, we can store as pair (c1, c2). This pair only has 4 possible combos? For strings 'AA', 'BB', 'AB', 'AB' ends with 'A','B'? Actually last two chars of 'AB' are 'A','B'. So we have 3 combos. But perhaps after use of 'AB', we may have last two characters 'B', some other char; but we don't have string 'BA', so indeed last two is only these pairs among our tokens.
+
+Thus we only need 3 states.
+
+But we also need to consider we can have sequences formed from adjacency of 'AA' and 'BB'? Example 'AA' + 'BB' => last two char 'AB' (?) Actually last two of resulting string are 'A','B'. So 'AB' again. So we can consider any sequence of tokens, but last two letters after any string will always be one of 'AA', 'BB', 'AB'. Indeed, with 'AB', last two is 'AB', 'AA', 'BB', 'AB', etc. Because we never produce a string ending with 'BA'. So state is small.
+
+Thus we can DP: dp[na][nb][nc][last] = max tokens used (or length) where last refers to the last two characters of the string (0->AA, 1->BB, 2->AB). Let's map 0->AA, 1->BB, 2->AB.
+
+Base state: start with no string: we can set dp[0][0][0][*?]. But we should treat last as None; we need to handle transitions from start to any token. So we can set dp[0][0][0][none] = 0. Then for start state we will add a token. For such transitions, we need to skip triple constraint.
+
+But we can also simply start with dp[0][0][0][0] = negative large? maybe we can treat start as special. Actually we can handle transitions by building sequences in BFS:
+
+We can use recursion over counts. For each state, we try to add a token (AA) if possible, and compute new last as 'AA' (or as letter pair). But we need to check that adding this token does not produce AAA or BBB.
+
+To check that, we need to know the last two letters of previous string. We'll store as last two characters (a,b) as 'A' or 'B'. We can transition from start to any token.
+
+But to determine whether adding a token is allowed, we check triple boundaries.
+
+Let's implement function allowed(last_pair, token_pair). We need to check if concatenation yields no triple. That is if there is any window of 3 consecutive of same char. Let's define extended string last of length 2 + token length 2. But easier: We only need to check windows that involve cross boundary: sequences with last two char preceding token and first char of token.
+
+We know last two chars of previous string are L1,L2. Token's first two characters are T1,T2. We need to check sequences:
+
+- (L1, L2, T1) should not be all same. Wait if we had L1 = L2 = T1? If the last two char of previous string are same (like 'A','A'), and token starts with same letter, that creates triple of A's? Actually if L1='A', L2='A', T1='A', we get 'AAA' overlapping in @ positions.
+
+- (L2, T1, T2) may produce triple.
+
+- (L1, L2, T1) clearly found as above.
+
+But if L1 and L2 are distinct, we need to check maybe nothing else. But we also need to maintain triple inside token: e.g. 'AA' of token itself contains 'AA' only length 2, not 3. Similarly 'BB' inside token fine.
+
+Thus we only need to check cross boundary. So we just need to keep the last two characters of previous string.
+
+This is fine.
+
+Edge case: start state (no previous char). Let's treat start as having last pair not defined; we can just allow any token.
+
+We also need to update last two characters after adding token: the new last pair is token pair: so for new string last two is the last two characters of the token. But we need to check if last two interior pattern: but we need to ensure we don't have triple within a token.
+
+To look at token 'AB' doesn't produce triple; 'AA' 'AA' => 'AA' inside, but not triple; 'BB' inside, but not triple.
+
+Hence we can proceed.
+
+Perform DP via memoization / recursion over counts and last pair. We use recursion for state (a,b,c,last). Since counts <= 50, dimension 51^3=132k, times 4 states ~ 500k. Manageable.
+
+But the recursion depth may be up to 150, but still fine.
+
+Let's define dp[ a ][b][c][last] = maximum number of tokens used from that state. (a,b,c) counts of remaining tokens? Or used? It's easier to use counts remaining. We'll return maximum number of tokens chosen from that state. But easier: dp[usedA][usedB][usedAB][last] maybe.
+
+The maximum number of tokens used is a+b+c. We'll store counts consumed: we start with 0,0,0. We'll add tokens each step up to limits.
+
+Thus dp[ uA][uB][uAB][last] -> max tokens from here. We'll use -1 sentinel.
+
+Pseudo:
+
+def dfs(uA, uB, uAB, last):
+    key = (uA, uB, uAB, last)
+    if memo: return memo
+    best = 0
+    for each token type:
+        if avail: 
+            if last==None or allowed(last, token):
+                new_last = token_pair
+                best = max(best, dfs(uA+1, uB, uAB, new_last) + 1) etc.
+    memo=best
+    return best
+
+We need to fill avail by checking counts: uA < x etc.
+
+But we also have to ensure we don't blow recursion depth or memory.
+
+Memoization will be dictionary mapping tuple to best length.
+
+Edge: allowed function returns False if triple occurs.
+
+We must interpret last as None if no prior string.
+
+We need to convert last pair to string pair, e.g., aa, bb, ab.
+
+Simplify: Represent 'AA' as 0, 'BB' as 1, 'AB' as 2, 'None' as -1.
+
+Define function token_chars(token): returns tuple of (c1,c2). For token types: 0 -> 'AA', 1 -> 'BB', 2 -> 'AB'.
+
+We can implement allowed by:
+if last == -1: return True
+L1, L2 = last_codes
+T1, T2 = token_codes
+if L1==L2==T1: return False   # triple of letter
+if L2==T1==T2: return False
+if L1==L2==T1 or L2==T1==T2: return False
+return True
+
+But also just check maybe: any triple with same letter: If L1==L2==T1 or L2==T1==T2 or L1==L2==T1? Wait third triple combination could be L1==L2==T1? Actually we should connect: Actually we need to check the three windows: L1,L2,T1; L2,T1,T2. Since there are only 2 additional windows. So the triple-same condition: if L1==L2==T1 or L2==T1==T2.
+
+But AB effects: Suppose last is "AA": L1='A', L2='A', token first is 'A': L1==L2==T1 -> 'AAA'. So we disallow.
+
+If last is "BB", token is "BB": L2==T1==T2? L2='B', T1='B', T2='B': triple 'BBB' (checked). So we disallow.
+
+If last is "AB", token is "AB": L1='A', L2='B', T1='A', T2='B': does any triple? L1==L2==T1? No. L2==T1==T2? 'B', 'A', 'B' no. So allowed.
+
+If last is "AA", token is "BB": L1='A', L2='A', T1='B', T2='B': check L1==L2==T1? 'A','A','B' no. L2==T1==T2? 'A','B','B' no. allowed. So Appending 'BB' after 'AA' no issue.
+
+If last is "AB", token "AA": L1='A', L2='B', T1='A', T2='A': L1==L2==T1? 'A','B','A' no. L2==T1==T2? 'B','A','A' no. allowed.
+
+But we need to ensure no triple across all windows? Eg, if last is "AB", token is "BA"? But there is no token type "BA". So no issue.
+
+Thus allowed function above seems correct.
+
+Now we also need to consider that after we add token, new last pair is last two chars of the token, which are token_codes.
+
+But we also need to consider that last can be 'None' on first move; when we start building new string, we treat state as no triple to check.
+
+Edge: Suppose we use 'AB' after 'AA'. This is disallowed because 'AA' ends with 'A', 'AB' starts with 'A', produce triple 'AAA' (three A's). We already flagged by L1==L2==T1 because L1='A', L2='A', T1='A', all same -> invalid. Good. So we keep there.
+
+Now we need to compute maximum number of tokens used; final answer = 2 * max_tokens.
+
+But we also have possibility that no token can be used; then answer 0.
+
+Implementation details: recursion depth up to 150, but Python recursion limited maybe 1000. So okay.
+
+But we can also do iterative DP with bitset but not necessary.
+
+Memoization: dictionary or use list of dimension (x+1)*(y+1)*(z+1)*(4) to reduce memory.
+
+We can fill with -1.
+
+Let's implement:
+
+last indices: 0,1,2,3 where 3 = None? But we need -1 initial as None. So we can treat last indices 0..3. For simplicity, we can maintain -1 for None; as dictionary key.
+
+Implementation: iterate using recursion.
+
+Pseudo:
+
+def dfs(a,b,c,last):
+    key = (a,b,c,last)
+    if key in memo: return memo[key]
+    best = 0
+    if a < x:
+        if last == -1 or not is_bad(last, 'AA')? Wait we need is_allowed(last, token). Use mapping.
+        if allowed(last, 0):
+            best= max(best, dfs(a+1, b, c, 0)+1)
+    if b < y:
+        if allowed(last, 1):
+            best= max(best, dfs(a, b+1, c, 1)+1)
+    if c < z:
+        if allowed(last, 2):
+            best= max(best, dfs(a, b, c+1, 2)+1)
+    memo[key]=best
+    return best
+
+We may also consider the possibility of using 0 tokens: but we only need count of used tokens. The recursion will always return 0 for all, but we may check if no token chosen.
+
+However, e.g., for base state no next token; we will evaluate all options but we don't need to special case.
+
+Given we check dp[a][b][c], we can compute best as maximum tokens we can add. So the recursion will return maximum number of tokens from state.
+
+Now number of tokens from initial state: dfs(0,0,0,-1).
+
+We also may include the possibility that we could use each token until reaching count but may never use all if not possible.
+
+Since recursion might produce big branching but state size manageable.
+
+Edge: Since max tokens <= 150, recursion depth ~150. Good.
+
+Let's test mentally with example 1: x=2,y=5,z=1. Let's guess that answer 12. That means 6 tokens used. Let's see if all tokens possible: total tokens = 2+5+1=8. >6 though. Our algorithm may produce 6 tokens. Let's test. Implementation expects to find longest path. That should result.
+
+Edge: When constructing string we might attempt to start with 'AA', but after constructing they may not use all tokens; but we check all possibilities.
+
+Implementation details: allowed function mapping:
+
+def allowed(last, token):
+    if last == -1:
+        return True
+    L1, L2 = last_pair
+    T1, T2 = token_pair
+    if L1==L2==T1:
+        return False
+    if L2==T1==T2:
+        return False
+    return True
+
+Where last_pair can be (0,0) for AA, (1,1) for BB, (0,1) for AB.
+
+But we use mapping arrays: pair_map=[(0,0),(1,1),(0,1)].
+
+Mapping for token id as pair_map[tid].
+
+Now compute:
+
+def allowed(last_id, token_id):
+    # last_id in [-1,0,1,2]
+    if last_id == -1:
+        return True
+    L1,L2 = pair_map[last_id]
+    T1,T2 = pair_map[token_id]
+    if L1==L2==T1:
+        return False
+    if L2==T1==T2:
+        return False
+    return True
+
+Now overlapping: Suppose we have last 'AA', token 'AB', we check: L1=0 L2=0 T1=0 T2=1. L1==L2==T1==0 -> true => forbidden. Good.
+
+When last 'AA', token 'BB' L1==L2==0, T1==T2==1 -> 0==1? false; L2==T1==T2? 0==1==1? false; so allowed.
+
+Now last 'AB', token 'AB', L1=0 L2=1 T1=0 T2=1. L1==L2==T1? 0==1==0? false; L2==T1==T2? 1==0==1? false; allowed.
+
+Similarly last 'BB', token 'AB': L1==L2==1, T1==0 ... not making triple.
+
+Edge: If last 'AA', token 'AA' -> L1==L2==T1 => 0==0==0 -> true => forbidden. Good.
+
+Now the algorithm uses recursion from state 0 to all tokens. There may be overlapping states: we memo need to store best for each state.
+
+Time complexity O(x*y*z*4) ~ 250k etc.
+
+Let's test quickly mentally on example 1:
+
+x=2,y=5,z=1. We can run algorithm; but trust it's okay.
+
+Now implement:
+
+class Solution:
+    def longestString(self, x, y, z):
+         pass
+
+We must return number of characters length of final string.
+
+Edge: we may also want to keep optimal number of tokens selected from state; we can present final answer = 2*max_tokens.
+
+We can also consider the possibility that we might skip some tokens; but we might also try to use only one token? yes.
+
+Edge: Suppose we have no tokens, return 0.
+
+Edge: ensure recursion/dp not overcount; but we set memo as dict.
+
+Implementation:
+
+def dfs(a,b,c,last):
+    key= (a,b,c,last)
+    if key in memo: return memo[key]
+    best=0
+    if a < x:
+        if allowed(last,0):
+            best=max(best, dfs(a+1,b,c,0)+1)
+    if b < y:
+        if allowed(last,1):
+            best=max(best, dfs(a,b+1,c,1)+1)
+    if c < z:
+        if allowed(last,2):
+            best=max(best, dfs(a,b,c+1,2)+1)
+    memo[key]=best
+    return best
+
+Caveats: recursion might raise RecursionError if depth large. In worst case we could say 150 but may exceed recursion limit? Default recursion limit is 1000. Good.
+
+But DP may be huge if we traverse all nodes; but we will evaluate all states as visited but not produce many recursion artificially: each node will call recursion maybe 3 times; we have about 150k nodes, but some may call each; but recursion overhead may be fine.
+
+But we must manage memory: use list of int dimension 51*51*51*4? that's 51^3*4=~ 525k; each entry can be int 0/1. Use 3D list with dictionary may be ok.
+
+Simplest use dictionary: hopefully fine.
+
+You can optimize by using lru_cache.
+
+Define:
+
+@lru_cache(None)
+def dfs(a,b,c,last):
+
+Works.
+
+But need to wrap to pass local variables.
+
+But we need to choose last as number 0..3.
+
+Okay.
+
+Edge-case: pos might have state where last is None, which we use -1.
+
+some tokens may be bigger.
+
+Check algorithm final answer: 2* tokens.
+
+We also need to return int. If we check for all tokens, we may get 0 tokens if no tokens at all? but we can always use at least one token: picking one token with length 2. That always satisfies no triple because string length 2 cannot have triples. So answer >= 2 always if at least one of x,y,z > 0. But we can also choose none, but we want maximum. So our algorithm will find best.
+
+Let's test some sample rough:
+
+Case 0: x=1,y=1,z=0: tokens=1,2. We can build: 'AA' last -> 'AA', we can then add 'BB' as 'AA' then 'BB' => no triple. So tokens used=2 length 4. Our algorithm would find best maybe 2.
+
+Case 2: x=2,y=0,z=0: we have two 'AA' tokens. We cannot use both because 'AA' 'AA' will generate 'AAA'? Actually 'AA' + 'AA' concatenation yields 'AAAA', which contains 'AAA' substring starting from second char. So only one token can be used: answer 2. Our algorithm would disallow second token due to triple: last 'AA' -> token 'AA' -> L1==L2==T1; blocked. Good.
+
+Case 3: z=3 (three 'AB'): can we use all three? Think: AB+AB+AB. After each AB, last two letters are 'AB'. Let's test: AB1 AB2: last two letters 'AB', AB2 starts with 'A' => 'AAA' overlapping? Wait 'AB' followed by 'AB' produce 'ABAB' => string: 'ABAB'. Does it have AAA? It contains 'A','B','A','B': no triple. Good. So can use all 3: length 6.
+
+Good.
+
+What about z=2: ABAB: length 4. Works.
+
+Now consider x=1,z=2. we might do AB, AB? 'AB' 'AB' yields 'ABAB', we can also add 'AA' somewhere? 'AA' cannot be inserted? Maybe after AB, AB etc. Suppose we add AA at end: 'ABAB' + 'AA' gives 'ABABAA' with 'AA' repeated 2 at end may produce 'AAA'? Sequence: last two 'AB' (B, A) then 'AA' starts with 'A', but preceding 'A' is 'A', so we have 'A' 'A' 'A'? but there is no preceding 'A'? Let's check: string 'ABAB' ends with 'A','B'. So last two letters 'A','B': (L1='A', L2='B'). Then 'AA' appended: L1='A', L2='B', T1='A', T2='A': The triple windows: L1,L2,T1 = 'A','B','A' no. L2,T1,T2 = 'B','A','A' no. So allowed. So AB+AB+AA yields 'ABABAA' which has no triple? Let's check: 'ABABAA': characters 'A','B','A','B','A','A', consecutive 'A','A' only 2, no triple. So all 3 tokens can be used: length 6.
+
+Seems good.
+
+Corner: 'AA' followed by 'BB' allowed. Good.
+
+Now we might think about using tokens that result in at most 2 consecutive of each char by using alternating patterns. Our algorithm will pick best.
+
+Ok.
+
+Edge: Suppose we have many 'AA', 'BB', but few 'AB's. It might still be possible to use all because we could always cut by 'AA' to 'BB' etc? Let's analyze.
+
+We can attempt to produce algorithm that uses all tokens except some 'AA's, maybe some 'BB's that cannot be paired. But algorithm will find optimum.
+
+Now the recursion enumerates all possibilities; but there may be high branching causing 150k states. Each state exploring 3 transitions, computing maybe 450k function calls, fine.
+
+We need to ensure we compute correctly, and no repeated calculations.
+
+Let's produce final answer.
+
+Let's test some edge: x=50,y=50,z=50. Complexity 50^3*3 ~ 3.75 million operations, maybe still fast.
+
+But we as recursion will compute each state once. Good.
+
+Now produce final code.
+
+Also need to output int.
+
+Edge: if no token at all? but constraints guarantee at least 1 each.
+
+Ok.
+
+Let's provide final code.
+
+We need to 'include' but not heavy.
+
+We will use lru_cache.
+
+Implement:
+
+from functools import lru_cache
+
+class Solution:
+    def longestString(self, x, y, z):
+        pair_map = {0:(0,0),1:(1,1),2:(0,1)}
+        @lru_cache(None)
+        def dfs(a,b,c,last):
+            best = 0
+            if a < x:
+                if last == -1 or not isBad(last,0):
+                    best = max(best, dfs(a+1,b,c,0)+1)
+            if b < y:
+                if last == -1 or not isBad(last,1):
+                    best = max(best, dfs(a,b+1,c,1)+1)
+            if c < z:
+                if last == -1 or not isBad(last,2):
+                    best = max(best, dfs(a,b,c+1,2)+1)
+            return best
+        return 2*dfs(0,0,0,-1)
+
+But we need isBad last? rather we use allowed function.
+
+Let's define function is_allowed(last, token_id):
+
+if last == -1:
+   return True
+L1,L2 = pair_map[last]
+T1,T2 = pair_map[token_id]
+if L1==L2==T1 or L2==T1==T2:
+   return False
+return True
+
+But we need to compute inside lambda using pair_map dictionary; but we cannot access inside lambda? It's fine.
+
+So we define:
+
+@lru_cache(None)
+def dfs(a,b,c,last):
+    best=0
+    if a < x:
+        if allowed(last,0):
+            best=max(best, dfs(a+1,b,c,0)+1)
+    if b < y:
+        if allowed(last,1):
+            best=max(best, dfs(a,b+1,c,1)+1)
+    if c < z:
+        if allowed(last,2):
+            best=max(best, dfs(a,b,c+1,2)+1)
+    return best
+
+But allowed needs to be defined outside.
+
+Define function allowed(last, token_id):
+
+    if last == -1:
+        return True
+    L1,L2 = pair_map[last]
+    T1,T2 = pair_map[token_id]
+    if L1==L2==T1 or L2==T1==T2:
+        return False
+    return True
+
+But if last == -1 we treat as start. Use function to check.
+
+Edge: There could be triple with first 2 of previous string (no triple because only two). So we only need to do as above.
+
+Ok.
+
+Now we may also consider return 2*best. But we compute answer.
+
+Let's test quickly maybe using small values.
+
+Case: x=1, y=0, z=0: => best 1. answer 2. Good.
+
+Case: x=1, y=1, z=1: total tokens 3. Let's try some arrangements: 'AA' 'BB' 'AB': 'AABBAB' -> no triple? Let's check: 'AAA'? 'AABB...' no triple AAA. 'BBB'? 'AABB...' no. 'AAA' occurs? No. So all tokens 3: answer 6. Our algorithm should get 3.
+
+Case: x=2, y=1,z=0: two AA and 1 BB: We can produce 'AA' 'BB' 'AA'? That string: 'AABB AA' = 'AABB AA'? Actually 'AA' + 'BB' + 'AA' = 'AABB AA' -> 'AABB AA' length 6, but check AAA? 'AABB' not; 'BB AA' contains 'B A A' for 'AAA'? No. 'AA' 'AA' absent due to 'BB' between them; run of 'A' at end 2. So safe. So used 3 tokens. But also 3 tokens. Good.
+
+But we need to avoid any 3 consecutive same char. This is fine.
+
+Now test all formulas: should handle.
+
+Edge: If we have more than 5 of each? But still fine.
+
+Thus finalize.
+
+Testing with given examples: x=2,y=5,z=1. Our algorithm might produce 6 tokens length 12, as expected. Its maybe produce 7? Let's test quick potential: maybe length 12. Let's attempt to find sequence: maybe sequences: AB+AB+... but there's only 1 AB. We can place AB at end. So maybe using 5 BB, 2 AA, 1 AB. Sequence: B B B B B B ... Our algorithm need to window: "BB" maybe 'BB' 'BB' -> 'BBBB' contains 'BBB' -> 3 consecutive? Actually string "BBBB": 'BBBB' substring 'BBB' present, so cannot have 'BB' followed by 'BB' after without insertion that breaks run. So connecting two 'BB' directly produce 4 'B's, which still contains 'BBB', as long as length >2. So we cannot just chain 'BB' after 'BB'. So you must put something else between them such as 'AA' or 'AB' etc. Since we only have one 'AB', we cannot for all 5 BB's. So maybe we can't use all 5? Wait we can use 'BB' 'AA' 'BB' 'AA' 'BB' 'AB' 'AA' 'BB'? Let's attempt a sequence: 5 BB -> you can intersperse some 'AA' between them to avoid 'BBB'. Because last two char 'BB' and next 'AA' start 'A', so not problematic. So we can run 5 BB with 2 AA inserted where at most 2 BB consecutive? But we cannot have 'BB' 'BB' consecutive. So if we put 'BB' before 'AA', we can have 'BB' 'AA' 'BB' 'AA' 'BB' etc. After 5 BB we need to end with AB at end maybe or maybe nothing, ensure end no triple.
+
+But we also need to position at most 5 BB with 2 AA? Let's try layout: BB AA BB AA BB AB BB? Wait we need 5 B's pairs: we only have 2 AA so we can't separate all 5 BB. We can maybe skip last BBB to avoid triple? Actually we can have 'BB','AA','BB','AA','BB','AB' use 5 BB: 3 BB? Actually 5 BB. Sequence: 'BB' & 'AA' &: 'BB' + 'AA' = "BB aa" -> 'BB' ends with 'B', next 'A' so new 2 char 'BB' cannot run. The second 'BB' uses 2 B's. After 'BB' 'AA', we could have another 'BB', but we need to avoid 'BB' 'BB' consecutively: we have 'BB' 'AA' 'BB' -> between them there's 'AA', so that's fine. We can do 5 BB and 2 AA: 'BB','AA','BB','AA','BB','AB','BB'? Wait we have 5 BBB; we can place them: BBB1, AA, BBB2, AA, BBB3, AB? Not enough. We can place AB maybe after 3rd BB? Let's test: 'BB',AA,BB,AA,BB,AB,BB? But after 3rd BB we still have AB and then they need 2 more BB's. But AB ends with 'B', then subsequent 'BB' would produce 'B','B','B' triple? Wait AB ends with 'B'; Next 'BB' will have 'B','B'; previous last 'B' from AB; that would produce AAA? Actually 'B','B','B' triple. So cannot have AB followed by BB. But we could still have AB after 3rd BB; but then because AB ends with 'B', we can't have 'BB' after. So we might need more 'AA' between AB and then BO? But we only have 2 AA.
+
+Hence we might get 5? But we might lose 1. So total tokens may be 6? Let's attempt design:
+
+Goal: 5 BB; 2 AA; 1 AB. We could do:
+
+BB -> AA -> BB -> AA -> BB -> BB ??? Wait can't.
+
+Alternatively: Use 'AA' at start and middle? Let's produce: AA, BB, AA, BB, AB, BB? But AB fails.
+
+We can do: BB, AA, BB, AA, BB, AB, BB? Not allowed. Let's attempt: AB after "#"? Not.
+
+Given example says answer 12 length 6 tokens. So we cannot use 5 BB. So our DP must find 6 tokens. Good.
+
+Implement.
+
+Edge: need to carefully generic - we are maximizing tokens but not resetting length.
+
+Let's test gradient: implement in python test with random. We'll trust.
+
+Let's produce final solution explanation: Use recursion / memoization; keep track of last two characters.
+
+Will produce final code.
+
+Potential optimization: Because we treat last as -1 for start, we compute allowed call: we may compute once: need to know last pair char. So we need mapping of pair (c1,c2). We'll do globally.
+
+Implementation details:
+
+def longestString(self, x, y, z):
+    pair_map = {0: (0,0), 1: (1,1), 2: (0,1)}
+    def allowed(last, token):
+        if last == -1:
+            return True
+        L1,D2 = pair_map[last]
+        T1,T2 = pair_map[token]
+        if L1==D2==T1 or D2==T1==T2:
+            return False
+        return True
+    from functools import lru_cache
+    @lru_cache(None)
+    def dfs(a,b,c,last):
+        best = 0
+        if a < x:
+            if allowed(last,0):
+                best = max(best, dfs(a+1,b,c,0)+1)
+        if b < y:
+            if allowed(last,1):
+                best = max(best, dfs(a,b+1,c,1)+1)
+        if c < z:
+            if allowed(last,2):
+                best = max(best, dfs(a,b,c+1,2)+1)
+        return best
+
+    return 2*dfs(0,0,0,-1)
+
+Test: Input 1: x=2,y=5,z=1: If we allow recursion we must produce 6 tokens. I think correct.
+
+But we must ensure we don't use out-of-range indices: last is int; mapping uses pair_map. We'll call allowed last, token with correct id. Since last -1 may not be present in dict, but we handle in sym cond.
+
+Ok.
+
+Now produce final output as length 12.
+
+Let's test with x=2,y=5,z=1: We'll evaluate.
+
+But maybe we need to check that we can't choose 'AA' after 'AA' etc. Good.
+
+We should also test with random values: maybe create small enumeration and brute force to test.
+
+But can't run here.
+
+But we can include reasoning that DP obtains max tokens.
+
+Hence final answer.
+
+Let's produce final Python code.
+
+<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every value we can use a *fixed pair of characters*  
+
+```
+AA  –  gives two consecutive 'A'
+BB  –  gives two consecutive 'B'
+AB  –  starts with 'A' and ends with 'B'
+```
+
+The strings may be concatenated in any order.  
+The resulting string is **invalid** if it contains  
+
+* `"AAA"` or `BBB` (three equal consecutive letters).
+
+For a **valid** string we only have to look at the last two characters that
+have already been placed – everything else is irrelevant.
+
+--------------------------------------------------------------------
+
+#### 1.   State representation
+
+*`a`*  – number of `AA` strings already used  
+*`b`*  – number of `BB` strings already used  
+*`c`*  – number of `AB` strings already used  
+`last` – last 2 characters that were written
+
+```
+last = -1      → the string is still empty          (no restriction)
+last = 0       → "AA"      (last two chars are 'A','A')
+last = 1       → "BB"      (last two chars are 'B','B')
+last = 2       → "AB"      (last two chars are 'A','B')
+```
+
+We never have a pair `BA` because there is no block with that pair.
+All strings that can be built end with one of the three pairs above.
+
+--------------------------------------------------------------------
+
+#### 2.   Transition
+
+For every state we try to append one of the three kinds of strings
+
+```
+AA  ->  last becomes 0
+BB  ->  last becomes 1
+AB  ->  last becomes 2
+```
+
+Before appending we must check that the three consecutive **new** possible
+triples are not all equal.
+
+With a previous pair `L1L2` and a new pair `T1T2`
+only the two triples that contain a character from the new pair can be
+bad:
+
+```
+L1 , L2 , T1
+L2 , T1 , T2
+```
+
+The block is allowed **iff** neither of these triples consists of the same
+character.
+
+```
+allowed(L1,L2, T1,T2)      = False
+                          if L1==L2==T1
+                          or L2==T1==T2
+                          True otherwise
+```
+
+--------------------------------------------------------------------
+
+#### 3.   Dynamic programming
+
+The number of strings we can use is at most `x + y + z`
+(`≤ 150`), therefore we can memoise by the *remaining* number of
+strings (or equivalently by `a,b,c` already used).
+
+```
+dfs(a,b,c,last)  → maximum number of strings that can be placed
+                 using at most (x-a)  remaining 'AA'
+                                (y-b)  remaining 'BB'
+                                (z-c)  remaining 'AB'
+```
+
+The transition described above is applied recursively.
+The base case is reached automatically when no further string can be added –
+the recursion returns `0`.
+
+The answer is the maximal number of strings multiplied by the length of each
+string (2):
+
+```
+answer = 2 * dfs(0,0,0,-1)
+```
+
+--------------------------------------------------------------------
+
+#### 4.   Correctness Proof  
+
+We prove that the algorithm returns the maximum possible length.
+
+---
+
+##### Lemma 1  
+For any two consecutive blocks `P` and `Q` only the two triples
+
+```
+(last two chars of P) + (first char of Q)
+(last char of P) + (first two chars of Q)
+```
+
+may contain three equal characters.
+
+**Proof.**  
+All other characters are entirely inside the previous block
+(`P`) or the current block (`Q`).  
+Both `P` and `Q` are only two characters long, therefore the only
+triples that cross the boundary can involve at most two characters from
+`P` and at most two from `Q`.  
+The only triples that use at least one character from `Q` are exactly the two
+stated above. ∎
+
+
+
+##### Lemma 2  
+The transition rule “allowed” is *exactly* the condition for a
+consecutive concatenation of two blocks to keep the string valid.
+
+**Proof.**  
+Let the last two characters of the already built string be `L1L2`
+and let the next block be `T1T2`.  
+By Lemma&nbsp;1 the only new triples must be
+
+```
+L1L2T1     and     L2T1T2
+```
+
+Both of them are equal to the same character
+iff:
+
+* `L1==L2==T1`   (first triple)
+* `L2==T1==T2`   (second triple)
+
+The transition rule forbids the block in the two and in no other case.
+Therefore a block is allowed **iff** the new string will still be valid. ∎
+
+
+
+##### Lemma 3  
+`dfs(a,b,c,last)` returns the maximal number of blocks that can be
+added to the already chosen block `a,b,c` ending with pair `last`.
+
+**Proof by induction over the number of remaining blocks
+(`(x-a)+(y-b)+(z-c)`).**
+
+*Base* : 0 remaining blocks.  
+No more blocks can be appended – the algorithm returns `0`.  
+Plausible.
+
+*Induction step* : assume the lemma holds for all states with  
+`k` remaining blocks, prove it for a state with `k+1` remaining blocks.
+
+For the current state the algorithm examines all admissible blocks
+(Lemma&nbsp;2).  
+For each such block the new state has exactly `k` remaining blocks,
+hence by the induction hypothesis the recursive value already gives the
+maximum number of blocks that can be appended after the current block.
+Adding one more block yields the exact total that can be obtained after
+choosing that block.
+
+The algorithm stores the **maximum** of those totals,
+therefore the returned value is the maximum of all possibilities for the
+current state. ∎
+
+
+
+##### Lemma 4  
+The maximum number of blocks that can be used in a valid string equals the
+value returned by `dfs(0,0,0,-1)`.
+
+**Proof.**  
+The call starts with zero blocks used and an empty string.
+All admissible choices of the first block are examined and, by
+Lemma&nbsp;3, the recursive calls produce the optimum for the remaining
+blocks. Therefore the returned value is the optimum for the
+entire construction. ∎
+
+
+
+##### Theorem  
+`longestString(x, y, z)` returns the maximum possible length of a
+string that can be built from at most `x` copies of `"AA"`,
+`y` copies of `"BB"`, and `z` copies of `"AB"` without containing
+`"AAA"` or `"BBB"`.
+
+**Proof.**  
+The algorithm finds a maximum number of usable blocks (`dfs(0,0,0,-1)`,
+Lemma&nbsp;4).  
+Every block has length `2`, therefore the length of the constructed string
+is `2 * that number`.  
+No longer string can exist because it would have to use more blocks,
+contradicting the optimality proved above.  
+Thus the returned value is the required maximum length. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 5.   Complexity Analysis
+
+Let `X = x+1`, `Y = y+1`, `Z = z+1`.  
+The memo array contains at most `X*Y*Z*4` states.
+
+```
+X ≤ 51, Y ≤ 51, Z ≤ 51   →   51^3 ≈ 132,000
+```
+
+For each state we check at most 3 transitions

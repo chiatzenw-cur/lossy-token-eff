@@ -1,0 +1,886 @@
+<|channel|>analysis<|message|>We need to count stepping numbers between two big integers up to 10^100. Use DP with digit DP, counting numbers <= limit.
+
+We need to count steps numbers with property: adjacent digits differ by 1. Also no leading zeros, except number "0". But low>=1 and high>=1. But stepping numbers are allowed single digit. But numbers of length L can become 0 as first digit? Not allowed (leading zeros). So we can treat DP issues.
+
+We need to compute f(limit) = number of stepping numbers <= limit. Then answer = count(high) - count(low-1). Need to convert low-1 to string, careful handling negative large numbers; low at least 1. So compute low1 = low-1 using string subtraction.
+
+We need to implement DP: dp[pos][prev_digit][tight][started], where pos index from 0 to len-1. pos index of current position. prev_digit can be 0-9 plus 'unknown' for start. For started, maybe 0. But we can predefine dp[pos][last_digit][tight] for started state; but we also need to handle starting digits: we can iterate over first digit: if started==0, we can choose any digit from 1..limit_digit when tight else 0..9? Actually top digit cannot be zero. But subsequence not started? Let's design: DP[pos][prev_digit][tight][started]. pos from 0 to len-1. We'll use recursion with memoization. At each pos, we choose digit d up to limit_digit if tight else 9. If started==0, we cannot choose any digit? At zero digits, the number hasn't started yet; maybe we treat d==0 as permitted? but number '0' not allowed; we skip numbers that never started. This is typical DP for counting positive integers.
+
+Hence we can use DP only for numbers that have started. Starting at pos 0, started=0 and prev_digit 0.
+
+When started==0, we can choose:
+- d=0: skip starting? But as we cannot have leading zero, but we can pick 0 to skip, but ensuring no leading zeros. But we can allow d=0 to skip: we skip until we pick a non-zero digit. However we don't need to handle if we skip all digits due to zero digits? That yields number of length 0 -> 0 -> not counted. So we must at last pos ensure started==1. But the DP will naturally count them.
+
+If started==0 and we pick d=0 (within allowed digits). This means we haven't started yet. Then this digit doesn't matter for stepping condition; we need to keep prev_digit unused. For next pos, started=0, prev_digit irrelevant. So we can just choose next digit: continue.
+
+If started==1, we need to ensure | |d| - prev_digit|==1. For next, prev_digit=d.
+
+Also we need to decide modulo: 1e9+7.
+
+After evaluation, we can compute f(limit) counts up to limit. We also must maintain that the whole number's length is exactly the length of limit, because we don't allow leading zeros. But we are building numbers of length L with fixed leading zeros? Actually we allow variable length by not started until we choose non-zero. If start==0 at all pos, we produce number 0 which is not allowed, but we exclude. So we only consider numbers with at least one digit at start. So fine.
+
+But we must consider that our DP is built as steps for length up to limit length. But we also want to count numbers less than limit length. If we skip all digits, we get number 0; that's excluded. But we also need to allow numbers of length less than limit length but with preceding zeros. Example: limit = "1000". We can produce numbers like "10" (two digits). This will be represented by ignoring leading zeros for the first 2 digits? Wait we maintain pos 0 to len-1. For "10", we might choose digits: 0's for first 2 positions, then 1, then 0 last. But we need to ensure that we didn't start until 2 huge digits. That leads to number 10 with leading zeros. But we used indegree as started==0 until window. but if we are at pos where first non-zero digit occurs, typical DP for numbers with leading zeros counts numbers of length L but with leading zeros to fill to length L. So if limit length is max(10,1000), we can produce number 10 as 0 0 1 0? Wait our DP picks 0 at pos1, 0 at pos2, 1 at pos3, 0 at pos4. That yields 10. But property includes adjacency difference difference 1 between pos3 and pos4. But our algorithm would treat adjacency between 0 and 1? Wait the digits before zeros? For not started, adjacency condition not considered until started. So when started=0, we ignore adjacency. So at pos4, when d=0, prev_digit? Actually previous step before started was '14' at pos4? Wait we started at pos3 with digit 1. That at pos4 we used d=0; we ensured that | |0| - prev_digit|==1, correct. So stepping property is satisfied. So our DP counts numbers with leading zeros effectively. That covers them. Good.
+
+But we must ensure numbers have no leading zeros at start: i.e., the first non-zero digit cannot be zero. That's fine. When we start zero, we also treat it's not start. So output 0 from all zero. So fine.
+
+Edge Cases: Lower bound could be 1. Compute low-1: we need to subtract 1 from string. Implementation: subtract 1 from string with borrow.
+
+Also using DP 0..len-1, index initialized 0. DP with memoization for each state. While visited and with 'tight' etc.
+
+Return f(high) - f(low-1) modulo 1e9+7. Add mod.
+
+Now complexity: number of states: len up to 100, prev_digit 0-9, started 0,1, tight 0,1. 100*10*2*2=4000 states, safe.
+
+Memoization: use dictionary or 3D list of -1.
+
+Implementation details:
+
+def countSteppingNumbers(limit, mod=1e9+7):
+
+We parse limit as string s.
+
+We use recursion:
+
+def dfs(pos, prev_digit, tight, started):
+    if pos==0? Actually pos is len. So when pos==len(s), return started? Because we started at pos==n. If started==1, we counted a valid number. Else 0.
+
+Implementation:
+
+def helper(pos, prev, tight, started):
+    if pos == len(s):
+        return 1 if started else 0
+    if mem[pos][prev][tight][started] exists: return from mem
+    limit = int(s[pos]) if tight else 9
+    res = 0
+    for d in range(0, limit+1):
+        if tight and d==limit: next_tight = 1
+        else: next_tight = 0
+        if not started:
+            if d==0:
+                # skip, remain started
+                res += helper(pos+1, prev, tight=next_tight, started=0)
+            else:
+                res += helper(pos+1, d, tight=next_tight, started=1)
+        else:
+            # must have |d-prev|==1
+            if abs(d - prev) == 1:
+                res += helper(pos+1, d, tight=next_tight, started=1)
+    return res % mod
+
+But we must handle prev for non-start started: prev != used. If started==0 and prev isn't chosen, we might set prev as 0 or -1. But in recursion we pass prev to next state; but we only use prev if started==1. So we can set prev to 0 or any placeholder.
+
+But if we pass prev=0 when started==0, it doesn't matter. But we can still compute by passing prev as 0 always first.
+
+At start, we call helper(0, 0, 1, 0).
+
+We need to store memo per state. Because prev only depends on if started==1. If started==0, prev can be arbitrary; but we can still use it but we don't track state. We could set prev=0 in dp. Then during memoization state (pos, prev, tight, started). When started==0, prev=0. So easier.
+
+Implementation of memo: use 4D array of -1. But easier: dictionary mapping key tuple.
+
+But large dimension: 100*10*2*2 = 4000. Use 4D list: dp[pos][prev][tight][started]. We can dimension size 100 as length. But prev from 0 to 9. But tight=0,1; started=0,1. Example: dp = [[[[ -1]*2 for _ in range(2)] for _ in range(10)] for _ in range(101)].
+
+But we also have dp used with length 1 when started=0; but we can compute start.
+
+Let's create dp = [[[[ -1]*2 for _ in range(2)] for _ in range(10)] for _ in range(101)]
+
+But we need to handle pos up to len(s). For pos range 0..len(s).
+
+In recursion when pos==len(s): return 1 if started else 0.
+
+Now memory: Use dict.
+
+Edge Cases: len=1. Example: low=1 high=1. Count of stepping numbers <=1.
+
+Let's test quickly conceptually.
+
+Now implement long long subtraction: lowminus1 to reduce with small high big but binary.
+
+Implementation subtract_one(s): We'll subtract 1 from s with Borrow from rightmost. If s==0 "0"? But low>=1. For positive s. Borrow 'carry'.
+
+Pseudo:
+
+def decrement_one(s):
+    s = list(a)
+    i = len(s)-1
+    while i>=0 and s[i]=='0':
+        i -= 1
+    s[i] = s[i]-1
+    if s[i]=='0' after subtract? Actually char '0' -> 'X' becomes '0'? we convert to int then minus.
+
+But easier: convert to list of digits ints. iterate.
+
+Implementation:
+
+def subtract_one(s):
+    if s == "0":
+        return "0"
+    digits = list(map(int, s))
+    i = len(digits)-1
+    while i>=0 and digits[i]==0:
+        digits[i] = 9
+        i -= 1
+    digits[i] -= 1
+    # remove leading zeros
+    if digits[0]==0:
+        while len(digits)>1 and digits[0]==0:
+            digits.pop(0)
+    return ''.join(map(str, digits))
+
+Now main: high = self.countSteppingNumbers(high, mod). low = self.countSteppingNumbers(low, mod). We need low - 1. So:
+
+low_minus1 = subtract_one(low)
+
+Then compute:
+
+low_less = countSteppingNumbers(low_minus1, mod) -> f(low-1)
+
+res = countHigh - countLowMinus1
+
+If low_minus1 == "0" ??? But low>=1. We compute low_minus1 (0). So we compute f(0) which presumably counts 0? But our counting function exclude leading zeros. We should handle limit to zero: We can define high=0 -> sum should be 0. So we can compute f(0) and it will return 0 because 0 is not counted. Let's test recursion: s="0", len=1. Count stepping numbers <=0. For s="0": we restrict digits 0-0 with tight. If started==0: if d=0, we go to pos+1, started=0. pos==0? Wait pos==0. Starting recursion with pos=0, prev=0, tight=0, started=0. For limit=0, digits[0] = 0. So limit=d+1: for d=0: next_tight = 1, started=0. Recurse to pos+1=1 again: pos==len=1, started==0 -> return 0. So final 0. Good.
+
+Edge: low='1', then low_minus1='0'. Works.
+
+Now bridging: Determine answer digits up to high - low+1.
+
+Edge: If low <= high maybe adjust.
+
+Now final test:
+
+Example 1: low=1, high=11. List by brute: 1,2,3,4,5,6,7,8,9,10,11? Wait 11 contains 1 diff 1? But they said all stepping numbers: they include 11? 1 and 1 diff 0, not allowed. So 11 not built. But they result 10. So 11 not counted. So our DP should exclude 11: digits 1,1 diff 0. Good.
+
+Now test 1 - 11.
+
+Using DP: count stops.
+
+Now compute f(11). Count stepping numbers <=11: 1,2,3,4,5,6,7,8,9,10. => 10. Good.
+
+Now compute low-1=0 returns 0. Answer 10.
+
+Example 2: low=90 high=101. Let's quickly compute stepping numbers between 90 and 101:
+
+- 90, 91, 92? 90: digits 9,0 diff 9, not allowed; oh 90 difference 9 (invalid). 91 diff 1 diff 9? digits 9,1 diff 8 invalid. 92 diff 7. So 98 diff 9 diff 8? Wait 98: digits 9,8 diff 1. Good. 101 diff 1,0 diff 1,1 diff 1. So stepping numbers 100? 100 diff 1-0 diff 1, 0-0 diff 0 invalid. So 100 not counted. 101 repeated 1's? 101 had 1-0 diff 1, 0-1 diff 1 => stepping. 101 is 3-digit stepping number.
+
+So answer 2. Our DP: f(101)-f(89). Count stepping numbers <=101 includes 1-9, 10, 20, 30,...? Wait 20 difference 2-0 diff 2 invalid. 12 diff 1,2 diff 1 yes; 23 diff 1,2 diff 1 etc. So many. Actually the DP will count them all. But difference should produce 2. Check.
+
+Now performance: ratio 1e9+7. Standard mod.
+
+Edge: big numbers up to 100 digits.
+
+Implementation of DP: Since we recuse across many positions, we can use lru_cache.
+
+Let's implement with memoization using functools.lru_cache.
+
+Define function:
+
+def count_upto(s).
+
+Use @lru_cache(None, maxsize=None). def dfs(pos, prev, tight, started). Use recursion.
+
+But we need to pass prev as ability index 0-9.
+
+When started==0, we set prev=0. So we may restrict to 0. But we may still use 0 for prev. In dp we can set prev to 0.
+
+Implementation:
+
+@lru_cache(None)
+def dfs(pos, prev, tight, started):
+    if pos==len(s):
+        return 1 if started else 0
+    limit = int(s[pos]) if tight else 9
+    if tight and d==limit: nxt_tight = 1 else 0
+    ...
+But we can use loops.
+
+Now we need to convert length but we maintain the value as string.
+
+Implement attr: modulus.
+
+But loops inside recursion may overcomplicate.
+
+Potential think: We can compute DP state: dp[pos][prev][tight][started]. But we already used lru_cache.
+
+Now we need to compute for each query: count_upto(high) and count_upto(low-1). So we compute two DP runs each.
+
+Complexities: each DP 100*10*2*2 * \(digits loops add 10 each). So about 2000*10 = 80000 operations; trivial.
+
+Now we will test for the sample.
+
+Edge: high may be 10^100. digits length 100.
+
+Now finalize.
+
+Now produce final solution code we use a class Solution with method countSteppingNumbers ?
+
+Wait function signature: countSteppingNumbers(low, high). So we will pass low and high.
+
+Implementation inside solve.
+
+Now produce final code.
+
+But we need to compute result mod 1e9+7. At each step we mod.
+
+Edge: result may be negative after subtracting: use (result % mod + mod) % mod.
+
+Ok.
+
+Double-check: For numbers with leading zeros, count may exceed limit? For numbers < len, we also represent them as padded zeros at start; counted.
+
+Ok.
+
+Edge: The stepped number 0 may have digits length 0? We exclude. Good.
+
+Now finalize.
+
+But there's nuance: The DP should allow stepping numbers with same adjacent digits? no. Should be zero difference? not allowed. Only diff exactly 1.
+
+Now implement subtraction:
+
+def lower_minus_one(s):
+    if s == '0':
+        return '0'
+    digits = list(map(int, s))
+    i = len(digits)-1
+    while i >=0 and digits[i]==0:
+        digits[i] = 9
+        i -= 1
+    digits[i] -= 1
+    # remove leading zeros
+    if digits[0] == 0:
+        cleaned = ''.join(map(str, digits))
+        if digits[0]==0:  # but if digits[0]==0 and there are digits >1 length
+            # skip leading zeros
+            k = 0
+            while digits[k]==0:
+                k += 1
+            digits = digits[k:]
+        if digits.length??? Equivalent raw.
+    return ''.join(map(str, digits)). lstrip('0') or '0'.
+
+But we had cases like 1000 -> 999. Implementation: after subtract 1, digits[1] may be 0? Let's just convert to string and leftstrip zeros.
+
+Implementation:
+
+def subtract_one(s):
+    res = list(s)
+    i = len(res)-1
+    while i>=0 and res[i]=='0':
+        i -= 1
+    # copy digits
+    # rely on char >0
+    k = i
+    if k == -1:
+        # number is 0? but we might not call in this context. So we can return '0'.
+    res = list(s)
+    # subtract
+    i = len(res)-1
+    while i >= 0:
+        if res[i] == '0':
+            res[i] = '9'
+            i -= 1
+        else:
+            res[i] = chr(ord(res[i]) - 1)
+            break
+    # Remove leading zeros
+    for i in range(len(res)):
+        if res[i] != '0':
+            break
+    else:
+        return '0'
+    return ''.join(res[i:])
+
+But this uses int? Actually we can implement char as int.
+
+Simpler: use Python's int conversion for small up to 100 digits? Python ints can hold arbitrary precision. But we can't convert to int because high could be up to 10^100 which would be huge but Python int can handle. But the problem states high<10^100, but Python int can handle far bigger. So we can compute low_minus1 = int(low) - 1; close to 10^100 - 1. But Python int is arbitrary precision, we can. So we can skip string subtraction entirely: compute low_minus1 = int(low) - 1. But for that we need to convert to int; we can but we could use big ints. Use Python's big int: int(low) - 1 is feasible. But we need to compute up to 10^100; Python int can hold more than 1e9 digits, but 10^100 is 10 digits? Actually 10^100 is about 10^100's integer, 101 digits. Python can handle that; it's allowed in memory. So easiest: reduce string to int. But the problem might limit memory? But typically int may be okay for 100 numbers; Python int is safe. So we can convert.
+
+But 'low' is a string of digits up to 100; we convert to int: low_val = int(low) - 1.
+
+We can choose to manually subtract.
+
+But using Python int may be simplest: we just parse both low and high as strings and use python int. But that may be efficient for 100 digits. Complexity might be high but fine.
+
+But we need to run DP for each limit; we need to compute digits string s. We cannot feed int to DP; we need string. So we can convert int to string again. So use:
+
+def count_upto(s):
+
+But if we get int(low_val) we convert to string: str(low_val). But if low_val=0 we need to handle separately: define s='0'.
+
+But to avoid big-int, we can convert string -> int for low-1 and high. But high may be 10^100; we can parse as int. OK.
+
+But official constraints ask for string to avoid overflow. But Python int bigger not necessary. But we can still handle as int; but we might worry about performance for repeated conversion? But only one call.
+
+But we can avoid string subtraction once.
+
+But better: DP is independent of numbers; we just compute count for limit string. So we can compute low_minus1 as string using subtract_one.
+
+Let's implement subtract_one() manually to avoid string to int? But we can do both.
+
+Let's do manual subtract for reliability.
+
+Implementation:
+
+def subtract_one(s):
+    if s == '0':
+        return '0'
+    i = len(s)-1
+    lst = list(s)
+    while i>=0 and lst[i]=='0':
+        lst[i] = '9'
+        i -= 1
+    lst[i] = str(int(lst[i]) - 1)
+    # Remove leading zeros
+    j = 0
+    while j < len(lst)-1 and lst[j]=='0':
+        j += 1
+    return ''.join(lst[j:])  # return string
+
+Test: '1' -> '0', '1000' -> '999', '10' -> '9', '90' -> '89', '2000' -> '1999'.
+
+Edge: '1000': '0999' etc.
+
+Will produce correct.
+
+Ok.
+
+Now tests:
+
+Example 1 range 1-11. low_minus1 = '0'.
+
+Compute countUpto('11').
+
+Let's test start quickly.
+
+Manual algorithm maybe produce correct.
+
+Now but we must handle special case when limit includes leading zeros? When we call countUpto('0'), difference 0.
+
+Now we finalize.
+
+Implementation details:
+
+def count_upto(s):
+    global mod
+    function dfs(pos, prev, tight, started)
+    use lru_cache.
+
+But careful: d <= limit. For tight we compute new_tight = tight and d==limit.
+
+Also we need to convert char to int for each digit: digits = [int(c) for c in s] once. For len.
+
+Ok.
+
+Now final code.
+
+We will produce final code:
+
+___
+
+class Solution:
+    def countSteppingNumbers(self, low, high):
+        MOD=1_000_000_007
+        def count_upto(s):
+            n=len(s)
+            digits = [int(c) for c in s]
+            from functools import lru_cache
+            @lru_cache(None)
+            def dfs(pos, prev, tight, started):
+                if pos==n:
+                    return 1 if started else 0
+                limit = int(s[pos]) if tight else 9
+                res=0
+                for d in range(limit+1):
+                    if tight and d==limit:
+                        nxt_tight = True
+                    else:
+                        nxt_tight = False
+                    if d==0 and not started:
+                        # still not started
+                        res += dfs(pos, prev, 0, False)  # Wait recursion -> but we need more careful: We skip this digit: we don't want to stay same pos. We need to move to pos+1 with started same and started False; we also can't set pos remain same. So we need updated state: pos+1, prev, nxt_tight .. set started False
+                    else:
+                        nxt_tight = tight and d==limit
+                    Should we use? The previous logic for dest.
+
+But careful: If d==0 and not started, we don't set started=0. Because we are staying next position with started False. Implementation: recursively call dfs(pos+1, prev, nxt_tight, False). Yes we incremental.
+
+Also we need to skip start scenario: Actually if d==0 and not started, we don't care about prev.
+
+So algorithm:
+
+for d in range(limit+1):
+    if tight and d==limit:
+        nxt_tight = True
+    else:
+        nxt_tight = False
+    if not started:
+        if d==0:
+            res += dfs(pos+1, prev, int(nxt_tight), 0)
+        else:
+            res += dfs(pos+1, d, int(nxt_tight), 1)
+    else:
+        if abs(d - prev) == 1:
+            res += dfs(pos+1, d, int(nxt_tight), 1)
+
+Take modulo = 1_000_000_007.
+
+But we need to map bool to int for caching because boolean false? It's okay.
+
+But 0 or 1 convertible to bool.
+
+Implementation details:
+
+ Memo key: (pos, prev, tight, started). Use lru _cache on tuples.
+
+Ok.
+
+But we need to differentiate prev when not started (i.e., prev). Should we ignore prev? It's ok: if started==0, prev is 0.
+
+So we set prev=0 during DFS default.
+
+Edge: In dp there is empty number.
+
+Now typical DP deg.
+
+But careful: At later positions we may choose d==0 and started==0. That leads to hidden path. Good.
+
+Need to ensure no leading zeros, but removing leading zeros ensures we do not count number of zero digits? Actually we may produce numbers like 0 (all zeros). That is not counted. That's fine.
+
+Now code details:
+
+But we need to convert to int for 'tight' because j small. But we can use bool.
+
+Let's implement:
+
+def count_upto(s):
+    n=len(s)
+    digits = list(map(int, s))
+    from functools import lru_cache
+    @lru_cache(None)
+    def dfs(pos, prev, tight, started):
+        if pos==n:
+            return 1 if started else 0
+        limit = int(s[pos]) if tight else 9
+        res=0
+        for d in range(limit+1):
+            nxt_tight = tight and d==limit
+            if not started:
+                if d==0:
+                    res += dfs(pos+1, 0, nxt_tight, 0)
+                else:
+                    res += dfs(pos+1, d, nxt_tight, 1)
+            else:
+                if abs(d - prev)!=1:
+                    continue
+                res += dfs(pos+1, d, nxt_tight, 1)
+        res %= MOD
+        return res
+
+    return dfs(0,0,True,False)
+
+But we used 's[pos]' inside recursion. For efficiency we can use digits array. ok.
+
+But we used 'limit' = int(s[pos]) if tight else 9. But we used 'limit' but incorrectly used.
+
+Because we need to compute "limit" as digits[pos] instead of str(s[pos]), but we can use digits[pos].
+
+Thus:
+
+limit = digits[pos] if tight else 9
+
+Now implement.
+
+Now we need to compute count at low-1 (some may not use string.
+
+Now implement subtract_one:
+
+def subtract_one(s):
+    if s == '0':
+        return '0'
+    lst = list(s)
+    i = len(lst)-1
+    while i>=0 and lst[i]=='0':
+        lst[i] = '9'
+        i -= 1
+    lst[i] = str(int(lst[i]) - 1)
+    # remove leading zeros
+    j = 0
+    while j < len(lst)-1 and lst[j]=='0':
+        j += 1
+    return ''.join(lst[j:])
+
+Testing: s='1000': s='1000', while loop we set 0..9: i=3-bit 0 becomes 9 etc; next i=2: 0 becomes 9; i=1: 0 becomes 9; i=0: 1 becomes 0; final list: ['0','9','9','9']; j=0 -> j=1? We'll skip first leading zero because j< len(lst)-1, j=0 -> us. The while loop stops j < len(lst)-1 AND lst[j]=='0' ; j=0 triggers, j=0 < len-1=3 true, so j=0 -> st char '0', we increment j; j becomes 1. j=1 -> < len-1=3 True, j=1 char '9', j=1 not '0' so j>0; break; result = '999' -> final.
+
+Now low=0? But low>=1.
+
+Now we compute result:
+
+def countRange(low, high):
+    value = count_upto(high) - count_upto(subtract_one(low))
+    if value < 0:
+        value += MOD
+    return value
+
+Time good.
+
+Now we need to include mod constant.
+
+Now produce final solution.
+
+Let's test mentally quick:
+
+Example2 low=90 high=101.
+
+- count_upto('101') ?
+
+Let's run DP: call k.
+
+But we trust.
+
+We may also test for '0' case: count_upto('0') returns 0. We'll test risk: Suppose count_upto('0') returns 0. Good. So low - 1 result.
+
+Edge: For high less than 10 maybe small.
+
+Ok.
+
+Now we produce final code.
+
+But we might also include fast path for addition.
+
+Let's also test extreme: low=high, high=high (like 1). The answer should be 1 if high is stepping number else 0.
+
+The algorithm: ans = count_upto(high) - count_upto(low-1). This yields 1 for stepping number.
+
+Ok.
+
+Now we should produce final solution code with functions inside class.
+
+Now produce full solution explanation.
+
+Let's produce final output.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every integer
+
+```
+d0 d1 … dk   (k = length of the number – 1)
+```
+
+the number is *stepping* iff
+
+```
+|d0 – d1| = |d1 – d2| = … = |dots – dk| = 1
+```
+
+and the first digit must not be `0` (no leading zero is allowed within the
+range).  
+The task is to count all stepping numbers between two arbitrary
+strings `low` and `high` (both inclusive, up to `10^100`).
+
+--------------------------------------------------------------------
+
+#### 1.   Counting all stepping numbers ≤ `low`
+
+If we can quickly obtain
+
+```
+F(x) = number of stepping numbers  (x ≤ x  ≥ 1)
+```
+
+then the answer for the lower bound is
+
+```
+answer = F(high) – F(low)
+```
+
+(when `low` is subtracted we really need `low – 1`; we will subtract 1
+sub‑routine below).
+
+The number of digits is at most `100`, so we can use a classic
+**digit DP** with memoisation.
+
+--------------------------------------------------------------------
+
+#### 2.   Digit DP
+
+For a fixed limit string `s` (`s` = length `n`)
+
+```
+dfs(pos, prev, tight, started)
+```
+
+`pos` – current index (0 … n)  
+`prev` – previous digit (0 … 9) – meaningful only if `started == 1`  
+`tight` – `True` if the already chosen prefix is already equal to the
+prefix of `s`  
+`started` – have we already chosen a non‑zero digit?  
+
+```
+pos == n:
+        if started → 0‑1 digit stepping number -> 1
+        else        -> 0 (the number 0 is not counted)
+```
+
+For the current position we may choose any digit `d` except
+
+```
+for d in 0 … best
+        if tight and d == limit: next_tight = True
+        else                     next_tight = False
+```
+
+Handling the four cases:
+
+| started | d | action |
+|---------|---|--------|
+| 0 | 0 | stay in `started` = 0 (ignoring the leading zero) |
+| 0 | d>0 | number now starts – set `prev = d`   |
+| 1 | d | only last digit `prev` can be used; the step must satisfy  
+                `|d – prev| == 1` |
+
+If any step cannot be taken, the loop continues.
+
+The recursion depth is the number of digits (`≤ 100` ).  
+Number of states is at most `n × 10 × 2 × 2`.  
+With memoisation we visit each state once, so the total amount of work
+is tiny (`≈ 4·10^3` operations).
+
+--------------------------------------------------------------------
+
+#### 3.   Subtracting one from a string
+
+`low` is at least `1`.  
+To obtain the value `low-1` we perform a manual subtraction on the
+string – it is very safe for the required length.
+
+```
+function subtract_one(s):
+    if s == '0': return '0'
+    from rightmost digit to the left:
+        if digit == '0': replace with '9'
+        else: digit -= 1
+    return ''.join(all digits without leading zeros)
+```
+
+--------------------------------------------------------------------
+
+#### 4.   Final algorithm
+
+```
+MOD = 1_000_000_007
+
+answer = (F(high) – F(low-1)) mod MOD
+```
+
+`F(low-1)` is the value returned by the delete‑zero DP for limit
+`low-1`.  
+All intermediate values are taken modulo `MOD`.
+
+--------------------------------------------------------------------
+
+#### 5.   Correctness Proof  
+
+We prove that the algorithm returns the number of stepping numbers in
+`[low, high]`.
+
+---
+
+##### Lemma 1  
+For a fixed limit string `s` the function `count_upto(s)` (the
+digit DP described above) returns the number of stepping numbers
+`x` such that `1 ≤ x ≤ s`.
+
+**Proof.**
+
+*Base `s = ""`* – Every state at `pos = len(s)` returns `1` iff
+`started = 1`, otherwise `0`.  
+Thus indeed the empty set of digits yields 0 are counted.
+
+*Induction step* – Assume the lemma holds for all states
+`pos > len(s)` (the base case).  
+Consider a state `pos` with a smaller value `d` that can be chosen
+for the current position:
+
+- if `started = 0`  
+  * `d = 0`   → we keep `started = 0` and simply move to the next
+  position, all digits are still counted.  
+  * `d > 0`   → we are starting the number; the next\n`prev` can be
+  `d`.  
+  The number of valid completions is exactly the recursive call
+  `dfs(pos+1, prev, pos+1 ... )`.
+
+- if `started = 1`  
+  * `|d – prev| | must be 1.  
+  The number of full valid completions is exactly that recursive call
+  (the same logic as above, but the number is already started).
+
+All possibilities for the next digit are examined, and `tight` constraints
+are honoured.  
+The recursion depth is at most the digit length of the number, therefore
+every possible number `x` with `1 ≤ x ≤ s` is counted once, and no
+invalid number is counted, because the condition on the adjacent
+difference is required.
+
+Thus the returned value equals the number of stepping digits `≤ s`. ∎
+
+
+
+##### Lemma 2  
+`subtract_one(s)` returns the string representation of `low - 1`
+for all valid inputs `s` (`s ≥ 1`).
+
+**Proof.**
+
+The process is a standard grade‑school subtraction of `1`
+from a decimal string.  
+Each iteration removes a trailing `0` turning it into a `9`,
+and the first non‑zero digit is decreased by one.
+This leaves the same artifact as the decimal number `low-1`.  
+The final stripping of leading zeros removes the leading zero that
+appears when the leading digit becomes `0` in the most significant
+position, e.g. `1000 → 0999 → 999`.  
+Thus the returned string is exactly the decimal representation of
+`low-1`. ∎
+
+
+
+##### Lemma 3  
+`answer = (F(high) – F(low-1)) mod MOD` equals the number of stepping
+numbers in the lower bound `low` and upper bound `high`.
+
+**Proof.**
+
+From Lemma&nbsp;1 we know that `F(high)` is the count of all stepping
+numbers `≤ high`.  
+From Lemma&nbsp;2 we know that `F(low-1)` is the count of all stepping
+numbers `≤ low-1`.  
+Subtracting removes avoid the numbers that are strictly smaller than
+`low`.  
+Therefore the difference counts exactly the numbers **strictly
+between** `low` and `high` and **including** `high`.  
+The modulo operation does not change the count modulo `MOD`. ∎
+
+
+
+##### Theorem  
+`Solution.countSteppingNumbers(low, high)` returns the number of
+stepping numbers in the inclusive interval `[low, high]`,
+modulo `10^9+7`.
+
+**Proof.**
+
+From the algorithm:
+1. `low-1` is computed correctly (Lemma&nbsp;2).
+2. `f(high)` and `f(low-1)` are computed correctly (Lemma&nbsp;1).  
+3. Finally the difference is taken modulo `MOD`, which is the required
+   output (definition of `answer`).  
+   By Lemma&nbsp;3 this difference equals the number of stepping
+   numbers inside the interval `[low, high]`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 6.   Complexity Analysis
+
+The DP has at most 100 digits, 10 values for the previous digit,
+2 × 2 possibilities for `tight` and `started`.  
+Thus
+
+```
+states  ≤ 100 × 10 × 2 × 2 = 4000
+Transitions per state  ≤ 10
+```
+
+```
+time   :  O(4 · 10^3)  ≈ 4·10^4 elementary operations
+memory :  O(4 · 10^3)  ≈ 4·10^3 integers
+```
+
+Both are negligible for the given limits.
+
+--------------------------------------------------------------------
+
+#### 7.   Reference Implementation  (Python 3)
+
+```python
+import sys
+from functools import lru_cache
+
+MOD = 1_000_000_007
+
+
+def count_upto(s: str) -> int:
+    """Return number of stepping numbers ≤ s  (s is a decimal string)."""
+    n = len(s)
+    digits = [int(c) for c in s]
+
+    @lru_cache(maxsize=None)
+    def dfs(pos: int, prev: int, tight: int, started: int) -> int:
+        if pos == n:
+            return 1 if started else 0
+
+        limit = digits[pos] if tight else 9
+        res = 0
+
+        for d in range(limit + 1):
+            if tight and d == limit:
+                next_tight = tight
+            else:
+                next_tight = False
+
+            if not started:
+                if d == 0:
+                    # still no leading digit – we keep started = 0
+                    res += dfs(pos + 1, 0, next_tight, 0)
+                else:
+                    res += dfs(pos + 1, d, next_tight, 1)
+            else:
+                if abs(d - prev) == 1:
+                    res += dfs(pos + 1, d, next_tight, 1)
+
+        return res % MOD
+
+    return dfs(0, 0, True, 0)
+
+
+def subtract_one(s: str) -> str:
+    """Return string representation of s – 1,  s >= 1."""
+    if s == "0":
+        return "0"
+    lst = list(s)
+    i = len(lst) - 1
+    while i >= 0 and lst[i] == "0":
+        lst[i] = "9"
+        i -= 1
+    lst[i] = str(int(lst[i]) - 1)
+    # strip leading zeros
+    j = 0
+    while j < len(lst) - 1 and lst[j] == "0":
+        j += 1
+    return ''.join(lst[j:])
+
+
+class Solution:
+    def countSteppingNumbers(self, low: str, high: str) -> int:
+        mod = 1_000_000_007
+
+        # total digits <= high
+        total_high = count_upto(high)
+
+        # total digits <= low-1
+        low_minus_one = subtract_one(low)
+        total_low = count_upto(low_minus_one)
+
+        ans = total_high - total_low
+        if ans < 0:
+            ans += MOD
+        return ans % MOD
+
+
+# ------------------------------------------------------------------
+# Example usage (for local testing)
+if __name__ == "__main__":
+    sol = Solution()
+    print(sol.countSteppingNumbers("1", "11"))   # 10
+    print(sol.countSteppingNumbers("90", "101"))  # 2
+```
+
+The program follows exactly the algorithm proven correct above and
+conforms to the required function signature.

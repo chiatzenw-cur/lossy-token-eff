@@ -1,0 +1,356 @@
+<|channel|>analysis<|message|>We need to maximize bitwise OR of all nums after applying at most k times operation: multiply an element by 2.
+
+We can apply up to k times; each operation chooses an element of current array and multiplies it by 2. Equivalent to choose an element and some number of times we multiply it by 2 (i.e., multiply by 2^t). Each operation increases each element by factor 2.
+
+Observation: Bitwise OR is monotonic in terms of adding bits (setting 1). Multiplying an element by 2 shifts its bits left by 1. Do we ever consider effect of shifting beyond 32 bits may exceed 1e9? We can compute up to 2^something, but k <= 15, num <= 1e9, so 2^15 ≈ 32768: 1e9*32768 = 3.3e13 > 2^34 ~ 17179869184. So bits up to 34, but we might still use 60 bits if exceed 1e9? 3.3e13 < 2^45 ~ 34.8e13. So not huge.
+
+We're limited by k <= 15, so we can brute force? There are n up to 1e5, can't brute per element.
+
+We can think of the result: we can assign each multiplication to an element individually, each incrementally. Equivalent to selecting for each element x i with t i >= 0, sum t_i <= k. The resulting array is [a_i * 2^t_i]. OR of all elements.
+
+We want max OR. Since operations increase bits, we can think of considering bitwise OR value at each bit. Usually OR can be improved by setting bits on some element. For each operation, we can attempt to set a high bit by applying to one element.
+
+But we can potentially use greedy algorithm: process bits from highest to lowest. For each bit position j, we check if it's possible to set this bit in the final OR by assigning some operations to some element before or after others? Or we can perform multi-step.
+
+Observations: Since multiplying an element by 2 shifts all bits left by 1; OR of all elements after operations can be seen as OR of each transformed element. It's tough.
+
+We can think of state: we can choose an element and apply all remaining multiplications to it at once; as the operation count is small, you can only consider at most k steps. The number of choices of which element to multiply each step may be combinatorial; but we can limit to 1e5 * 15? Not good.
+
+We can think of this as we want to maximize OR over all possible configurations. Since we can shift each element individually, but shifting whole vector by 2 will shift OR accordingly. But we can plan to shift some element many times to set high bits that are present in original but not in OR yet.
+
+Wait perhaps there is information that the key to maximizing OR is to assign all operations to some element to create largest possible bits. Because you can OR each element with its shifted versions. The OR of all elements; each element's contributions. The OR of all items is (a1)| (a2)|... But if we transform a1 to a1*2^t, the OR may change by bits that appear in new value but not in other values.
+
+It may be optimal to apply all operations to one element to increase its share? Because using multiple elements to shift may create uneven distribution.
+
+Consider example: nums = [12(1100), 9(1001)] k=1. We can't shift both? The best is to shift index 1 to get 18(10010). But what if we shift 12 to 24: 11000; OR would be 24|9= 11000|01001=11001=25? Wait 24|9=11001=25? Wait 9=1001 (111?). Actually 9 decimal 1001 (binary). OR with 24: 11000 OR 01001=11001=25? Wait 11001=25. So 25 less than 30. So shifting index 1 wins.
+
+But is there always a strategy? Suppose we have two numbers and we could shift each to contribute high bits. But shifting one may produce several bits; shifting another may produce disjoint bits.
+
+Goal: maximize OR; each operation may create some bits. The OR result not strictly increasing by any operation because we don't care about bits already present. So we need to choose operations that add new bits.
+
+Alternate approach: DP over bits? For each bit from highest to lowest, we can decide if we can achieve OR value with that bit set.
+
+We can treat each element as a bitmask that can be changed by multiply by 2. Each shift yields a sequence of bitmasks: original bits shift left. So after t operations, the bitmask becomes original XOR (?) Actually shift.
+
+This is like each operation transforms the bitmask to a shifted version, etc. The OR is union over all elements.
+
+However, we can think of each position j of final OR, we can set it to 1 if there exists at least one element t_i such that j-th bit of (a_i * 2^t_i) is 1. This bit is originally (a_i >> (j - t_i))'s bit (1) if j>=t_i and (a_i >> (j - t_i)) & 1 == 1.
+
+So for each bit j, we need at least one element for which existence. T_i <= k.
+
+Thus we can choose new t_i to try to create target bits.
+
+Goal: maximize OR value, meaning set bits from highest to lowest possible.
+
+This is similar to maximizing numeric value by selecting bits. Since OR is lexicographically by bits.
+
+We can think of constructing answer bit by bit: starting from 0. For each bit starting from 60 down to 0, we can check whether we can set it to 1 while considering remaining operations costs.
+
+We can consider constrained: we need to assign t_i for each element to cover selected bits.
+
+Let's consider dynamic programming for each element: how many operations to shift them to enable additional bits. But shift applies globally; operations shift each bit position by the same amount; shift cost is same for all bits on that element. Gains may be many bits.
+
+Hence, if we shift some element by s, all bits shift left by s, meaning bit j becomes originally bit j-s. So we can set bit j for that element if there is some bit j-s in the original number that is 1. So we need to know for each element the possible set of bits we can get by shifting some number of times.
+
+Thus we can think of each element's set of up to ~31 bits can be shifted.
+
+So we can treat each element as a set of potential (bit, shift cost) pairs: For each original bit position b (0-based) where bit is 1 (i.e., a_i >> b & 1 == 1), shifting that bit left by s gives new bit at position b+s. So the pair (b+s, shift cost s). So if we shift s times, the element contributes that bit.
+
+So we need to choose a set of bits to be achieved by using some elements with some shifts such that total sum of used shifts <= k. We might also shift same element multiple times across different bits in modeling each bit separately. But each shift can contribute to many bits. But we cannot have a shift that can set multiple bits independently; but we can apply arbitrary multiple shifts to element.
+
+But the total shift cost is one per operation. The element's final shift s determines which bits are present: all bits of original number shifted left by s. So we can only incorporate bits that are shift result of some subset of original bits.
+
+We could think at each bit we decide to set it via some element's shift.
+
+This is like a linear programming over bits, but we can target each bit individually with cost base on shift of element.
+
+But we can't shift a single element multiple times to set different bits independently, but we can shift it once to get all its bits shift left. So to set any bit among the original bit's shifted ones, we need to pay shift s.
+
+Thus we need to choose some (possibly multiple) elements and shift each once to some deficits.
+
+Simplify: We'll binary search by value: For each candidate value T, we need to check if we can achieve an OR >= T. Equivalent to checking if there exists an assignment of shift s_i to each element such that OR >= T.
+
+Observation: Since OR is superset of bits, achieving >= T means all bits present in T are present in OR. That's easier.
+
+Thus we can binary search over T, but OR value is monotonic? Suppose we choose any set of bits; any bit we set can basically be achieved by operations; each bit count may be large. For a given T, we can try to check if there's sufficient operations to achieve required bits.
+
+Feasibility: given T, we need to select for each element how many bits we want to contribute to supply bits of T. Actually we must ensure that for each bit position in T, at least one element after shift s_i contains that bit.
+
+But we may have to choose one element and shift it to include all bits (since its shift can supply multiple bits). So we can choose at most one element to shift each time, but the same element may be used more than once? Actually we have at most k operations: each operation increments shift for chosen element, but you can apply multiple operations to same element, but shift each time includes same shift as addition of 1. So if we wish to shift element i by s units, we should use exactly s operations for that element. That is allowed. So we can choose any element to shift.
+
+Therefore, we may search for a set of elements (maybe same) with shift s_i to supply all bits. We need sum s_i <= k. This is like we need to assign each element a shift s_i (possibly 0), then see if OR overall cover bits in T.
+
+Brute: For each element i, we can compute the set of bits that will be set with shift s, for each s up to k, but we only care about bits used to cover missing bits. However we can think of mapping to cost to cover each bit in T. For each bit position b of T, we need to find an element i and shift s such that (original a_i >> (b - s)) & 1 ==1. Equivalently, we need a bit in the original number at position b - s, with s >= 0. So to produce bit b, we need a bit in original at position b - s. That suggests we need to find a certain shift s for each element to cover b.
+
+Simpler: Each bit position j has requirement that we need at least one element i such that: (orig/a_i) >> (j - s) & 1 is 1, and s >= 0. In other words, we need to find some index j of original o seen bits.
+
+We can think of each element's original bits give us a vector of required shift amounts for each target bit j. For a given original bit b that is 1, we can produce target bit j = b + s. This requires shift s = j - b. So we can generate pairs: For each original bit b (1), compute the target bits it can produce for each s=0..k. So j ranges from b to b+k.
+
+Therefore, for the set of bits that indicate we need, we need to choose for each element some shift s (0..k) to max the coverage of required bits. But shift s can produce many bits, but we may treat them as we can produce any j among [b, b+k] for each existing bit? Actually if we shift s times, every original bit b becomes at position b + s. So each bit j in [b, b+k] is accessible with shift s if j - b == s. Thus each bit can be produced by that shift.
+
+Hence there is a simple property: For each element, we need to choose a shift s. The element can then produce a set of bits; each bit j is present if j - s is a set bit in original. Then s used for all bits to be produced.
+
+Thus the objective: For a given T, which bits (positions covered) are needed. For each element, we can test whether we can choose shift s that covers all its necessary bits? But we need at least one element covering all bits.
+
+But we are allowed to use multiple elements; but we can sum shifts across elements. Suppose bit j is some part of T; we might choose element i to cover j; for each bit j we might need to cover with some element, but if we use multiple elements, the sum of shifts is sum of their shifts.
+
+So we can consider: For each element i, we can decide to shift it with some amount s_i, and deduce that for any bit index j where T bit is 1, we require that j - s_i must be a bit in the original. So we can decide that element i can be used for a set of bits J_i = { j | a_i>>(j-s_i)&1==1 }. But shift is same across all bits. So we can choose for each bit j to be assigned to some element i, but we might not get overlapping coverage? Since each element may be reused for many bits. But with a shift s_i fixed, marking all bits J_i. After this, we need union of J_1, J_2, ... to cover all bits of T. Since each bit has to be present at some selected element.
+
+Hence you might have many elements to shift by different amounts, each shift cost counted. So we need to cover all bit positions of T by selecting set of (i, s_i) such that union covers T.
+
+Is it possible that selecting same element with shift s_i multiple times for different bits? Since we only shift once, but we can later shift again? Wait we could shift multiple times, cost s_i for a final shift. But we may adopt strategy: we could shift two elements each with different s while still using s_i operations each. That may be okay; each bit could go to whichever element.
+
+Thus we might need to represent as hitting set problem: we have T's bitset; we need to choose subsets of bits that each element can cover at some shift, with cost s_i. We want to minimize sum cost <= k. This is reminiscent of Set Cover with small cost (k <= 15). But number of bits ~ up to 60. This is feasible via DP over bits because bitset size up to 60. But we have to consider each element's ability to cover which bits for each shift. But we can reduce: For each element, we can compute for each shift s <= k, a bitmask of which bits positions can be reached with this shift: B[i][s] = set of bit positions such that bit at j-s in element is 1 and 0 <= (j-s) < 31. That's basically shift of original bits.
+
+But we just need to cover bits of T. But T could have up to 61 bits; let us track bits low 61.
+
+We need to solve: choose subset S of (i, s) pairs such that union of bits in X's bitmask==T; cost sum(s) <= k. dp over bitmask of covered suffices; cost BFS.
+
+But we could also skip T binary search; we can just search for maximum OR by searching all subsets of shifts? Since k <= 15, we can do dynamic programming: Starting from original array (no shift). We need to consider all ways of performing up to k operations.
+
+Simplify: Actually we can treat the state as final OR value. Because there are only 1e5 numbers but small number of operations: we can exchange operations via performing all operations early on a single element and then compute OR once? For each possible shift counts distribution among elements of up to k total (like integer partition). Each distribution can be at most 2^k? It's about partitions of k into at most n parts. This is large but we can test each element's shift s from 0..k. Each element's shift b is 0..k. But we only have to consider that each element not shifted many times, just chosen by at most k. Since k <= 15, we could do DP over bit patterns of elements: for each element, we could use or not shift each of the remaining operations: but each operation chooses a pair (element), which may be repeated multiple times. The complexity: we could do DP over position for elements, just keep track of number used. But can't for all 1e5.
+
+But maybe we can just attempt exhaustive search of which element to use each operation, but choose at most 1e5 => too many.
+
+We may need to do DP over bit patterns of OR and count of used operations, but we don't want to iterate over all numbers.
+
+Let's think property with bitwise OR: If we only shift at most k times, the best OR is the OR of the original array plus some bits that may be created by shifting some elements. Each shift can create at most 1 new bit? Actually shift can create multiple bits potentially. Eg multiply by 2 will shift each bit left, so each bit shift left. But we just need to consider that the OR of an element's new bitset is equal to original bitset shifted left. So we can consider that the combined OR may include bits that were initially at value < (bit position) in any element. For any bit j, we need at least one original element where bit j-1 originally exist or not? No.
+
+This is variant: For each element, the set of bits after shift is shift left by s. As we shift s, we essentially shift all bits. So the OR of all elements is union of shifts of each. So merging OR of all elements; which is quick to compute each time.
+
+Thus we want to find shift s_i distribution to maximize OR of all elements after shifts. Each shift for each element adds 1 to bit positions relative to original. So each element runs contributes bits equal to its original bits shifted left.
+
+Thus, adding shift s to some element is analogous to adding original bits purely to higher positions. Equivalent to we choose for each element a shift s_i; OR / sum bits of result at final bit positions: include bit j if there exists i such that bit j-s_i in original a_i is 1.
+
+Thus we can analyze all bits contributions.
+
+Goal: maximum OR of all elements. Since bitwise OR is upper bound by plus difference between bits.
+
+Observation: Since OR extends bits with high positions, we can just choose to shift the element with maximum high bits to high positions. But we have low k maybe that is optimal.
+
+Because bits range up to 31 (original). So shift can bring them up to j+ k.
+
+Thus, we can think we need to pick the element with highest bit pattern (e.g., 1 at some high position). To maximize OR, we might want to set bits that are present after shift of some element. For example, if we have element with bit 11, shifting it by 4 yields bit 15. That's high.
+
+Hence maybe we can choose to shift the element with the most specific highest bit. Because shifting it will create the highest bit multiple of the bit at that element's position. But there may be multiple bits.
+
+But due to k <= 15, which is small, we might try enumerating all possible positions of the single element with shift s>0? But we might also need to consider multiple elements: maybe to fill a bit at 15 we could shift a bit from 1, from 1 at 1 to 9? Wait 1 shift to 17 gives 10 etc. So we can choose minimal cost.
+
+Essentially, we can view each bit of T as a "resource" requiring at least one shift to bring that bit to some position. For each bit t, we need to find an element i with original bit at position b (i.e., b < 31) and shift s such that b + s = t. That is s = t - b. We need to pick s for each element. So we don't need to shift more than the maximum needed.
+
+So we can simply compute feasibility: we can consider each element individually and choose assignment to cover all bits of T. But we need to assign one S per element maybe not overlapping.
+
+However we can optimize: Since k <= 15, we can try enumerating all subsets of bit positions that we can "cover" through selecting up to k bits? For each bit we can cover it with one operation of some particular element; but that operation may come from other bits too.
+
+Alternate viewpoint: The OR result is determined by counts of bits among elements. Ultimately, bits that are not present in any element are those that are not among the union of all bits of numbers. But we can shift some elements to create new bit positions. But we can only add bits that are present in original bits offset, i.e., they are the same as original bits but shifted. So we can not create new bits beyond positions that are currently above 0 plus shift.
+So the final OR is basically the set of bits that were 1 in any original number, but potentially moved up.
+
+Thus each bit we can cover must be originally somewhere in any element. The shift may be chosen per element to supply that bit.
+
+Hence we can consider the order of bits: Suppose we choose to use shift for element with its given shift s. The number of shifted bits sets is number of bits 1 in original. That is maybe many.
+
+So for each element we might pick shift s: each bit j of original may produce bit j+s. So we can encode as bitmask grow.
+
+Thus we want to pick subset of pairs (i, s) with cost sum s <= k and union of all bit masks (shifted bits) get superset of bits we want, we choose bits that maximize result.
+
+We can do DP over bitmask of covered bits: For each state (mask bits representing what OR we have collected), we can apply additional operations using an element and shift s (cost s). That will produce new mask = mask | mask_of_element_s. This might improve OR value. We want maximum OR for mask with cost <= k.
+
+Hence we can DP from initial mask of 0 and operations cost is 0 or 1? But we only count operations as shift count. Suppose we consider operation to include element i with shift s. But we cannot sample that multiple times: we could use same element multiple times but multiple times may produce extra OR due to multiple shifts? Not needed because we only shift once per element and the set of bits we get is all bits shifted; so each element may only be used once. But we may shift multiple different elements each with shift s. But we also have to consider the cost of each shift: we can choose multiple operations on different elements, each with shift s_i.
+
+Thus we can iterate over all elements; each can be used once or not. But we don't need to share operations across multiple elements; we only shift that element once.
+
+Thus we need to process at most n elements each considered once.
+
+Therefore we can convert to DP over states: iterate over elements and for each state, we min over cost or maximize mask as we consider including an element with shift s. But for each element, we consider all possible shifts s <= k. However cost of using shift s is s.
+
+Use DP: dp[mask] = min cost to achieve that bitmask. Initially dp[0] = 0. For each element, compute bitmask of each possible shift s. Then for each dp entry, we consider adding this shift? But we can't reuse element multiple times, but same element used once leads to new mask = mask | mask_of_shift. However we also need cost addition.
+
+Thus dp[mask] is min cost to achieve mask. Parity: we need to track bits from all selected elements. DP over 2^M bits where M is number of bits up to 60? That's too big. But we can restrict to bit positions we want to maximize then number of bits in final OR is large (maybe up to 62). So DP over 2^62 infeasible.
+
+However the bitset size matters: we have to consider limited bits: maximum bits we can produce from any element is up to 31 + k. Worst-case: 31 bits all set in some element? Actually each element may have up to 31 bits. So union bits per element might be up to 31. So we could create up to 31*? at max distinct bits, but still many.
+
+Thus DP by bitmask not feasible.
+
+Alternative: Use integer programming where we consider target J (bits) to maximize. Since k <= 15, we might enumerate all targets for each bit separately.
+
+Maybe we can approach differently.
+
+We can treat this as we need to fill bits up to 30 + k. Because each element can be shifted up to k. The maximum OR <= 2^(31+k)-1 perhaps.
+
+But we just need to maximize. There is property: Given small k, we may brute force over all subsets of k operations using backtracking? Wait each operation choose an element. So we just need to choose number of times we shift each element. That is like distributing k operations across up to n elements.
+
+This is similar to generating all simple combinations: For each i in allowed indices: sum_{i} t_i = k. Each assignment defines final OR of all elements. But we cannot iterate over all assignments because k <=15, but can we think combinations of distinct elements? We can allocate operations to at most k distinct elements; but the actual distinct elements are limited by k. However each element can be used at most k times. But we cannot guarantee that all elements must be distinct. But we could restrict to each element shift count <= k.
+
+Because we require k <= 15, we can brute force over decisions of which element gets which shift count. That's like each assign chooses t_i operations among a subset of at most but possibly up to n. But you can't produce all assignments enumerating all elements except at most k distinct indices. So we could pick a combination of at most k distinct elements from n, and then assign each a shift count. But each element can take up to k operations.
+
+This is similar to few items chosen from array of size n (k <=15). So we can examine all subsets of size up to k of indices. That is C(n, <=k) ~ n^k/ k! but with k <=15 huge, but typical n=1e5 => not feasible.
+
+We might consider dynamic programming over bits only.
+
+But maybe the property that OR is increasing with shifting, so the best strategy is to pick the best element to shift all the k times, i.e., shift one element k times. But example 1 says shifting one element 1 step may be better than shifting other? Wait if we found best element to shift k times is to shift the one with maximum bit pattern? Let's test with example 2: [8,1,2], k=2. Shifting 8 twice: 8->32 (binary 1000->100000). OR 32|1|2 = 100001=33? Wait 32 is 100000, 1=1, 2=10, OR=100011=35. That matches output 35. Could we do better by splitting operations differently? e.g., shift 8 once (16), 1 once (2) => array [16,2,2] => OR=16|2|2=18? Actually 16|2=18. So not bigger. Option shift 1 twice: 1->4 => [8,4,2] => OR=8+2+? 8=1000, 4=100, 2=10 => OR=1110=14. Not bigger anyway.
+
+But maybe there is case where shifting across two elements is better? Let's think. Suppose nums: [15 (1111), 3 (0011)] k=2. If we shift 3 twice: 3->12 (1100). OR=15|12=1111=15. Not more. If we shift 15 twice: 15*4=60 (111100), OR=60|3=64+? 60=111100, 3=11 => OR=111111=63. That's bigger. So shifting one big number gave best.
+
+Suppose [5(0101), 2(0010)] k=2. If we shift 5 twice: 5->20 (10100), OR=20|2=10110 = 22. If we shift 5 once: 10 (1010), OR=10|2=1010=10 vs 2? 10 > 5? Wait 10 vs 22. But maybe shifting 2 twice: 2->8 (1000) => OR=5|8=1101=13. Not better.
+
+Seems likely optimum is to shift one element with the best bits.
+
+However maybe we can shift element i, j, and each alone produce some bits that complement each other. But we are limited by k <= 15: we can shift a distinct small group to each element individually. But we use each operation once to shift by one. A shift of the same element across all its bits can produce bits that are all shifted, not just high bits. So using two elements could produce bits that produce a higher union? But maybe because we could possibly shift each element some number of times to bring additional bits that were not present in original after shifting all operations onto one element? Let's test more extreme: Suppose arrays: [1, 1] k=2. The best would shift first element twice: 4. OR=1|4=5. But maybe shifting each once? That yields [2,2], OR=2. Not better. So single.
+
+I think it's generally optimal to shift one element repeatedly? But is there counterexample? Let's search mental: Suppose we have numbers with disjoint bits, but we can shift them to yield higher bits overlapping.
+
+But note that shift always increases positions of bits. So increasing bits from 1's low bits may travel into higher positions that may already be available? For bit 0, shifting 1 by 1 will put at bit1 which might be high. If we shift different elements with different bits, the OR may have bits at various positions from the original highest bit plus shift.
+
+But we might have two numbers with high bits at positions 30 and 29. If we shift one element by 1, its high bit goes to 31. If we shift the other by 1, its high bit goes to 30. So OR will have bits at 31 and 30. That might be better than shifting only one; but if we shift only the one with 31, we still have bit 30 present from original. So that bit 30 is unchanged. So OR yields bits at 31 and 30 anyway. So not an advantage.
+
+But if we shift different elements, some bits are shifted by bigger amounts, but maybe not maximizing? Let's think: Suppose numbers have bit 1 only at bit 0: We can't shift same element to produce multiple bits, we just get a bit at 0+s repeated. Actually if we shift two different elements each with s1 and s2; they produce bit at positions s1 and s2 respectively. So we might be able to set two distinct bits at different positions. If we shift only one element with s1 two times? Wait we cannot shift by fractional amounts. We might shift only one element two times; we might get bit at position s2; but we can also produce some earlier bits? The bit at position s1 (if s2 > s1) is not set because lower shift bits are not present. So we lose ability to set bit at position s1. So if we shift element with bits repeated, using only 1 element might be suboptimal because we wouldn't get both bit positions. However if we have two different elements, each with only one set bit, we could shift each to fill different positions from the same set bits. This might allow larger OR.
+
+Consider example: nums: [1, 1, 1] k=2. If we shift one element twice: we get 4. OR=1|1|4 = 5 (101). Bits positions 0 and 2. If we shift two elements each once: we get [2,2,1], OR=2|1=3 (011). Not bigger. So again.
+
+Let's think of example where each element has only one bit that we can shift to distinct positions. For half operations across, we could set bit positions at s1 and s2. But if we use only one element with s1+s2, the bit at position s1 will be missing because we don't need shift s1. But we could still shift the bit at position s1+s2 by counting the occurrences? Actually if we shift element twice: 1->2->4. The bit at 2 becomes 2 (0). Wait shift from 1 to 2 then to 4. So at final state we have only bit at 2^2. So we miss the bit at position 1.
+
+Thus you can't combine multiple shifts across one element into multiple separate bits at different positions. So we might lose ability to set intermediate bits.
+
+Thus we need to consider for each element the shift s.
+
+Therefore optimal OR may be achieved by selecting a subset of elements each with shift s_i. But k <=15. Therefore the number of elements used is at most k, because each element uses at least one shift (since s_i>=0). Actually if we use an element with shift s_i>0 but we could also use element with shift 0, but shifting zero is meaningless.
+
+Thus we can use at most k elements. So at most 15 elements.
+
+So we might consider enumerating all subsets of at most k elements (so at most 15 elements) where we will consider them. That reduces the number of elements considered drastically: we only need to consider the bits that appear in any element? Wait if we choose 15 elements, each could have huge bits. But we can reduce to we only need to consider up to 15 elements because we can't shift more than k times across them. Each element could use 0 or more operations.
+
+But we might pick a subset of at most k elements maybe bigger than 15 if some element may be used many times; but all shfits may exceed some chosen elements.
+
+Actually we could choose an element for all operations, e.g., 1 element, k=15. So 1 element is allowed.
+
+Thus we only consider a subset of elements up to k. Actually we can choose any set of elements selected; each element may take shift s_i >=0. We want union of all bits. The maximum OR may be achieved by picking some of the 15 most promising elements? Let's consider reasoning: Since every element not used at all yields s=0, so no effect. We can always ignore them. So we may choose subset of elements any size <=k. Because each element used at most uses its shift s_i, but the shift s_i increments cost, but we can choose an element with 0 shift if we want to keep it? But we don't need to use all k budgets.
+
+Thus the optimal sets of elements may involve at most k non-zero shift items. But the number of elements we choose could be less than k, because each element may use more than 1 shift.
+
+However, we can just generate the possible set of elements with shift s_i may be small? Actually we can impose upper bound as we only have k total shift operations, so we can rely on at most 15 elements (since each element needs at least one shift). So we can maintain at most 15 elements. It's a small number; we can iterate over possible tuples of elements selected and their shift amounts.
+
+We could implement dynamic programming over states: We will consider each element in turn and update states: minimal cost to achieve some bitmask of bits? But again large bit mask.
+
+We might consider greedy OR building but limited by picks of elements.
+
+But we can use BFS over subsets of elements? But n large.
+
+Possibly we can think more cleverly: We only need to think of which bits we might get above the highest bits present in O. Because we can shift only up to k meaning we can shift bits up by at most k. So the maximum possible OR has 'ones' at positions up to max_bit + k.
+
+Therefore, the possible final OR patterns are large but we can consider using DP over number of operations left: analysis of bit contributions. The bit contributions of each element can be considered as independent; we essentially choose shift amount for each element to pick some bits.
+
+But maybe we can compute the answer by greedy: For t from 0 to k nonnegative: we take the element with maximum value after shift s? But when we combine multiple elements with shifts, the OR may be maximized by selecting those with the largest bit 0-to-1? Not, but we need to assign shift counts accordingly.
+
+Observation: Since addition of shift of an element only increases all bits of that element. So OR is additive across elements. So the effect of choosing a shift s_i on an element is the OR of that element's bitset. But we can't partition bits across multiple elements: each element's bits stay together. So plus repeated magnitude.
+
+Thus we can think in terms of the set of bits at positions we can set. The OR of many elements is the bitwise union of each element's shifted bits.
+
+This is basically a weighted set cover problem: Each element with shift cost yields some set of bits; we need to choose a set of such pairs (element, shift) to cover all bits we want, maximizing weight of union bits (i.e., maximizing weight). Equivalent to choose subset of a set of subsets.
+
+We have k <=15. The number of subsets we choose is at most 15. The number of possible subsets per element can be large (k decisions). But we can treat each (i, s) as a 'set' with cost s.
+
+Given the cost budget k, we can use subset DP that chooses sets to cover certain bits. Classic DP on subsets of bits: For each DP[mask] = min cost to reach mask, we iterate over all possible sets (i, s). But we count each set as a potential candidate. But total number of sets: each element i has k+1 possible shifts, for each we compute bitmask of bits under shift s. That would be 1e5*16=1.6e6 sets; each set bitmask of size maybe up to 31 bits, which we can store as an integer. 1.6 million sets is big but manageable. Each DP state might be large; but we cannot iterate over all masks of size 62 bits (2^62 huge). So we need to be smarter.
+
+Another approach: Since k <=15, we can attempt to brute force over switches using recursion with pruning: We build a priority queue for OR results and the current index; each state defined by a tuple (current_OR, used_k, last_index). But we still need to explore many possibilities.
+
+Maybe maybe we can circumvent by using heuristic that best is to shift maximum element(s) fully. Let's analyze formal proof via bitwise OR property. Suppose we have two elements a and b. If we consider shifting both a and b at most s_a and s_b. Then OR of result = (a << s_a) | (b << s_b). Suppose we want to maximize OR; each bit position j may be contributed by either side if we choose shift accordingly. Since a << s_a yields bits that were set in a shifted to positions > s_a. Similarly for b.
+
+Observation: Since we maximize OR, we want to maximize highest bit (most significant). That occurs if we pick any element that has bit at 'position p' and set s such that p+s get maximum across all possible picks. The highest bit will come from max over all (a_i plus shift). We can say best for highest bit is to pick the element with the highest bit when shifted. For each element, its highest bit is at most original_highest_bit + shift. But for each element, that's maximum shift. Since we only have limited k, we can shift largest element with some shift. So the highest bit might be from any element. So we want the maximum possible value of OR; we could set each bit individually.
+
+But there's known algorithm: Since k <=15, we can consider all possibilities for each bit individually: we can try to compute by iterative DP over bit positions: for candidate value ans, we can iterate over methods.
+
+Given potential complexity, maybe we just do brute force over all options of picking elements for bits: choose for each bit j either some element to produce that bit, and compute minimal cost. Because each bit must be covered by at least one element. The cost per element shift is max shift among all bits assigned to it. That is: For a set of bits assigned to element i, the required shift s_i = max over j in set of (j - b_i) , where b_i must be one of bits that are set in original  a_i? Actually the bit that yields that bit j must be original bit at position b_i <= j and the shift needed is j - b_i. So the element's shift s_i must be at least that. But we might not have original bit at position b_i if we want shift j. So for each bit j we want to be covered by element i, we choose any original bit b_i (within [0, 30]) such that it will be shifted to j. Among all necessary bits, we need single shift to cover all bits that require that particular shift. So s_i = max over required j's? But we must choose a single shift for each element; i cannot produce bits with different shift counts. So, all bits assigned to same element must be produced by some shift s_i that works for all of them: maybe if we choose some base bit b_i, then for any target j, we need shift s_i = j - b_i. But we can't pick different shift for each j. If some bits require j1, others j2, requiring s_i = j1 - b_i and j2 - b_i; if both j1 and j2 do not have the same difference from b_i, that would require different s_i. So we can't assign arbitrary j.
+
+Simplify: For each element i, we can pick a shift s_i from 0..k. Then the set of bits it contributes is defined. So for our assignment, we choose shift for each element; it's basically predetermined. That doesn't allow flexible assignment.
+
+Thus total number of possibilities: For each element, #shifts up to k+1 = 16. That's about 16*n ≈ 1.6M. For each such assign, we can compute OR of all elements at that shift; but we only need to choose at most k elements, but still we might not be able to compute all combinations of 16^k? Wait we could just for each element consider each shift s_i; we can pick at most one shift per element. But we can pick at most k elements, but we may still consider each element independent: there are at most 16 choices for each element. So we could set of dimension 1.6M combos; we cannot.
+
+But maybe the OR after exploring each element's shift results in OR that can be extended by adding other elements: we can choose to add OR of that element with shifted versions.
+
+But we can do DP over subsets of elements: Suppose we choose a subset of elements and each shift. But maximum subset size can be at most 15. So we need to consider at most 15 elements. We can search for all subsets of elements up to 15 indices: That's still huge.
+
+But we can perhaps treat the set of indices as arbitrary. But we can gradually do DP over states: Start with best_OR of just the current set of selected elements (or performing some shifts). We can approximate that the best OR will be achieved by selecting a small subset say 5 elements? But we might need to prove.
+
+However, typical combinatorial optimization: We can think each element's shift yields an OR with all others. So we can use dynamic programming: Instead of selecting elements, we might simultaneously decide for each element shift or skip, but can't examine all combination of 16^n.
+
+We need more efficient.
+
+Consider there are at most 15 operations, maybe we can choose a small sequence of operations. So we could simulate each step: we can choose an element to multiply by 2. The OR after each step changes accordingly. We need maximum over all sequences of at most k steps (which is at most length 15). So we can try BFS on states of (array of values?) but we can think of two ops: each step only influences one element's value, others unchanged. So state is the set of scaled numbers? But we can treat each operation's effect on OR by only that element's shift and OR. Equivalent to at each step, we choose an element to double, and our OR becomes previous OR | (a_i * 2). Actually previously OR set of all elements unchanged, but after doubling we might break a_i.
+
+Given that operations are incremental, we can as we track OR after each step. However, we could enumerating all sequences of operations but that's  n * k * k??? Not.
+
+We might optimize with approach: We can choose an element to double <=k times, any number. The reactions produce a final OR that is the OR of current original array with each doubled version. But we can think of the OR after each operation and the OR after final operations. The OR is basically OR of some elements if we consider each element has possibly been doubled some times.
+
+We can think of exploring only 'calls' for each element: e.g., for every element chosen, we can at most halving? Not.
+
+I think we can design algorithm enumerating all subsets of k operations across all elements, but we can choose which element each time. With k <=15, we can think of exploring all possibilities of picking *target* element to double each time. But that is n^k potential sequences: too high.
+
+But we can use DP: Let dp[j][mask] = maximum OR after j ops (though mask may include selected elements?) Not.
+
+We need to think smaller. Because we can compute OR value as OR of each element's original number multiplied optionally by 2^t_i. So OR can be computed as for each bit: bit present if at least one element with t_i = j - b_i. Actually we can just compute OR for each distribution of t_i: we can choose for each element t_i <= k.
+
+Given t_i up to 15 (and many zeros). So we can iterate over all t_i assignments within sum <=k? That's 16^n possibilities but huge.
+
+But we can think of using DP over bits given we only consider at most 15 elements. But we need to know which elements to use. Hmm.
+
+However, we have n large; we can step into candidate selection: we can choose the 'best' elements for considering shift. Because all elements are identical except their bitset pattern, but we don't need to consider all elements because we only shift up to k times and each element may be used only once. If we choose a set larger than k, we may shift a subset by zero and others by one etc.
+
+But I think key property: For each element, there's an inherent potential after each shift s, producing some bits. Suppose we want to maximize OR; if we choose a set of elements, we are limited to k operations. So selecting a set of extremely large elements may not produce more bits.
+
+Thus maybe we can compute best OR by trying all 15 elements combinations of which we apply operations? But we cannot choose which 15 elements will yield best. But we can iterate over all elements and for each we compute its bitmask. But we might need to consider bitmask of up to 15 elements; we can do a branch & bound: we scan blocks of up to 15 elements; we can pick any indices.
+
+Is there better algorithmically accepted solution? Could be solved by generating candidate bits? Let's analyze possible search algorithm:
+
+Let ans = 0. For each bit from 60 down to 0: we attempt to set it to 1 by verifying whether we can cover all bits in an augmented set of bits that includes bit j and all bits already set in ans. We can attempt to find assignment of shifts <=k that can produce this set. We can formulate as exactly a subset sum with cost.
+
+This is reminiscent of knapsack: we have bin capacity k; each element + shift s produce set of bits. If we pick this element, we pay cost s. But can we use each element multiple times? Not.
+
+This is exactly "set cover with costs" where we can pick at most k cost units and each element is used at most once. Since k <=15, the number of elements chosen is limited; but we might also consider selecting all 15 elements and each shift cost equals 15? Wait no.
+
+We need to formulate as we want to find if we can cover set of bits under cost limit k; As we iterate bits from high to low, we can maintain DP of cost to cover a set of bits maybe represented as bitmask of bits in the set we need. But we only need to cover the target bits of current ans. Since ans initially 0 -> target bitset is empty; we can just set any bit? She.
+
+But we can treat this as constructing answer greedily: We'll create mask ans = 0; For bit j from high to low: We will attempt to add bit j by giving a new set of operations to achieve union of previous ans and bit j. Since we will try to find minimal cost needed to cover ans_with_bit j. For each bit j, we can try to find minimal cost assignment. But not trivial.
+
+But we can use DP to maintain minimal cost to cover any set of bits that appear in T: we can precompute all possible subsets of bits from total bits. But each required bit set is up to 60 bits; we don't need to consider all subsets fully; but we only need to know if we can achieve at least some mask. However we can use DP with bitmask size 2^number_of_bits_needed. But we can also compute minimal cost to cover each bit individually; but we can't use many bits.
+
+Actually, there is known dynamic programming approach: we treat each bit as variable; we can search with bitmask of operations assigned. But we will need to cover at most M bits; we need to take advantage of k small.
+
+Since k <=15, we can iterate over all DP states that represent sum of shift used for each element. But there are too many possibilities.
+
+Hold on: maybe we can try to generate all distinct sets of bits that can be produced by (i,s). Because each element's set of bits may be large but we can generate them per bit. Let's compute for each element i, set B_i = {b: number of bits 1 in original}. For shift s, we produce bit values at positions b+s.
+
+Now we can filter types: For each bit after shift, we may need to find cost. Maybe we can treat each bit individually: For each bit j, we consider the minimum number of operations needed to bring some bit into that position. We can compute for each bit j, what's the minimal shift s for some element that has bit b, with s = j - b. So we can compute minimal cost to cover bit j.
+
+But we need to cover all bits of answer; but the minimal cost for each bit might not be independent due to overlapping shift usage per element. For example, if we need both bits j1 and j2, we can maybe cover them using same element with shift s to shift j1 and j2. But we can't guarantee to use both individually.
+
+Hence we need to choose subset of elements. But maybe the minimal cost for each bit j is to shift element where j-th bit originally present and s = j - b, but we need to add up s. However we can't use the same element multiple times but we might use each element with shift that produce some bits and then we may need to use that element again? Wait one element can produce many bits. So cost per element might be the shift used to cover the maximum j among all bits that element covers; but we could also consider use-of-two-elements if they share some bits.
+
+But we can circumvent by modeling each bit j as only requirement that there is at least one element with shift s as j - b. But we can choose to use multiple elements each with shift s, but each operation can only shift one element more by 1. So if we need to use those elements with same shift, we can pay cost accordingly.
+
+But we can plan: Suppose we need to cover bit j: This requires shifting an element at least j - b. Let's define pairs: For each element i, we create a list of (bit pos = b + s, cost s). So the cost for achieving that bit is that s.
+
+Now we can treat it as multiple items (one per bit). Each item can be used as well for multiple bits? Actually if we choose a single element's shift s, then it can produce multiple bit values concurrently. But we cannot pick a single pair from a particular element to produce a particular bit while also producing others maybe at different s. But we can think in terms of selection of which shift s gets used. Because each element chooses s. So for each element we include it with some shift s (if we don't care about bits we can set shift to 0? but we cannot choose shift too high that exceed required? Actually if we shift 0, we may keep some bits. But we might still consider shift 0 to include some bits that are needed below. Condition: For each bit j in ans set, we need at least one element. So we can attempt to choose presence of element, but we might cut off some bits if we shift too far.
+
+Thus effect: For each element we might assign shift s up to k. This indicates which bits of original will be shifted to positions that we need, and we cannot keep original bits lower than any bit of ans? Actually if we choose shift s where all bits in ans less than pos s will be lost? Wait if we shift s, the bit at position b in original leads to pos b+s. It might go beyond the positions we need, but if we don't need it, that's fine.
+
+Therefore the effect of shift s for element i only includes bits that are currently required among those positions pos that correspond to (b + s) for some b set bit in original. But we may skip bits not needed.
+
+Thus we might treat the problem as searching for maximum ans set of bits where there's a strategy of reducing elements to shift s with sum s <=k, and each bit among ans can be achieved by the chosen assignment. That is NP-hard maybe.
+
+But given constraints small, we can brute force over all selections of bit settings? Might be heavy.
+
+Alternative: Maybe we can compute for each bit j the maximum possible bit we can set to 1 with some transformation. Suppose we attempt to set every bit j = 0..30+k. We can consider if we can set such bit. For each bit j, we set final bit by shifting some element.
+
+What is the maximum value of bitwise OR we can reach without any constraints? Sum bits 0.. sufficiently high.
+
+Thus we can check if there exists an assignment of shifts such that each bit j is set.
+
+Observation: Suppose we want to set all bits j that we can: For each bit j, we need at least one element that originally has bit at position b where j - b is integer >=0. If we choose shift for that element limited to some value; but if we choose shift for each bit separately, we might have conflict.
+
+But maybe we can construct assignment that simultaneously satisfies all bits by shifting each element individually? Let's consider each element's shift individually minimal s_i to bring all bits we need? We can treat each element's ability to cover multiple bits. If we choose to shift each element to produce certain bits we might have multiple bit patterns. But is it always possible to choose shift for each element individually to produce all bits? Suppose we choose for each element a shift s_i that brings its bits to some positions; we maximize OR by picking all bits from those shifted numbers. If we decide to use each element i at most once, but we might increase if we assign shift s_i to each element. That's feasible.
+
+Since we may choose any subset of elements to be used with shift s; we choose each element's shift s_i or 0. Since we can shift each element sequentially, and we have limited operations.
+
+Hence strategy: for each element, find cost s_i = minimal shift used, but we could shift more than needed.
+
+Hence a natural

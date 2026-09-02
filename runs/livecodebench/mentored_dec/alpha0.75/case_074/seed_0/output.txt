@@ -1,0 +1,321 @@
+<|channel|>analysis<|message|>We need to count subarrays where all elements differ by at most 2? Let's parse: "for each pair of indices i <= i1, i2 <= j, 0 <= |nums[i1] - nums[i2]| <= 2." This means the maximum difference between any two elements in subarray <= 2. So count subarrays where range <= 2.
+
+We need an efficient algorithm: sliding window, two-pointer with multiset to maintain max and min. We want to count number of subarrays where max-min <=2. Equivalent to number of pairs (i, j) such that max-min <=2. Approach: Expand right pointer and maintain min and max via two deques. For each j, find minimal i such that window [i, j] has max-min <=2. Then all subarrays ending at j with start >= i are valid. We can compute sum of segment lengths.
+
+Specifically, we want to count subarrays ending at j: For each j, have left bound low (the minimal index such that [low,j] is valid). Then the number of valid subarrays ending at j is j - low + 1.
+
+We can compute using two pointers:
+
+Initialize left=0, deques for min (increasing) and max (decreasing). For each right in range(n):
+
+- push nums[right] into min_deque, removing larger elements from tail. Similarly for max_deque, remove smaller elements from tail.
+
+- While max_deque[0] - min_deque[0] > 2: we need to move left pointer until the condition is satisfied. That means: if left > max index, pop front accordingly? Actually when we move left, we should remove elements from deques if they are at front index equal to left.
+
+- So we maintain deques storing pairs (value, index). But we only need to maintain indices; we can maintain a deque of indices with increasing values.
+
+Specifically:
+
+Min deque: indices increasing from front to back such that values increasing: so at front we have smallest value. For max, values decreasing.
+
+When we push new index right:
+
+- While min_deque not empty and nums[right] < nums[min_deque[-1]]: pop right. This ensures increasing order.
+
+Similarly for max.
+
+But we need to store indices, not just values.
+
+After push, check condition: while max_value - min_value > 2: we shift left:
+
+- If min_deque[0] == left, pop left index.
+
+- If max_deque[0] == left, pop left index.
+
+- left += 1.
+
+Then current window length = right-left+1: add to result.
+
+Edge: We must ensure we always maintain condition after each left increments.
+
+This algorithm is O(N). Complexity: Need big integers? result can be up to n(n+1)/2 ~ 5e10 fits in 64-bit.
+
+Let's test with given example.
+
+Example 1: nums [5,4,2,4] n=4.
+
+Simulate.
+
+right=0: push 5.
+
+min=[0] (value5), max=[0] (value5). Condition 5-5=0 <=2. left=0; add len=1 => result=1.
+
+right=1: push 4: min: while nums[1] < nums[0], pop 0. min=[1], max: while nums[1] > nums[0] ??? 4 <=5 => keep 0? Actually max_deque: while nums[1] > nums[0], pop 0. now left is earlier. So max stays [0] (value5). Condition: max[0]-min[0]=5-4=1 <=2. left=0. add 2 => result=3.
+
+right=2: push 2:
+
+min: while nums[2] < nums[1] -> pop 1. min=[2]. max: while nums[2] > nums[0]? 2 <=5? no; check maybe > it? after pop of others? Not. So max stays [0]. Condition: max[0]-min[0]=5-2=3 >2. So need to move left: while >2, do:
+
+if min_deque[0] == left? left=0 and min[0]=2, so no. If max[0]== left? max[0]==0 yes, pop left index 0. So max deque becomes empty? Actually after pop maybe 0 removed. Then increment left: left=1. Now condition: max[0] - min[0] difference: max[0] now has what? We popped 0, but may also have other indices? We popped 0 not in min. We had only max deque containing [0]; after pop it's empty. Oops we need to maintain max. But after removing 0 still there might be others? Actually we also had no other max values. But after we popped 0, the max deque empty. Then we will need to add maybe next? But we need max value from window. But the maximum value after removing 0 is 4? Wait we didn't maintain max; we used another condition. In this algorithm, after popping max[0]==0 we need to remove it from deque; to maintain max from window we need to again use the difference. But we can't compute max from an empty array. So we must also ensure that after pop, we should find max from window again. However we also have algorithm: When we pop elements from left, we remove the index if it's at front. If after popping the max becomes empty, we need to maintain global max. But this can't happen. Because from operation, after we pop 0, we still have max values from indices [1]? Wait earlier we had max_deque initially [0] (value5). After adding 2 to max, we didn't change the deque, so max remains [0]. But we also had a 4? Since 4 <=5, so max deque remains [0]. After 2, we had [0] only. So max deque contains [0]; after we pop 0 from max list, we need to consider max from new window. But we also had 4 between indices 1 and 2. 4 is not in max deque, but same value as 4? Actually we haven't updated max: We didn't insert 4 when popped earlier. But we inserted 4 at right=1, but we didn't remove that. But we should maintain max deque by removing from end if nums[1] > nums[0]? Wait we popped 0 due to 4 > 5? No, 4 < 5, so max remained [0]. So after 2, we kept max deque [0]. After we pop 0, we have [ ] but we still have values 4 and 2 in window. The max should be 4 not 2. So we need to maintain the max deque properly. But we also have indices 1,2. We didn't update max deque after popping 0 because we didn't modify any elements. But we should have had a max deque that contains the indices of elements that are candidates for max in current window. Since we have a 4 and 2, we need a max deque that can provide max. In the typical algorithm with deques, we push indices in descending order of values; we maintain that max_deque[0] is max. For the scenario: we had 5,4,2. After adding 2, at that time we removed 5 from max deque? Actually we removed 0 because we popped 0? Wait before pop, we only inserted 2 at right=2. We didn't modify max deque when inserting 2. So after adding 2, we should have kept [0] (value5). The deque remains [0] (value5). So after we removed 0, we eventually pop it. But we also removed 5, but we didn't include the 4 (index1) as a candidate perhaps because 4 <5. But in our algorithm when we pop 0 from max deque, we need to check the next candidate. Since we removed 0, we might have 4 too? Actually in the algorithm, for max deque, we maintain indices in decreasing order of values: For [5,4,2], we push 5: deque [0]; push 4: values [5,4] but we don't modify because 4 <= 5? Wait for max deque, we pop from tail if nums[right] > nums[deq[-1]] . For 4, 4 > 5? no. So we keep [0,1] (decreasing order? Actually we push 1 on the right: deque [0,1]. But the algorithm says we maintain decreasing values; but [0,1] where values [5,4] decreasing. So 4 is appended to back. For 2, push 2: 2 > 4? no, push 2: [0,1,2]. So after adding 2, max deque [0,1,2]. But earlier we wrongly popped something. In that case, after we pop 0 when shifting left, we removed 0 index. So max deque becomes [1,2] which has values 4,2; front value 4. So now max remains 4. Good.
+
+Therefore we must modify algorithm accordingly: maintain deques such: For min, we maintain increasing; for max, decreasing. Implementation: When inserting new index, while deque not empty and nums[right] < nums[deq[-1]] ... for min; for max, while nums[right] > nums[deq[-1]] etc. Then add right index.
+
+After we push, we need to check while max_val - min_val > 2: if max deque front index equals left then pop left; similarly for min deque. Then left++.
+
+But as we shift left, we will need to remove elements from deques whose index == left before moving left. But we may shift left multiple times; gradient until the condition satisfied. So we need to maintain condition after each increment.
+
+Edge Cases: repeated values. Implementation details: Use collections.deque.
+
+Complexities O(n).
+
+Let's test with example 1:
+
+We'll implement quickly.
+
+Let's pseudo:
+
+def continuousSubarrays(nums):
+    left =0
+    min_dq = deque()
+    max_dq = deque()
+    res=0
+    for right, val in enumerate(nums):
+        # maintain min
+        while min_dq and val < nums[min_dq[-1]]:
+            min_dq.pop()
+        min_dq.append(right)
+        # max
+        while max_dq and val > nums[max_dq[-1]]:
+            max_dq.pop()
+        max_dq.append(right)
+        # check condition
+        while nums[max_dq[0]] - nums[min_dq[0]] > 2:
+            if min_dq[0] == left:
+                min_dq.popleft()
+            if max_dq[0] == left:
+                max_dq.popleft()
+            left += 1
+        res += right - left + 1
+    return res
+
+Test:
+
+nums[5,4,2,4]:
+i=0 val=5: min=[0], max=[0], diff=0 => res=1.
+i=1 val=4: min: while 4<5 -> pop 0 -> min empty -> append 1 -> min=[1]; max: while 4>5? no, append 1 -> max=[0,1]; diff=5-4=1 <=2 => res += 2 => 3
+i=2 val=2: min: while 2<4 -> pop 1 -> min empty -> append 2 -> min=[2]; max: while 2>4? no => append 2 -> max=[0,1,2]; diff=5-2=3>2 => loop: min_dq[0]==2==left? left=0; no. max_dq[0]==0==left? yes -> pop left, max=[1,2]; left=1. Now diff=4-2=2 <=2 => exit. res+=2 (right-left+1=2-1+1=2) => total=5
+i=3 val=4: min: while 4<2? no => append 3 => min=[2,3] (values [2,4]) => min order 2,3? Actually we need increasing values: 2<4 so [2,3] good. max: while 4>2? yes pop 2 -> max=[1]; while 4>4? no, append 3 => max=[1,3]. diff=4-2=2 <=2 => res+=3-1+1=3 => total 8 matches.
+
+Edge when condition fails? We would loop leaving all good.
+
+Check example printed list.
+
+Edge 2: nums=[1,2,3]. Simulated: i=0 val=1: mins=[0], max=[0], diff=0 => res=1.
+i=1 val=2: min: while 2<1? no; min=[0,1]? Actually add 1 to tail: [0,1]; max: while 2>1? yes pop 0, append 1: max=[1]; diff=2-1=1 <=2 => res+=2 => total3.
+i=2 val=3: min: while 3<2? no, add -> [0,1,2]; max: while 3>2? yes pop1; max=[2]; diff=3-1=2 <=2 => res+=3 => total 6. Good.
+
+Thus algorithm good.
+
+Edge: array length up to 10^5; compute big ints.
+
+We need function signature as given: class Solution: def continuousSubarrays(self, nums: List[int]) -> int.
+
+Need imports: from typing import List. Use collections.deque.
+
+Now produce final answer: explanation with algorithm, complexity, implementation.
+
+Also maybe show function.
+
+Let's produce final code.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a subarray `nums[l … r]`
+
+```
+max(nums[l … r]) – min(nums[l … r]) ≤ 2
+```
+
+must hold for every pair of elements inside the subarray, i.e. we only
+have to keep track of the maximum and minimum of the current subarray.
+
+For a fixed right border `r` all subarrays ending at `r` and whose
+left border is **at least** the leftmost position `L` that satisfies  
+`max – min ≤ 2` are valid.  
+So the number of valid subarrays ending at `r` is
+
+```
+count(r) = r - L + 1
+```
+
+If we can find `L` in *O(1)* time and move `r` from left to right
+once, the whole solution is linear.
+
+--------------------------------------------------------------------
+
+#### Sliding window + two deques
+
+We maintain a sliding window `[left … right]`.  
+Two deques keep the indices of the current maximum and minimum
+elements:
+
+* `min_dq` – indices of increasing values: `val[min_dq[0]]` is the minimum.  
+* `max_dq` – indices of decreasing values: `val[max_dq[0]]` is the maximum.
+
+While iterating `right` over the array
+
+```
+1. insert right into both deques
+   (while the tail of the deque is worse, pop it, then push the new index)
+2. While the window is not "continuous" (max-min > 2):
+      a. if the front element of a deque equals left, pop it          (it is leaving the window)
+      b. increment left
+   After the loop the window is valid.
+3. Add (right-left+1) to the answer.
+```
+
+The two deques always contain only indices that belong to the current
+window, so the two while‑loops are amortised *O(1)* per element.
+The total complexity is `O(n)` time and `O(n)` memory for the deques.
+
+--------------------------------------------------------------------
+
+#### Correctness Proof  
+
+We prove that the algorithm returns the exact number of “continuous”
+subarrays.
+
+---
+
+##### Lemma 1  
+At any time during the algorithm,  
+`val[min_dq[0]]` equals `min(nums[left … right])` and  
+`val[max_dq[0]]` equals `max(nums[left … right])`.
+
+**Proof.**
+
+*Insertion:*  
+When we insert a new index `right`, we maintain for `min_dq` the
+increasing property:  
+All older indices with a larger value are removed, so the remaining
+indices are in increasing order of `val`.  
+The smallest value in the window is exactly the value of the first
+element that has not been removed – the front of the deque.  
+The same reasoning for `max_dq` with decreasing order.
+
+*Deletion:*  
+When `left` moves forward, the algorithm removes any deque entry
+whose index is `left`.  
+All other indices are still inside the window, so the front of each
+deque continues to produce the true min / max. ∎
+
+
+
+##### Lemma 2  
+After the inner while‑loop (step 2) terminates,
+`max(nums[left … right]) - min(nums[left … right]) ≤ 2`.
+
+**Proof.**
+
+The loop condition is that the difference is > 2.
+If the condition is true, the loop body removes the element that is
+exiting the window (`left` is increased), and then `left` is advanced.
+Thus after the loop the window is shrunk until the difference is
+at most 2.  
+Because the loop stops immediately once the condition is false,
+the invariant holds. ∎
+
+
+
+##### Lemma 3  
+For a fixed right border `r`,
+the number of valid subarrays ending at `r` equals `r - left + 1`
+where `left` is the value left by the loop in step 2.
+
+**Proof.**
+
+All indices `l` with `left ≤ l ≤ r` satisfy the window condition
+(because `left` is the minimal index that still satisfies the
+constraint).
+Therefore every subarray `[l … r]` with `l` in that range is valid.
+Conversely, a subarray starting at `l < left` would contain
+`ans[l … r]` with an element that violates the constraint, so it would
+not be continuous.
+Hence the exact count is the number of admissible starting indices:
+`r - left + 1`. ∎
+
+
+
+##### Theorem  
+The algorithm outputs the number of continuous subarrays of
+`nums`.
+
+**Proof.**
+
+The algorithm iterates over all `right` from `0` to `n-1`.
+
+* By Lemma&nbsp;1 the deques always contain the correct `min` and `max`
+  for the current window.
+* By Lemma&nbsp;2 the window is always valid after the inner loop.
+* By Lemma&nbsp;3 the contribution added to the answer for this `right`
+  is exactly the number of valid subarrays ending at `right`.
+
+Summing over all `right` therefore counts each continuous subarray
+exactly once, hence the algorithm returns the desired total. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### Complexity Analysis
+
+*Time*: `O(n)` – each array element is inserted into and removed from
+each deque at most once.
+
+*Memory*: `O(n)` – the two deques store at most `n` indices.
+
+--------------------------------------------------------------------
+
+#### Reference Implementation (Python 3)
+
+```python
+from typing import List
+from collections import deque
+
+class Solution:
+    def continuousSubarrays(self, nums: List[int]) -> int:
+        n = len(nums)
+        if n == 0:
+            return 0
+
+        min_dq = deque()      # indices, values increasing
+        max_dq = deque()      # indices, values decreasing
+
+        left = 0
+        ans = 0
+
+        for right, val in enumerate(nums):
+            # update min deque
+            while min_dq and val < nums[min_dq[-1]]:
+                min_dq.pop()
+            min_dq.append(right)
+
+            # update max deque
+            while max_dq and val > nums[max_dq[-1]]:
+                max_dq.pop()
+            max_dq.append(right)
+
+            # shrink window until it becomes continuous
+            while nums[max_dq[0]] - nums[min_dq[0]] > 2:
+                if min_dq[0] == left:
+                    min_dq.popleft()
+                if max_dq[0] == left:
+                    max_dq.popleft()
+                left += 1
+
+            # all subarrays ending at 'right' with start >= left are valid
+            ans += right - left + 1
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the requested function signature.

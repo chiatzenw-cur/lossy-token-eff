@@ -1,0 +1,656 @@
+<|channel|>analysis<|message|>We need to count integers between low and high inclusive that have equal number of even and odd digits and divisible by k. Range up to 1e9 (~10 digits), k up to 20. Brute force enumeration using DP digit DP. Since constraint 1e9, counting numbers up to 9-digits? Actually 1e9 is 10^9, so 10-digit maximum since 1,000,000,000 has 10 digits 9 digits? 1e9 is 10 digits? 1,000,000,000 has 10 digits (1 followed by zeros). So 10 digits. N up to 10^9 inclusive.
+
+We need to compute f(high) - f(low-1). Where f is count of numbers <= n that satisfy conditions.
+
+Define DP position: index pos, digit, and constraint less and greater? Use DP over digits from most significant to least. Since we only need to count, we can place digits? But we need parity counts, and parity of value modulo k. We only care about numbers modulo k; must be divisible by k. So we need state: index position, d, color (balanced difference). For digits counting we can maintain difference between even and odd digits: diff = even_count - odd_count. We want diff between zero and 0 at end. Actually we need equal counts so diff = 0. Since at most 10 digits, diff range [-10,10]. We'll maintain offset.
+
+We also need parity of number modulo k. Since we cannot just sum digits but number modulo k. We'll need pow10 mod k for each position.
+
+We do DP with memoization with colors of the number modulo k.
+
+Procedure:
+
+- Convert n to string digits.
+- For each position i in 0..len-1, we want to assign digits 0-9 respecting local constraints: not leading to number exceeding n or smaller.
+
+Define state's "tight" boolean: True if prefix equals n's prefix so far. At start tight=True.
+
+Also we need to handle leading zeros: but if leading zeros, they don't count as digits? In numbers we consider leading zeros not part of number. So need to handle start-of-number. For digits before first non-zero, we don't count them; we don't count them as even or odd digits presumably? Example: For number 12: digits 1 and 2; no leading zeros. So we need to ignore leading zeros. So we may maintain a flag leading. When leading==True and digit==0: we don't add to even/odd counts. Actually we need to treat number 0? But low>0, so positive integers only, but we might consider n=0 in k? low>0, but we may compute f(low-1) where low may be 0? but low<0? low>0? constraints: 0 < low <= high . So low>=1. For n=0 domain, we need to treat. We can set f(0)=0 as no numbers >0.
+
+So DP: start leading True. At each step choose digit d from 0..limit (limit=digits[pos] if tight else 9). but if leading==True and d==0: then only +d=0 not counted. deg remains zero.
+
+When d>0: reduce leading? Historically we can treat diff = number of even digits minus number of odd digits. If leading==True and choose d==0, we maintain leading==True and not counted. Only at first non-zero digit, we set leading=False and count parity. That ensures number 0 isn't counted.
+
+When leading==False, is the number always >0? yes because we have at least one non-zero.
+
+At the end, when pos==len-1, we check if leading==False OR (if leading==True and number is a string of zeros? which we exclude) meaning we have some number, but we only count valid numbers >0.
+
+We need to check diff==0 and mod==0.
+
+Additionally, digits must be sorted? no, any constraint.
+
+We need count numbers with equal even and odd digits. For numbers with single digit cannot have equal because counts 1 vs 0. But equality is not possible unless at least 2 digits: even/odd counts must be even numbers? Actually diff must be even numbers; but for a 10-digit number diff must be 0.
+
+Edge: number 10: digits 1,0: diff 0? 1 odd, 0 even? Wait 0 is even. So diff = 1 even - 1 odd? Actually even count 1 (0), odd 1 (1). So diff=0? no diff=1-1=0. Yes.
+
+Now test example 2: low=1 high=10 k=1. only 10 is counted.
+
+Implementation details: digits[0] is most significant.
+
+Our DP must use caching on pos, diff, mod, tight, leading.
+
+We might use recursion with memoization.
+
+Since k <=10, diff range [-10..10], offset 10.
+
+DP function: dp(pos, diff, mod, tight, leading). Returns count.
+
+If pos==len: if leading==False and diff==0 and mod==0: return 1 else 0.
+
+Transitions: limit = digits[pos] if tight else 9.
+
+For each d in range(limit+1):
+
+- if tight==True and d==limit: next_tight=True else False.
+
+- new_leading = leading and d==0
+
+- new_diff = diff
+
+- new_mod = mod
+
+- new_div = d
+
+If d==0 and new_leading tight: before number started: we skip count. So new_diff = diff; new_mod = mod
+
+But if new_leading == False: we must count. For d==0 but not leading: we treat 0 as even digit: diff=diff+1. For d>0: if d%2==0: diff+1 else diff-1.
+
+For mod: we need to append digit d to future; we need to compute new number modulo k: new_mod = (mod * 10 + d) % k.
+
+But careful: we already previous mod; for leading zeros, we don't consider them; but if we are still leading zero, we need to maintain mod as 0 for the value. Since we ignore digits, the number mod remains unchanged regardless of how many zero digits? Suppose we have number 10..k=1: digits 1,0. When we choose leading zeros start: at pos=0, even digits 0 at first digit? Actually we can't choose d=0 because leading zero means we start at 0 digits? Actually we must skip all digits until first non-zero. Thus, for pos==0, digits sum=1? For number 10, length=2. So pos stays digits: '1','0' - leading zeros not counted.
+
+For such numbers, we don't need to consider mod when leading zeros because we skip until we start. It's easier to treat leading zeros as not counted and mod remains 0.
+
+So for d==0 and leading==True: new_diff same, new_mod similar? But we might choose digit 0 as incomplete and not part of number, but for later positions we still need to compute mod. But we didn't add any digits, so mod remains 0 because since we haven't started building number. However we might be at last position where we never start number: that's just number 0; we should exclude.
+
+Thus:
+
+If d==0 and leading == True: new_leading = True; new_diff = diff; new_mod = mod (still 0). So mod remains 0.
+
+If new_leading==False: new_div = d.
+
+But we still need to compute mod when starting new number says digits are actual digits. So we need mod rational.
+
+Therefore, we can update new_mod = (mod * 10 + d) % k if not leading or d==0 else 0? Wait if leading==True and d==0, remained 0, same as above; but we already treat mod=0 and mod*10+0=0. So we can maintain formula: new_mod = (mod * 10 + d) % k with mod=0 for leading zeros. So works. So it's fine.
+
+When leading==True and d==0: mod stays 0; new_mod is 0. Then new_mod remains 0. So it works.
+
+Edge Cases:
+
+- If leading==True and d<0? d>0 no.
+
+- For counting diff when d==0 but not leading: d=0 (even) is even digit. So diff+1.
+
+Let's code.
+
+But we need to compute f(n) quickly; we have length up to 10^9 => up to 10 digits. DP state ~ len * diff states * mod * tight * leading. diff states 21, mod 21, tight 2, leading 2. 10 * 21 * 21 * 2 * 2 = 10*1764 = ~17640 states, fine.
+
+Memoization with dictionary.
+
+We also need to handle c++? but Python.
+
+Plan:
+
+def count_upto(n):
+    if n == 0: return 0
+    digits = list(map(int, n))
+    start recursion index0.
+
+Return dp(0, 0, 0, True, True).
+
+Use lru_cache.
+
+Edge: we must consider that string digits can start with leading zeros? The representation of n doesn't have leading zeros. But we rec call dp starting at pos=0.
+
+Our function will handle.
+
+Now test with examples:
+
+Example 1: low=10 high=20 k=3. Let's compute counts: numbers divisible by 3. candidates: 12,18,15,12 etc. Filter: 12,18. Should be 2. Let's test mentally.
+
+Example 2: low=1 high=10 k=1. count upto 10: But we must exclude 0 etc. count 10 alone. Good.
+
+Example 3: low=5 high=5 k=2; count 0.
+
+Edge: Number with multiple digits but equal d: e.g., 110? digits 1 odd, 1 even, 0 even -> extended 2 even digits, 1 odd: diff 1, not 0 -> not count.
+
+We need to ensure that diff counts mathematically distinguishing even/odd digits. For len 2-digit number, diff maybe 0.
+
+Implement.
+
+Double-check leading-process: Eg number 10. digits format: '1','0'. So pos0: leading= True; digits[0]=1. h='tight'. For d=1: leading= False; new_div=1; diff=1+1? Wait 1 odd; diff-1; new_mod = (0*10+1)%k=1. g=1. dp afterwards pos1: tight= (since d==limit; limit==1). new_tight=False? Actually limit=1 get d=1: It is equal to limit, so next_tight=True. In next pos n=2: digits[1]=0 sub? Actually n=10. At pos1 index 1 limit=0. For d=0: leading=leading? We had leading= False. So new_leading becomes False. new_diff: if d%2==0: diff+1. So diff+1=0? Wait diff=-1? Actually from step0 diff=-1; plus 1 yields 0. So diff final=0. mod: (1*10+0)%k. Good.
+
+Now check 12: digits 1 2.
+
+At pos0: d=1, diff=-1, mod=1. pos1: d=2 leading: diff+1 => 0, mod=1*10+2 mod = cycle.
+
+Now test 8: 8: digits 8 (only 1). No even/odd equality. So diff should be 1 for 8 (even). So diff won't be zero. 8 divisible by k? Wait for k=1 we count maybe 8? Not equal diff zero. Good.
+
+Edge: number 100? 1 (odd), 0 (even), 0 (even). diff: 2 evens - 1 odd = +1. Not counted.
+
+Now test examples via DP.
+
+Potential issue: numbers up to 1e9 inclusive but high=10^9 : 1000000000 has 10 digits. Our DP: digits list length 10.
+
+Numbers up to 1e9 inclusive but we must handle 1e9 exactly. We need to handle separately? test: floor; but DP will handle.
+
+Edge: We may have numbers with leading zeros after first non-zero digit? But input numbers only exact representation; we don't skip leading zeros by scanning digits; it's fine.
+
+Now time complexity: O(len * 21 * 21 * 2 * 2 * 10) maybe 17640*10=176k, per query, fine.
+
+Let's test on custom:
+
+low=1 high=10 k=1: numbers 1..10. Let's compute: DP up to 10. The only ones counted: 10. Let's check DP counts: numbers 2 to 9: 1 digit each only. diff can't be 0. So 0. Good.
+
+Edge ex: low=1 high=1e9, k=1; Should count all numbers where even/odd are equal. We can try to produce small test? but can't run.
+
+Important: count of Big numbers. But okay.
+
+Potential pitfalls: mis-handle negative diff. Use offset to store, but caching using lru_cache with tuple (pos_q, diff, mod, tight, leading). diff can be negative; we can just use negative integer directly.
+
+Now code. Implementation.
+
+Be careful to convert digits string: digits = s.
+
+Also need to use global variables local.
+
+State:
+
+def dfs(pos, diff, mod, tight, leading):
+    if pos == len:
+        return int(has_started := not leading and diff==0 and mod==0)
+    else:
+        limit = digits[pos] if tight else 9
+        res = 0
+        for d in range(limit+1):
+            if tight and d==limit:
+                next_tight = True
+            else:
+                next_tight = False
+            new_leading = leading and d==0
+            if new_leading:
+                # new diff unchanged, new_mod unchanged
+                new_diff = diff
+                new_mod = mod
+            else:
+                # new diff: if d%2==0 -> new_diff=diff+1 else diff-1
+                new_diff = diff + (1 if d%2==0 else -1)
+                new_mod = (mod * 10 + d) % k
+            res += dfs(pos+1,-new_diff, new_mod, next_tight, new_leading)
+        return res
+
+But need to store diff variable design: we used diff as "even minus odd".
+
+Let's compute diff after updating: new_diff = diff + (1 if d%2==0 else -1). Because we need to treat diff=even-odd. So if we add odd digit, diff decreases by 1, else increases by 1.
+
+Now after all digits, we check diff==0 (even-odd). So fine.
+
+If we use ``for d in range(limit+1)``.
+
+Edge: Wait we defined new_diff = diff + (1 if d%2==0 else -1). Good.
+
+But we need to ensure we don't confuse bounds. For d==0 but leading==False, we count weight added: diff+1 (since 0 even). So diff. For d>0: if d>0 then we treat as even if even else odd.
+
+Now diff can be -10..10. Works.
+
+But we computed new_mod = (mod * 10 + d) % k. For leading zeros we need to keep mod as 0. But if leading==True and d==0, new_mod = (mod * 10 + 0) % k already 0. So fine.
+
+Caveat: When leading==True but d != 0, we start new number with d=0? Wait leading==True and d==0 produce new_leading True; but d==0 is trivial. However if leading==True and d==0, we skip counting. But if leading==True and d == 0, we keep mod 0. Good.
+
+Now after recursion, we call cnt(high). Our dp key includes pos, diff, mod, tight, leading. It's fine.
+
+We'll implement a helper function 'count(upto)'.
+
+Edge: low may be 1; we need count_upto(0) returns 0.
+
+Now implement custom assert high=20 low=10 k=3: compute difference.
+
+Also we may need to convert digits to list of ints. For 0: count0.
+
+Implementation details:
+
+def count_upto(n):
+    if n <= 0:
+        return 0
+    digits = list(map(int, str(n)))
+    from functools import lru_cache
+    @lru_cache(None)
+    def dfs(pos, diff, mod, tight, leading):
+        if pos == len(digits):
+            if not leading and diff == 0 and mod == 0:
+                return 1
+            return 0
+        limit = digits[pos] if tight else 9
+        del_me = 0
+        for d in range(limit+1):
+            if tight and d == limit:
+                next_tight = True
+            else:
+                next_tight = False
+            new_leading = leading and d == 0
+            if new_leading:
+                new_diff = diff
+                new_mod = mod
+            else:
+                new_diff = diff + (1 if d % 2 == 0 else -1)
+                new_mod = (mod * 10 + d) % k
+            del_me += dfs(pos+1, new_diff, new_mod, next_tight, new_leading)
+        return del_me
+    return dfs(0, 0, 0, True, True)
+
+Double-check: When leading==True and d > 0, we set leading=False. In new_diff we XOR accordingly. That's correct.
+
+Now we compute answer = count_upto(high) - count_upto(low-1).
+
+Edge: 'low' might equal 1; low-1=0.
+
+Now test with examples.
+
+But manually verifying all.
+
+Potential oversights: We used modulus k each step. For modulo k of number, we interpret number modulo k. It's standard digital DP: new_mod = (mod * 10 + d) % k but we had to reset mod when leading zeros? But before adding zero digits, we don’t add them; but our formula uses old mod that could be 0. So fine.
+
+But we may have incorrectly applied new_mod when leading==True and d=0? But we did not add digits 0 to mod; but new_mod = (mod * 10 + 0) % k: (0*10 + 0) % k = 0. So fine.
+
+Important: Suppose leading==True and d=0 -> new_mod = 0 remains 0. Good.
+
+Now but when we skip zeros and d=0, then at next pos we still have leading= True; if we subsequently choose d=0 again but we just remain 0, so fine.
+
+Edge: Suppose leftmost hex digits length 9, but we may treat partial digits? But pre-leading zeros are not counted.
+
+Edge: Suppose we have number 100 but leading zeros at pos0: we will skip leading zero until pos1? Wait we have digits: "100" => first digit 1. Actually there is no leading zero. So we will detect leading at pos1? For pos0 high=1, we choose d=1. Good.
+
+Edge: Suppose n=1000: 4 digits.
+
+Now we rely on diff representation correct.
+
+Also ensure we test 1-digit numbers? For low=0, high=9, k=1: we would count all numbers from 1..9? But they aren't equal, so return 0.
+
+Now test 10 all numbers with even/odd representation for odd/even digits. For numbers where both counts equal leads to even/odd even? Eg 10, 12, 18, 20? Wait 20: digits 2 even, 0 even: diff=2 even, not balanced.
+
+Similarly 22: digits 2,2 both even -> diff=2 even, not balanced.
+
+Thus only numbers with even count of digits and divisible by k of same parity.
+
+Edge: For 2-digit numbers equal to 1 even and 1 odd. For 10's digits: we said 10 qualifies if divisible by k. For 20: digits 2,0 both even 2 even digits no odd. Indeed fine.
+
+Now consider 59: digits 5 odd, 9 odd -> diff= -2. Not balanced.
+
+OK.
+
+Consider 101: digits 1,0,1: even digits 1, odd 2 -> diff= -1.
+
+Now we need to check for numbers larger than 10^9? Not necessary.
+
+Now usage of recursion with memoization.
+
+Complexities fine.
+
+Now produce final answer code.
+
+But we might compare with repeated count state for leading zero to avoid counting diff for numbers that are not started. Use bool.
+
+Now we confirm retrieving counts quickly.
+
+Double-check sample 1: low=10 high=20 k=3. Let's simulate quickly.
+
+Plan to compute on k=3.
+
+We verify 12 numbers divisible by 3: 12,18, 15? Wait 15 divisible by 3; 18 divisible by 3; 12; 18; 15? 15 divisible by 3? 12 is divisible? 12*3=36. 15 divisible by 3: 3*5=15. So 12,18,15? 15 is divisible by 3. True. So 12,18,15 all divisible by 3.
+
+But 15 not divisible by k=3? Wait 15 not divisible by 3? 15/3=5 remainder 0. So yes divisible.
+
+But they said 15 not divisible by 3? Wait 15 is divisible by 3, but they said 15 is not beautiful because does not contain equal counts even and odd digits. So 15 not divisible? They considered 15 not divisible by 3? Wait 15/3=5. Yes divisible. But 15 not divisible? Wait 15 is divisible by 3. So maybe they mis- typed or incorrectly? The example explanation says - 15 is not beautiful because it does not contain equal counts even and odd digits. Actually 15 doesn't have equal counts even/odd: 1 odd and 5 odd; 0 even =>0 difference. Not 0. So not balanced. But they mention 15 not divisible by k=3? That is wrong. The example includes 15 incorrectly. Actually they say "15 is not beautiful because it does not contain equal counts even and odd digits." They ignore divisible; they didn't mention it. So maybe the sample explanation contains minor mistake but correct.
+
+Thus our number of balanced divisible are only 12 and 18. So correct.
+
+Let's test low=1, high=10, k=1: numbers 1 to10 inclusive; 10 balanced. Others maybe not. So count 1.
+
+Third: low=5 high=5 k=2: 5 is not divisible by 2 rule.
+
+All good.
+
+Now produce final code.
+
+Potential improvements: Avoid recursion limit? length <= 10, recursion depth 10. It's fine.
+
+Now generate final solution:
+
+Define class Solution with method numberOfBeautifulIntegers.
+
+Add count_upto. Return difference.
+
+Edge: high difference high etc.
+
+Let's produce final answer.
+
+Now must format final answer with code block.
+
+Let's produce final solution.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For every integer in the interval `[low , high]`
+
+* the number of even digits must be equal to the number of odd digits  
+  (even – odd = `0`)
+
+* the number itself must be divisible by `k`  
+  (`0 ≤ k ≤ 20`)
+
+The task is to count how many such integers exist.
+
+
+
+--------------------------------------------------------------------
+
+#### 1.   Observations
+
+* `high ≤ 10^9`  →  at most 10 decimal digits.
+* The answer is  
+  `count( ≤ high ) – count( ≤ low-1 )` – a classic “counting
+  numbers up to a bound” problem.
+* The state of a number is completely described by  
+
+  * current position in the decimal string  
+  * the “balance” `even – odd` of the digits that have already been seen  
+    * the balance can be `-10 … +10`, because we only have up to 10 decimal digits
+  * the parity of the current number (`mod k`)  
+    * when we append a digit `d` we get  
+      `new_mod = (mod * 10 + d) % k`
+  * whether the decimal prefix is already the same as the prefix of the bound `n`
+    * whether the prefix is *tight* or already smaller
+  * whether the number has already started (the first non‑zero digit)
+    * leading zeros are treated as “no digit” – they do **not** change the balance
+    * and we do not count the number `0` itself
+
+The number of states is very small
+
+```
+positions   :  10
+balance     :  21  (0 … ±10)
+modulo        :  21  (0 … k-1)
+tight            :  2
+lead start       :  2
+```
+
+≈ 17 000 states – trivial.
+
+
+
+--------------------------------------------------------------------
+
+#### 2.   Digit DP
+
+```
+dfs(pos, diff, mod, tight, leading):
+    if pos == length:                 # all digits processed
+        if not leading and diff == 0 and mod == 0:
+            return 1                  # a valid number
+        else:
+            return 0
+
+    limit = digits[pos] if tight else 9
+    ans = 0
+    for d in 0 … limit:
+        if tight and d == limit:
+            next_tight = True
+        else:
+            next_tight = False
+
+        new_leading = leading and d == 0
+
+        if new_leading:               # still leading zero
+            new_diff = diff
+            new_mod = mod
+        else:                         # first non‑zero digit or new real digit
+            new_diff = diff + (1 if d%2==0 else -1)
+            new_mod = (mod*10 + d) % k
+
+        ans += dfs(pos+1, new_diff, new_mod,
+                    next_tight, new_leading)
+    return ans
+```
+
+* `diff` is **even – odd**.
+* `tight` guarantees that the constructed number never exceeds the bound `n`.
+* `leading` guarantees that the number `0` is never counted.
+
+The function `count_upto(n)` returns the number of beautiful integers
+in `[1 , n]`.  
+The final answer is `count_upto(high) - count_upto(low-1)`.
+
+
+
+--------------------------------------------------------------------
+
+#### 3.   Correctness Proof  
+
+We prove that the algorithm returns the correct number of beautiful
+integers in the interval `[low, high]`.
+
+---
+
+##### Lemma 1  
+For every number `x (0 ≤ x ≤ n)` the DP considers **exactly one** state
+representing the prefix equal to `x` when the recursion reaches
+`pos = len(digits)`.
+
+**Proof.**
+
+*The recursion follows the unique digits of `x`.`*
+
+* At the first position where `x` is smaller than `n` the flag `tight`
+  becomes `False` and the `limit` for all later positions is `9`,
+  thus the path allows exactly the digits of `x`.  
+  Consequently, the sequence of digits chosen by the recursion
+  equals the decimal representation of `x` and reaches the terminal
+  state `pos = len(digits)`.  
+
+* No other path can end with the same `x`, because the sequence of
+  digits chosen along the recursion is unique. ∎
+
+
+
+##### Lemma 2  
+For every input number `x` the DP considers
+`diff = (#even digits of x) – (#odd digits of x)`  
+and `mod = x % k`.
+
+**Proof.**
+
+*The invariant*  
+`diff` always equals the number of even digits minus the number of odd
+digits of the already processed prefix, `mod` equals the current number
+modulo `k`.
+
+*Base* : before any digit is processed (`pos = 0`)  
+`diff = 0` and `mod = 0` – correct.
+
+*Induction step* :  
+Assume the invariant holds before position `pos`
+when the chosen digit is `d`.  
+If `d` is a leading zero (`leading = True` and `d=0`):
+  * `diff` goes unchanged – `0` is not a digit yet.
+  * `mod` goes unchanged – the number is still the same as before.
+* Otherwise a real digit is added:
+  * If `d` is even, we add `+1` to the balance;  
+    else `-1`.  
+  * `mod` is updated
+    `new_mod = (mod * 10 + d) % k`.  
+    This is exactly the definition of the new number modulo `k`.
+
+Thus after the update the invariant still holds for
+`pos+1`. ∎
+
+
+
+##### Lemma 3  
+For each state `pos, diff, mod, tight, leading` the value returned by
+`dfs(pos, …)` equals the number of beautiful integers that can be
+built from the current prefix satisfying all constraints.
+
+**Proof.**
+
+By induction over the remaining digits.
+
+*Base.*  
+If `pos == len(digits)` no digits remain.  
+The number is fixed, its balance and modulo are all known.
+If the number is inside the interval (i.e. `tight` is not violated)
+and the number is non‑zero (`leading==False`), the number is
+beautiful if and only if `diff==0` and `mod==0`.  
+The function returns `1` in that case and `0` otherwise – correct.
+
+*Induction step.*  
+Assume the lemma holds for every state with the same `pos`
+but later positions are processed.  
+`dfs` iterates over all possible next digits `d` allowed by the
+`tight` flag.  
+For each such `d` it recurses with the updated state.
+By the induction hypothesis the recursive call counts  
+exactly the beautiful integers that extend the current prefix.
+Summing over all possible `d` gives the correct number of beautiful
+integers for the current state. ∎
+
+
+
+##### Lemma 4  
+`count_upto(n)` returns the number of beautiful integers in the
+interval `[1 , n]`.
+
+**Proof.**
+
+`count_upto(n)` reads the decimal representation of `n` and calls
+`dfs(0,0,0,0, tight=True, leading=True)`.
+
+By Lemma&nbsp;1 the recursion visits every integer `x (0 ≤ x ≤ n)`
+exactly once.  
+By Lemma&nbsp;3 the `dfs` value for the initial state counts all
+beautiful integers constructed from that prefix, i.e. all beautiful
+integers in `[1 , n]`.  
+No other numbers are counted, because the initial `dfs` forbids all
+numbers exceeding `n` and forbids `0` (leading zero is never counted).
+∎
+
+
+
+##### Lemma 5  
+`count_upto(high) - count_upto(low-1)` equals the number of beautiful
+integers in ` [low , high]`.
+
+**Proof.**
+
+`count_upto(high)` counts the beautiful integers in `[1 , high]`.  
+`count_upto(low-1)` counts the beautiful integers in `[1 , low-1]`.  
+Subtracting removes all beautiful integers below `low`;
+what remains are exactly the beautiful integers in `[low , high]`. ∎
+
+
+
+##### Theorem  
+`numberOfBeautifulIntegers` returns the number of beautiful integers
+between `low` and `high` in the interval `[low , high]`.
+
+**Proof.**
+
+Directly from Lemma&nbsp;5 and the implementation of `numberOfBeautifulIntegers`,
+which returns `count_upto(high) - count_upto(low-1)`. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.   Complexity Analysis  
+
+Let `L = number of digits of high` ( `L ≤ 10` ).
+
+*Number of DP states* (tight, leading stop, leading flag be present):
+
+```
+L * 21 * 21 * 2 * 2  ≤  10 * 21 * 21 * 2 * 2 = 17 640
+```
+
+*Transitions per state* : at most 10 digits.
+
+```
+Time   :  O( L * 21 * 21 * 2 * 2 * 10 )  ≤ 2.5 · 10^5  operations
+Memory :  O( L * 21 * 21 * 2 * 2 )  ≤ 17 kB
+```
+
+Both are completely negligible for the limits.
+
+
+
+--------------------------------------------------------------------
+
+#### 5.   Reference Implementation  (Python 3)
+
+```python
+from functools import lru_cache
+from typing import List
+
+class Solution:
+    def numberOfBeautifulIntegers(self, low: int, high: int, k: int) -> int:
+        """
+        Return the number of beautiful integers in [low, high] for
+        the given k.
+        """
+        # ---------------------------------------------------------
+        # Count beautiful numbers <= n
+        def count_upto(n: int) -> int:
+            if n <= 0:
+                return 0
+            digits = list(map(int, str(n)))          # most significant first
+
+            @lru_cache(maxsize=None)
+            def dfs(pos: int, diff: int, mod: int, tight: bool, leading: bool) -> int:
+                """
+                pos_k          : current index in digits
+                diff           : even – odd of the digits already seen
+                mod            : current number modulo k
+                tight          : prefix must be <= bound prefix
+                leading        : number has not started yet
+                """
+                if pos == len(digits) :
+                    # number finished
+                    if not leading and diff == 0 and mod == 0:
+                        return 1          # valid number
+                    else:
+                        return 0
+
+                limit = digits[pos] if tight else 9
+                res = 0
+
+                for d in range(limit + 1):
+                    next_tight = tight and d == limit
+                    new_leading = leading and d == 0
+
+                    if new_leading:
+                        new_diff = diff
+                        new_mod = mod
+                    else:
+                        new_diff = diff + (1 if d % 2 == 0 else -1)
+                        new_mod = (mod * 10 + d) % k
+
+                    res += dfs(pos + 1, new_diff, new_mod, next_tight, new_leading)
+
+                return res
+
+            return dfs(0, 0, 0, 0, True)
+
+        # ---------------------------------------------------------
+        # final answer
+        return count_upto(high) - count_upto(low - 1)
+```
+
+The code follows exactly the algorithm proven correct above and
+conforms to the required function signature.

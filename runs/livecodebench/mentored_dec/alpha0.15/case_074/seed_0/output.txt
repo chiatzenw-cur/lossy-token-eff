@@ -1,0 +1,230 @@
+<|channel|>analysis<|message|>We need count subarrays where pairwise difference <=2. Equivalent to max - min <=2. So subarray continuous iff max - min <= 2. So need count of subarrays with max-min <=2.
+
+We can use sliding window with monotonic deques to maintain max and min. Standard technique: as we expand right pointer, maintain deques for max and min. Then while max - min > 2, shrink left. For each right, number of valid subarrays ending at right is (right-left+1). Sum. Complexity O(n). Need to handle large n up to 1e5, int up to 1e9, but difference <=2 ensures deques operations.
+
+Implementation: left=0, answer=0. For each r in range(n): push into max deque (decreasing), min deque (increasing). While maxDeque[0] - minDeque[0] >2: if left == maxDeque[0] index, pop front. Same for min.
+
+When shifting left, we need to pop outdated indices from deques too. The loop condition again: while not window valid.
+
+But we cannot just pop when left moves: we check condition after potentially increment left. Implementation typical:
+
+for r in range(n):
+    while maxD and nums[r] > nums[maxD[-1]]: maxD.pop()
+    maxD.append(r)
+    while minD and nums[r] < nums[minD[-1]]: minD.pop()
+    minD.append(r)
+    while nums[maxD[0]] - nums[minD[0]] > 2:
+        if maxD[0] == left: maxD.popleft()
+        if minD[0] == left: minD.popleft()
+        left += 1
+    answer += r - left + 1
+
+Edge: after moving left, we need to pop front indices equal to left BEFORE increment? We moved left after condition; but we used in while loop: while difference >2, we remove left and increment left. When removing left we should pop front of deques if they equal left. At each iteration.
+
+Implementation correct.
+
+Return answer. Complexity O(n).
+
+Let's craft solution with python.
+
+Potential big answer up to n*(n+1)/2 ~ 5e9 so 64-bit. Use Python int.
+
+Now produce final answer.<|end|><|start|>assistant<|channel|>final<|message|>**Solution Explanation**
+
+For a subarray `[i … j]` let  
+
+```
+max = maximum value in the subarray
+min = minimum value in the subarray
+```
+
+The subarray is *continuous* iff
+
+```
+|x – y| ≤ 2   for every pair x , y  in the subarray
+        ⇔  max – min ≤ 2
+```
+
+So we only have to count subarrays whose maximum and minimum differ by at most `2`.
+
+--------------------------------------------------------------------
+
+#### 1.  Sliding window
+
+We keep a window `[left … right]` that is always continuous.  
+When we extend `right` by one element, the window may become invalid (`max - min > 2`).  
+We then move `left` rightwards until the window becomes valid again.
+
+For every position of `right` the number of valid subarrays ending at `right` is
+
+```
+(right – left + 1)
+```
+
+Summed over all `right` gives the answer.
+
+--------------------------------------------------------------------
+
+#### 2.  Maintaining `max` and `min`
+
+While the window expands, we need to know the current maximum and minimum
+in `O(1)` time.  
+This is a classic use of two monotonic double‑ended queues (deques).
+
+* `maxDeque` – indices of elements in decreasing order of value  
+  (front = current maximum)
+* `minDeque` – indices of elements in increasing order of value  
+  (front = current minimum)
+
+When a new element `nums[right]` is added:
+
+```
+while maxDeque not empty and nums[right] > nums[maxDeque[-1]]:
+        pop from back of maxDeque
+push right into maxDeque
+
+while minDeque not empty and nums[right] < nums[minDeque[-1]]:
+        pop from back of minDeque
+push right into minDeque
+```
+
+When the window is shrunk from the left, any indices that fall out of the
+window are removed from the front of the respective deque:
+
+```
+if maxDeque[0] == left:  pop left
+if minDeque[0] == left:  pop left
+```
+
+All operations are `O(1)` amortized, so the whole algorithm is linear.
+
+--------------------------------------------------------------------
+
+#### 3.  Correctness Proof  
+
+We prove that the algorithm returns the number of continuous subarrays.
+
+---
+
+##### Lemma 1  
+At any time during the algorithm, `maxDeque[0]` stores the index of the
+maximum value inside the current window `[left … right]` and
+`minDeque[0]` stores the index of the minimum value inside the window.
+
+**Proof.**
+
+*Insertion*:  
+When a new element at index `right` is processed, all indices with a
+smaller (for `maxDeque`) or larger (for `minDeque`) value are removed
+from the back, so the property is preserved.
+
+*Removal*:  
+When `left` is increased, we only remove indices equal to `left` from
+the front. Those indices were the old extreme elements, so after
+removal the new front is again the extreme element of the reduced
+window.
+
+By induction the invariant holds for every step. ∎
+
+
+
+##### Lemma 2  
+After the inner loop that moves `left` finishes,
+the window `[left … right]` is continuous (i.e. `max - min ≤ 2`).
+
+**Proof.**
+
+The loop continues while the difference of the current extremes is larger
+than `2`.  
+By Lemma&nbsp;1, `nums[maxDeque[0]]` and `nums[minDeque[0]]` are the real
+maximum and minimum.  
+Each increase of `left` discards the leftmost element of the window.
+When the loop terminates, the condition `max - min ≤ 2` is true for the
+remaining window. ∎
+
+
+
+##### Lemma 3  
+For a fixed `right`, the number of continuous subarrays ending at `right`
+is exactly `right - left + 1` at the moment of the addition to the answer.
+
+**Proof.**
+
+All subarrays that end at `right` are of the form `[k … right]`
+with `left ≤ k ≤ right`.  
+By Lemma&nbsp;2 the window `[left … right]` is continuous; removing any
+prefix element `[left … k-1]` keeps the property because a subarray
+cannot increase its maximum or decrease its minimum after a left cut.
+Hence every `k` in the range `[left … right]` produces a valid continuous
+subarray, and no other `k` does.  
+The count of such `k` is `right - left + 1`. ∎
+
+
+
+##### Theorem  
+The algorithm returns the total number of continuous subarrays of `nums`.
+
+**Proof.**
+
+The algorithm iterates over `right = 0 … n-1`.  
+By Lemma&nbsp;3, in each iteration it adds exactly the number of
+continuous subarrays ending at that position.  
+Summing over all `right` counts every continuous subarray exactly once,
+because each subarray is uniquely characterised by its right endpoint.
+Therefore the final sum is the desired total. ∎
+
+
+
+--------------------------------------------------------------------
+
+#### 4.  Complexity Analysis
+
+* Each index enters and leaves each deque at most once.  
+  Hence `O(n)` deque operations.
+* All other operations are `O(1)` per iteration.
+
+**Time Complexity:** `O(n)`  
+**Space Complexity:** `O(n)` for the deques (worst case).
+
+--------------------------------------------------------------------
+
+#### 5.  Reference Implementation  (Python 3)
+
+```python
+from collections import deque
+from typing import List
+
+class Solution:
+    def continuousSubarrays(self, nums: List[int]) -> int:
+        max_deque = deque()   # indices, decreasing values
+        min_deque = deque()   # indices, increasing values
+        left = 0
+        ans = 0
+        n = len(nums)
+
+        for right in range(n):
+            # maintain max deque
+            while max_deque and nums[right] > nums[max_deque[-1]]:
+                max_deque.pop()
+            max_deque.append(right)
+
+            # maintain min deque
+            while min_deque and nums[right] < nums[min_deque[-1]]:
+                min_deque.pop()
+            min_deque.append(right)
+
+            # shrink window until it becomes continuous
+            while nums[max_deque[0]] - nums[min_deque[0]] > 2:
+                if max_deque[0] == left:
+                    max_deque.popleft()
+                if min_deque[0] == left:
+                    min_deque.popleft()
+                left += 1
+
+            # all subarrays ending at 'right' and starting in [left, right]
+            ans += right - left + 1
+
+        return ans
+```
+
+The code follows exactly the algorithm proven correct above.
