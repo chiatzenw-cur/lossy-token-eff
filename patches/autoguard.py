@@ -58,13 +58,71 @@ over the ``[num_tokens, vocab]`` tensors are fine; a python loop over the
 vocab is not. No file I/O, no new imports beyond torch / stdlib.
 
 ======================================================================
-DEFAULT: no-op.  The autoresearch loop's job is to replace the body below.
+ACTIVE STRATEGY -- iteration 1: future-guard, K=8, wide marker set.
 ======================================================================
+
+Port of ``spec_casc_tok_semantic_guard_future_guard`` (K=8, the best result
+in analysis/semantic_guard/: -1.4% mean length on 30-case AIME24 at 25/30
+vs 26/30 baseline -- the only guard there that was *cheaper* than baseline
+without a large accuracy cost). It leaves an accepted hesitation/discourse
+marker's OWN verification untouched and forces strict on the K drafted
+positions that FOLLOW it, on the theory (analysis SUMMARY.md sec 5) that
+the length blow-up is a round-count effect: the drafter rides a marker into
+a self-correction / restart cascade, and a short forced-strict window right
+after the marker lets the trusted model settle the trajectory before the
+relaxed rule resumes.
+
+The window state (`strict_remaining`, 0..K) is reconstructed from
+``committed_token_ids`` every round rather than carried in a module global:
+walking the committed tail is exact for the cross-round hand-off (a marker
+older than K committed tokens has already counted down to 0) and cannot
+accumulate drift. Within the current round the countdown steps over the
+drafted ids (an approximation -- the frozen kernel steps over
+accepted/first-rejected positions and stops at the first rejection -- but
+spec_casc_tok accepts the large majority of drafted tokens, and any error
+is re-corrected from committed ground truth on the very next round).
 """
 
 from __future__ import annotations
 
 import torch
+
+# Wider marker / discourse-connective set -- identical to the frozen
+# spec_casc_tok_semantic_guard_future_guard patch's own _SEMANTIC_GUARD_TOKEN_IDS
+# (itself lifted from r_fuzzy_semantic_guard_v2). Grouped comments are the
+# surface words each id block encodes for gpt-oss-20b's tokenizer.
+_MARKER_IDS = frozenset((
+    29126, 17114, 5238, 24305,       # wait
+    112576, 186402, 165972,          # hmm
+    138925, 87471, 4771, 50557,      # actually
+    8293, 7943, 889, 3072,           # but
+    58369, 35717, 41021,             # let's
+    84787, 23586,                    # thus
+    2167, 1416,                      # we
+    5808, 2632,                      # so
+    10620, 6549,                     # now
+    12845,                           # let (sentence-initial only)
+    56734, 45438,                    # compute
+    151907, 65037,                   # similarly
+    55292, 38966,                    # define
+    3879, 7217,                      # from
+))
+_K = 8
+
+
+def _window_remaining_at_round_start(committed_token_ids: list[int]) -> int:
+    """Reconstruct the future-guard window counter (0..K) as it stands at
+    the start of this round, from committed history alone. Only the last K
+    committed tokens can matter: a marker older than that has already
+    counted all the way down."""
+    tail = committed_token_ids[-_K:]
+    remaining = 0
+    for tok in tail:
+        if tok in _MARKER_IDS:
+            remaining = _K
+        elif remaining > 0:
+            remaining -= 1
+    return remaining
 
 
 def decide(
@@ -77,9 +135,20 @@ def decide(
     num_draft_tokens: list[int],
     vocab_size: int,
 ) -> torch.Tensor:
-    # No-op: every position keeps plain spec_casc_tok verification.
-    # Baseline. Replace this with a real guard.
-    return torch.zeros_like(draft_token_ids, dtype=torch.bool)
+    n = int(draft_token_ids.shape[0])
+    if n == 0:
+        return torch.zeros(0, dtype=torch.bool, device=draft_token_ids.device)
+
+    remaining = _window_remaining_at_round_start(committed_token_ids)
+    draft = draft_token_ids.tolist()
+    flags = [False] * n
+    for j in range(n):
+        flags[j] = remaining > 0
+        if draft[j] in _MARKER_IDS:
+            remaining = _K
+        elif remaining > 0:
+            remaining -= 1
+    return torch.tensor(flags, dtype=torch.bool, device=draft_token_ids.device)
 
 
 # ======================================================================
