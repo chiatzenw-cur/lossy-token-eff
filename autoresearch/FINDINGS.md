@@ -176,3 +176,47 @@ directly via `scripts/fresh_server_replay.py`, not editing
 
 This is the next thing tried — see the `force_commit` section appended
 below (or the corresponding `results.tsv` / git history) once it lands.
+
+## 7. `spec_casc_tok_force_commit`, full 30-case AIME24 — a real, surgical win
+
+Ran the existing frozen `spec_casc_tok_force_commit` arm (force-inject the
+harmony `final`-channel-open boundary once a run crosses a token budget
+without one occurring naturally) at α=0.3, threshold=28000 (its own
+defaults, matching baseline's alpha), full 30-case AIME24, baseline
+already cached at 30/30:
+
+| | baseline | force_commit (t=28000) | Δ |
+|---|---:|---:|---:|
+| mean completion tokens | 9,269.6 | **8,840.3** | **−4.6%** |
+| median | 5,587.0 | 5,587.0 | — |
+| accuracy | 22/30 | 22/30 | **0** |
+| cap hits (32,768) | 3/30 | **0/30** | −3 |
+
+**Zero effect on 27/30 cases** — every healthy trajectory is byte-identical
+to baseline (force-commit only acts once the budget is crossed, so a case
+that finishes at 1,551 or 18,141 tokens is never touched). It shortens
+exactly the three cases that were hitting the cap:
+
+- case_003: 32,768 (wrong, capped) → 29,229 (wrong) : −3,539
+- case_004: 32,768 (wrong, capped) → 28,056 (no_answer) : −4,712
+- case_014: 32,768 (wrong, capped) → 28,139 (no_answer) : −4,629
+
+No accuracy cost (case_004/014 flip wrong→no_answer, both still
+incorrect either way). Full per-case table:
+`autoresearch/side_experiments/force_commit_t28000_full30.txt`.
+
+This is qualitatively different from every guard tried in §2–4: because
+it is a no-op on 90% of cases by construction, there is essentially no
+room for it to be a noise artifact the way iter7's 8-case win was — the
+only degrees of freedom are the three cases it actually touches, and it
+strictly helps or is neutral on all three. It confirms the §6-B
+prediction: matching the intervention mechanism to the actual failure
+mode (a commitment problem, fixed by forcing commitment) beats trying to
+steer it sideways with an acceptance-rate mask.
+
+**Next: threshold sweep.** The highest-length *correct* case in the set is
+case_002 at 20,070 tokens; nothing else correct exceeds 18,141
+(case_028). That leaves headroom to pull the threshold down from 28,000
+toward ~21,000–22,000 and capture more of the same three cases' savings
+for free, since force-commit's only lever is *when* it forces the same
+fixed boundary, never *what* it forces.
