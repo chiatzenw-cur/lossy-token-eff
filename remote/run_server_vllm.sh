@@ -82,6 +82,12 @@ CACTUS_ALPHA="${CACTUS_ALPHA:-0.25}"                # mid-range of the paper's {
 SPEC_CASC_ALPHA="${SPEC_CASC_ALPHA:-0.05}"          # matches the paper's own repetition-loop example (Fig. 5)
 R_FUZZY_ALPHA="${R_FUZZY_ALPHA:-0.3}"                # Jensen-Shannon divergence threshold
 SPEC_CASC_TOK_ALPHA="${SPEC_CASC_TOK_ALPHA:-0.3}"    # NOT the strict point -- see patches/README.md
+SPEC_CASC_OPT_ENT_ALPHA="${SPEC_CASC_OPT_ENT_ALPHA:-0.0}"  # cascade-workspace variant (cascade/README.md); -inf = strict
+SPEC_CASC_TOK_LT_ALPHA="${SPEC_CASC_TOK_LT_ALPHA:-0.3}"    # cascade-workspace variant (cascade/README.md); NOT the strict point, -inf is
+SPEC_CASC_DIFF_ALPHA="${SPEC_CASC_DIFF_ALPHA:-0.0}"        # cascade-workspace baseline (cascade/METHODS.md); -inf = strict
+SPEC_CASC_CHOW_ALPHA="${SPEC_CASC_CHOW_ALPHA:-0.5}"        # cascade-workspace baseline (cascade/METHODS.md); -inf = strict, alpha <= 1
+SPEC_CASC_OPT_HEAD_ALPHA="${SPEC_CASC_OPT_HEAD_ALPHA:-0.05}"  # cascade-workspace hybrid (cascade/METHODS.md); -inf = strict
+SPEC_CASC_OPT_HEAD_BETA="${SPEC_CASC_OPT_HEAD_BETA:-0.8}"     # its second knob: head width; 1 = plain spec-casc-opt
 SPEC_CASC_TOK_ANTILOOP_ALPHA="${SPEC_CASC_TOK_ANTILOOP_ALPHA:-0.3}"  # spec-casc-tok's own alpha; repetition breaker always on
 R_FUZZY_GUARD_ALPHA="${R_FUZZY_GUARD_ALPHA:-0.3}"    # r-fuzzy's own alpha; guard override is always on, no separate knob
 R_FUZZY_GUARD_V2_ALPHA="${R_FUZZY_GUARD_V2_ALPHA:-0.3}"  # same idea, wider token set -- see patches/README.md
@@ -159,6 +165,12 @@ cactus_file="/tmp/lossy-token-eff-cactus-alpha-$(id -u)"
 spec_casc_opt_file="/tmp/lossy-token-eff-spec-casc-alpha-$(id -u)"
 r_fuzzy_file="/tmp/lossy-token-eff-r-fuzzy-alpha-$(id -u)"
 spec_casc_tok_file="/tmp/lossy-token-eff-spec-casc-tok-alpha-$(id -u)"
+spec_casc_opt_ent_file="/tmp/lossy-token-eff-spec-casc-opt-ent-alpha-$(id -u)"
+spec_casc_tok_lt_file="/tmp/lossy-token-eff-spec-casc-tok-lt-alpha-$(id -u)"
+spec_casc_diff_file="/tmp/lossy-token-eff-spec-casc-diff-alpha-$(id -u)"
+spec_casc_chow_file="/tmp/lossy-token-eff-spec-casc-chow-alpha-$(id -u)"
+spec_casc_opt_head_file="/tmp/lossy-token-eff-spec-casc-opt-head-alpha-$(id -u)"
+spec_casc_opt_head_beta_file="/tmp/lossy-token-eff-spec-casc-opt-head-beta-$(id -u)"
 spec_casc_tok_antiloop_file="/tmp/lossy-token-eff-spec-casc-tok-antiloop-alpha-$(id -u)"
 r_fuzzy_guard_file="/tmp/lossy-token-eff-r-fuzzy-semantic-guard-alpha-$(id -u)"
 r_fuzzy_guard_v2_file="/tmp/lossy-token-eff-r-fuzzy-semantic-guard-v2-alpha-$(id -u)"
@@ -217,6 +229,12 @@ neutralise_all_knobs() {
   printf '%s\n' "-inf"   > "$spec_casc_opt_file"
   printf '%s\n' "-inf"   > "$r_fuzzy_file"
   printf '%s\n' "-inf"   > "$spec_casc_tok_file"
+  printf '%s\n' "-inf"   > "$spec_casc_opt_ent_file"
+  printf '%s\n' "-inf"   > "$spec_casc_tok_lt_file"
+  printf '%s\n' "-inf"   > "$spec_casc_diff_file"
+  printf '%s\n' "-inf"   > "$spec_casc_chow_file"
+  printf '%s\n' "-inf"   > "$spec_casc_opt_head_file"
+  printf '%s\n' "1"      > "$spec_casc_opt_head_beta_file"  # moot once alpha=-inf, written for cleanliness
   printf '%s\n' "-inf"   > "$spec_casc_tok_antiloop_file"
   printf '%s\n' "-inf"   > "$r_fuzzy_guard_file"
   printf '%s\n' "-inf"   > "$r_fuzzy_guard_v2_file"
@@ -333,11 +351,16 @@ DRAFT_SAMPLE_METHOD="${DRAFT_SAMPLE_METHOD:-probabilistic}"
 # autoregressive (one token per forward pass) and does not set this field.
 PARALLEL_DRAFTING="${PARALLEL_DRAFTING:-false}"
 
+# Speculative method. eagle3 for both campaign drafters; the addendum's step
+# 4.3 (campaign/addendum/README.md) sets SPEC_METHOD=draft_model to run a
+# standalone LM drafter (Qwen/Qwen3-0.6B for Qwen3-8B) through the same sampler.
+SPEC_METHOD="${SPEC_METHOD:-eagle3}"
+
 spec_json() {
   local method="$1"
   local extra="$2"
-  printf '{"method":"eagle3","model":"%s","num_speculative_tokens":%s,"rejection_sample_method":"%s","draft_sample_method":"%s","parallel_drafting":%s%s}' \
-    "$DRAFT_MODEL_PATH" "$NUM_SPEC" "$method" "$DRAFT_SAMPLE_METHOD" "$PARALLEL_DRAFTING" "$extra"
+  printf '{"method":"%s","model":"%s","num_speculative_tokens":%s,"rejection_sample_method":"%s","draft_sample_method":"%s","parallel_drafting":%s%s}' \
+    "$SPEC_METHOD" "$DRAFT_MODEL_PATH" "$NUM_SPEC" "$method" "$DRAFT_SAMPLE_METHOD" "$PARALLEL_DRAFTING" "$extra"
 }
 
 probe_patched() {
@@ -422,6 +445,47 @@ case "$MODE" in
           exit 5
         }
         echo "mode=lossy rule=spec_casc_tok alpha=$SPEC_CASC_TOK_ALPHA (via $spec_casc_tok_file) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      spec_casc_opt_ent)
+        printf '%s\n' "$SPEC_CASC_OPT_ENT_ALPHA" > "$spec_casc_opt_ent_file"
+        probe_patched "_SPEC_CASC_OPT_ENT_ALPHA" || {
+          echo "LOSSY_RULE=spec_casc_opt_ent needs the patch: bash patches/apply.sh spec-casc-opt-ent" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_opt_ent alpha=$SPEC_CASC_OPT_ENT_ALPHA (via $spec_casc_opt_ent_file) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      spec_casc_tok_lt)
+        printf '%s\n' "$SPEC_CASC_TOK_LT_ALPHA" > "$spec_casc_tok_lt_file"
+        probe_patched "_SPEC_CASC_TOK_LT_ALPHA" || {
+          echo "LOSSY_RULE=spec_casc_tok_lt needs the patch: bash patches/apply.sh spec-casc-tok-lt" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_tok_lt alpha=$SPEC_CASC_TOK_LT_ALPHA (via $spec_casc_tok_lt_file) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      spec_casc_diff)
+        printf '%s\n' "$SPEC_CASC_DIFF_ALPHA" > "$spec_casc_diff_file"
+        probe_patched "_SPEC_CASC_DIFF_ALPHA" || {
+          echo "LOSSY_RULE=spec_casc_diff needs the patch: bash patches/apply.sh spec-casc-diff" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_diff alpha=$SPEC_CASC_DIFF_ALPHA (via $spec_casc_diff_file) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      spec_casc_chow)
+        printf '%s\n' "$SPEC_CASC_CHOW_ALPHA" > "$spec_casc_chow_file"
+        probe_patched "_SPEC_CASC_CHOW_ALPHA" || {
+          echo "LOSSY_RULE=spec_casc_chow needs the patch: bash patches/apply.sh spec-casc-chow" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_chow alpha=$SPEC_CASC_CHOW_ALPHA (via $spec_casc_chow_file) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      spec_casc_opt_head)
+        printf '%s\n' "$SPEC_CASC_OPT_HEAD_ALPHA" > "$spec_casc_opt_head_file"
+        printf '%s\n' "$SPEC_CASC_OPT_HEAD_BETA" > "$spec_casc_opt_head_beta_file"
+        probe_patched "_SPEC_CASC_OPT_HEAD_BETA" || {
+          echo "LOSSY_RULE=spec_casc_opt_head needs the patch: bash patches/apply.sh spec-casc-opt-head" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_opt_head alpha=$SPEC_CASC_OPT_HEAD_ALPHA beta=$SPEC_CASC_OPT_HEAD_BETA (via $spec_casc_opt_head_file, $spec_casc_opt_head_beta_file) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
         ;;
       spec_casc_tok_antiloop)
         printf '%s\n' "$SPEC_CASC_TOK_ANTILOOP_ALPHA" > "$spec_casc_tok_antiloop_file"

@@ -46,8 +46,15 @@ class MethodSpec:
             raise ValueError(f"mentored_dec alpha must be in [0, 1); got {alpha}")
         if self.name == "cactus" and alpha < 0.0:
             raise ValueError(f"cactus alpha must be >= 0 (it bounds a KL divergence); got {alpha}")
+        if self.name == "spec_casc_chow" and alpha > 1.0:
+            raise ValueError(f"spec_casc_chow alpha must be <= 1 (alpha=1 already never defers); got {alpha}")
+        if self.name == "spec_casc_tok_lt" and alpha > 1.0:
+            raise ValueError(
+                f"spec_casc_tok_lt alpha must be <= 1 (alpha=1 already makes the trusted top set the whole "
+                f"vocabulary, i.e. accept every draft token); got {alpha}"
+            )
         if self.name in (
-            "spec_casc_tok", "spec_casc_tok_antiloop", "spec_casc_tok_force_commit",
+            "spec_casc_tok", "spec_casc_tok_lt", "spec_casc_tok_antiloop", "spec_casc_tok_force_commit",
             "spec_casc_tok_self_check", "spec_casc_tok_free_judgment", "spec_casc_tok_rv",
             "spec_casc_tok_judge_nudge",
             "spec_casc_tok_semantic_guard", "spec_casc_tok_semantic_guard_v2",
@@ -186,6 +193,37 @@ class MethodSpec:
                 "to have a real, reproducible kernel-level bug this investigation) -- "
                 "see analysis/semantic_guard/README.md"
             )
+        if self.name == "spec_casc_tok_lt":
+            return (
+                f"accept unconditionally iff p(x) >= (1-{alpha:g})*max(p) (x in the verifier's trusted top "
+                "set), else the strict p/q test -- spec-casc-tok's in-set free pass with a lossless tail "
+                "instead of the eta*p penalty outside the set; residual sampling stays on stock p -- "
+                "see cascade/README.md"
+            )
+        if self.name == "spec_casc_diff":
+            return (
+                f"defer to strict p/q test iff max_u q(u) < max_u p(u) - {alpha:g} (constant margin, "
+                "Narasimhan et al. 2025 Eq. 5), else accept unconditionally -- see cascade/METHODS.md"
+            )
+        if self.name == "spec_casc_chow":
+            return (
+                f"defer to strict p/q test iff max_u q(u) < {1.0 - alpha:g} (Chow's rule, Narasimhan et al. "
+                "2025 Eq. 2; the verifier is not consulted for the decision), else accept unconditionally "
+                "-- see cascade/METHODS.md"
+            )
+        if self.name == "spec_casc_opt_head":
+            return (
+                f"defer to strict p/q test iff max_u q(u) < max_u p(u) - {alpha:g}*TV(p,q) OR "
+                "p(x) < (1-beta)*max(p) (beta from its own knob file / --spec-casc-opt-head-beta), else "
+                "accept unconditionally -- spec-casc-opt restricted to the verifier's head; see cascade/METHODS.md"
+            )
+        if self.name == "spec_casc_opt_ent":
+            return (
+                f"defer to strict p/q test iff H(q) > H(p) + {alpha:g}*TV(p,q) (entropies in nats), else "
+                "accept unconditionally -- spec-casc-opt's Lemma 4 deferral with the log-loss/entropy "
+                "plug-in (Narasimhan et al. 2025 App. C.2) in place of the top-1 plug-in -- "
+                "see cascade/README.md"
+            )
         raise ValueError(self.name)
 
 
@@ -240,6 +278,70 @@ METHODS: dict[str, MethodSpec] = {
                 "family": "speculative cascades [OPT] (Narasimhan et al. 2025)",
                 "paper_name": "spec-casc-opt",
                 "reference": "Xia et al. 2026 (arXiv:2607.08690) Table 2 / Eq. 12",
+            },
+        ),
+        MethodSpec(
+            name="spec_casc_diff",
+            hashes_label="spec-casc-diff",
+            env_var="SPEC_CASC_DIFF_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-diff-alpha-{_uid()}"),
+            log_prefix="[SPEC-CASC-DIFF PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf); constant margin, stricter than spec_casc_opt at the same negative alpha",
+            default_alpha=0.0,
+            taxonomy={
+                "family": "speculative cascades, confidence-difference deferral (Narasimhan et al. 2025 Eq. 5; "
+                "cascade-workspace baseline, not in Xia et al.)",
+                "paper_name": "spec-casc-diff",
+                "reference": "cascade/METHODS.md",
+            },
+        ),
+        MethodSpec(
+            name="spec_casc_chow",
+            hashes_label="spec-casc-chow",
+            env_var="SPEC_CASC_CHOW_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-chow-alpha-{_uid()}"),
+            log_prefix="[SPEC-CASC-CHOW PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, 1]; trust the drafter iff max q >= 1-alpha",
+            default_alpha=0.5,
+            taxonomy={
+                "family": "speculative cascades, Chow's-rule deferral (Narasimhan et al. 2025 Eq. 2; "
+                "cascade-workspace baseline, not in Xia et al.)",
+                "paper_name": "spec-casc-chow",
+                "reference": "cascade/METHODS.md",
+            },
+        ),
+        MethodSpec(
+            name="spec_casc_opt_head",
+            hashes_label="spec-casc-opt-head",
+            env_var="SPEC_CASC_OPT_HEAD_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-opt-head-alpha-{_uid()}"),
+            log_prefix="[SPEC-CASC-OPT-HEAD PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf) like spec_casc_opt; second knob beta in (-inf, 1] via --spec-casc-opt-head-beta",
+            default_alpha=0.05,
+            taxonomy={
+                "family": "speculative cascades [OPT] restricted to the verifier's head "
+                "(this repo's own cascade-workspace hybrid of spec-casc-opt and spec-casc-tok, not in Xia et al.)",
+                "paper_name": "spec-casc-opt-head",
+                "reference": "cascade/METHODS.md",
+            },
+        ),
+        MethodSpec(
+            name="spec_casc_opt_ent",
+            hashes_label="spec-casc-opt-ent",
+            env_var="SPEC_CASC_OPT_ENT_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-opt-ent-alpha-{_uid()}"),
+            log_prefix="[SPEC-CASC-OPT-ENT PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf); entropies are in nats, so NOT comparable to spec_casc_opt's alpha",
+            default_alpha=0.0,
+            taxonomy={
+                "family": "speculative cascades [OPT], entropy (log-loss) plug-in of Lemma 4 "
+                "(this repo's own cascade-workspace experiment, not in Xia et al.)",
+                "paper_name": "spec-casc-opt-ent",
+                "reference": "cascade/README.md; Narasimhan et al. 2025 Lemma 4 + App. C.2",
             },
         ),
         MethodSpec(
@@ -315,6 +417,22 @@ METHODS: dict[str, MethodSpec] = {
                 "family": "speculative cascades [Tok] (Narasimhan et al. 2025 appendix)",
                 "paper_name": "spec-casc-tok",
                 "reference": "Xia et al. 2026 (arXiv:2607.08690) Appendix B, Eq. 15",
+            },
+        ),
+        MethodSpec(
+            name="spec_casc_tok_lt",
+            hashes_label="spec-casc-tok-lt",
+            env_var="SPEC_CASC_TOK_LT_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-tok-lt-alpha-{_uid()}"),
+            log_prefix="[SPEC-CASC-TOK-LT PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, 1], NOT 0.0 for strict",
+            default_alpha=0.3,
+            taxonomy={
+                "family": "speculative cascades [Tok] with a lossless tail "
+                "(this repo's own cascade-workspace experiment, not in Xia et al.)",
+                "paper_name": "spec-casc-tok-lt",
+                "reference": "cascade/README.md; Narasimhan et al. 2025 Eq. 15 used as a hard switch",
             },
         ),
         MethodSpec(
@@ -523,7 +641,14 @@ TRACE_PATH_FILE = pathlib.Path(f"/tmp/lossy-token-eff-trace-{_uid()}")
 # accept-kernel change is the smallest (one multiply, no full-vocab
 # reduction), so it's the least likely of the five to be the source of any
 # measurement artifact if one ever turns up.
-STRICT_TRACE_CARRIER = "mentored_dec"
+# Changed 2026-09-11 from mentored_dec: its self-test asserts that the V2
+# runner file (rejection_sampler_utils.py) is patched too, and the
+# consolidated V2 state exists only on the original H100 box (cascade/
+# DIRECTIONS.md D8) -- on a fresh install (Nibi) apply.sh mentored-dec
+# therefore fails and every strict arm with it. spec_casc_opt is V1-only,
+# is exactly strict at its -inf neutral value (which run_server_vllm.sh's
+# strict mode writes), and its kernel is the one verified on Nibi in E0.
+STRICT_TRACE_CARRIER = "spec_casc_opt"
 
 _ALPHA_RE = re.compile(r"alpha=(-?inf|nan|[0-9.eE+-]+)")
 

@@ -83,6 +83,13 @@ def parse_args() -> argparse.Namespace:
         help="spec_casc_tok_semantic_guard_future_guard_and only: length of the AND-combined window after an accepted marker.",
     )
     parser.add_argument(
+        "--spec-casc-opt-head-beta",
+        type=float,
+        default=0.8,
+        help="spec_casc_opt_head only: head width beta in (-inf, 1]; the drafted token gets opt's free pass "
+        "only if p(x) >= (1-beta)*max p. 1 = plain spec_casc_opt. See cascade/METHODS.md.",
+    )
+    parser.add_argument(
         "--spec-casc-tok-force-commit-threshold",
         type=int,
         default=28000,
@@ -175,6 +182,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tag-suffix", default="", help="Appended to the default per-arm tag.")
     parser.add_argument("--temperature", type=float, default=1.0, help="Fixed, not 0: draft_sample_method=probabilistic needs a real distribution to sample from.")
     parser.add_argument("--top-p", type=float, default=1.0)
+    parser.add_argument("--top-k", type=int, default=None, help="Optional; not sent unless given.")
     parser.add_argument("--max-new-tokens", type=int, default=9000)
     parser.add_argument("--server-seed", type=int, default=0, help="vLLM's own --seed. Fixed for replicability.")
     parser.add_argument("--num-spec", type=int, default=6, help="EAGLE3 draft length (NUM_SPEC).")
@@ -267,6 +275,8 @@ def method_and_params_for(args: argparse.Namespace, arm: str) -> tuple[str, str]
     params = f"alpha{alpha:g}".replace("-", "neg")
     if arm == "spec_casc_tok_semantic_guard_future_guard":
         params += f"_k{args.spec_casc_tok_semantic_guard_future_guard_k}"
+    if arm == "spec_casc_opt_head":
+        params += f"_beta{args.spec_casc_opt_head_beta:g}".replace("-", "neg")
     if arm == "spec_casc_tok_semantic_guard_future_guard_and":
         params += f"_k{args.spec_casc_tok_semantic_guard_future_guard_and_k}"
     if arm == "spec_casc_tok_force_commit":
@@ -437,6 +447,22 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
     if arm != "baseline":
         ensure_patch_applied(arm if arm not in ("strict",) else STRICT_TRACE_CARRIER)
 
+    # remote/stop_server.sh waits for the GPU to be released, not for the
+    # previous API server to close its listening socket; on Nibi (2026-09-15,
+    # longbench_v2 E1P) the next server hit "Address already in use". Wait
+    # for the port to be free before launching.
+    import socket
+
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.settimeout(1.0)
+            if probe.connect_ex(("127.0.0.1", args.port)) != 0:
+                break
+        time.sleep(2.0)
+    else:
+        raise RuntimeError(f"port {args.port} still in use 90s after stop_server; refusing to start another server on it")
+
     env = dict(os.environ)
     env["PYTHON"] = args.python
     env["PORT"] = str(args.port)
@@ -452,6 +478,8 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
         env[METHODS[arm].env_var] = f"{alpha_for(args, arm):g}"
         if arm == "spec_casc_tok_semantic_guard_future_guard":
             env["SPEC_CASC_TOK_FUTURE_GUARD_K"] = str(args.spec_casc_tok_semantic_guard_future_guard_k)
+        if arm == "spec_casc_opt_head":
+            env["SPEC_CASC_OPT_HEAD_BETA"] = f"{args.spec_casc_opt_head_beta:g}"
         if arm == "spec_casc_tok_semantic_guard_future_guard_and":
             env["SPEC_CASC_TOK_FUTURE_GUARD_AND_K"] = str(args.spec_casc_tok_semantic_guard_future_guard_and_k)
         if arm == "spec_casc_tok_force_commit":
@@ -527,6 +555,8 @@ def request_once(
     ]
     if arm not in ("baseline", "strict"):
         command += ["--lossy-method", arm, "--alpha", f"{alpha_for(args, arm):g}"]
+    if args.top_k is not None:
+        command += ["--top-k", str(args.top_k)]
     if args.overwrite:
         command.append("--overwrite")
     return subprocess.run(command, cwd=REPO_ROOT, check=False)

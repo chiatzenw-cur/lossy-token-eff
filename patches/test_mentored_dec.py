@@ -29,6 +29,15 @@ MODULES = (
     "vllm.v1.sample.rejection_sampler",
     "vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils",
 )
+V2_MODULE = MODULES[1]
+# MENTORED_DEC_TEST_V1_ONLY=1 (set by the addendum lanes for GPT-OSS-20B items only,
+# campaign/addendum/README.md): GPT-OSS-20B runs the V1 sampler exclusively
+# (patches/HASHES.txt, rejection_sampler_utils.py section), and on a fresh install
+# the V2 file is pristine because its consolidated multi-method state is not in
+# the repo (cascade/DIRECTIONS.md D8). With the variable set AND the V2 module
+# pristine, the plumbing check covers the V1 module only; the V1 kernel test is
+# unaffected. A patched V2 module is always checked.
+V1_ONLY = os.environ.get("MENTORED_DEC_TEST_V1_ONLY") == "1"
 
 READ_BACK = """
 import importlib, json, sys
@@ -67,17 +76,22 @@ def test_alpha_plumbing() -> None:
     try:
         ALPHA_FILE.write_text("0.63\n")  # lam = 0.37, matches sibling repo's test value
         got = read_back_in_subprocess()
-        for name in MODULES:
+        modules = MODULES
+        if V1_ONLY and got[V2_MODULE]["alpha"] is None:
+            modules = MODULES[:1]
+            print("  skip  V2 module is pristine and MENTORED_DEC_TEST_V1_ONLY=1 (V1-only target): checking the V1 module only")
+        for name in modules:
             assert got[name]["alpha"] == 0.63, f"{name}: {got[name]}"
             assert abs(got[name]["lam"] - 0.37) < 1e-12, f"{name}: {got[name]}"
             assert got[name]["path"] == str(ALPHA_FILE), f"{name}: {got[name]}"
-        log_lam = got["vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils"]["log_lam"]
-        assert log_lam is not None and abs(log_lam - math.log(0.37)) < 1e-12, log_lam
-        print(f"  ok  both modules read {ALPHA_FILE} -> alpha=0.63 (lam=0.37)")
+        if V2_MODULE in modules:
+            log_lam = got[V2_MODULE]["log_lam"]
+            assert log_lam is not None and abs(log_lam - math.log(0.37)) < 1e-12, log_lam
+        print(f"  ok  {'both modules read' if len(modules) == 2 else 'the V1 module reads'} {ALPHA_FILE} -> alpha=0.63 (lam=0.37)")
 
         ALPHA_FILE.unlink()
         got = read_back_in_subprocess()
-        for name in MODULES:
+        for name in modules:
             assert got[name]["alpha"] == 0.0, f"{name}: {got[name]}"
             assert got[name]["lam"] == 1.0, f"{name}: {got[name]}"
         print("  ok  missing file falls back to alpha=0.0 (stock rule)")

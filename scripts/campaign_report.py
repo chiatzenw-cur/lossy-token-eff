@@ -77,6 +77,9 @@ METHOD_STYLE: dict[str, dict] = {
     "spec_casc_tok": {"color": "#e87ba4", "marker": "*", "linestyle": "-",  "label": "spec_casc_tok"},
 }
 METHOD_ORDER = list(METHOD_STYLE.keys())
+# Fallback encodings for any method outside the fixed five (see render_graph).
+EXTRA_MARKERS = ["v", "P", "h", "<", ">", "8", "p", "d"]
+EXTRA_LINESTYLES = ["-", "--", "-.", ":"]
 
 # Lossless reference point (2026-08-15, user request): a single (not swept)
 # `strict` arm, plotted separately from the 5 categorical method lines --
@@ -92,12 +95,24 @@ STRICT_STYLE: dict = {"color": "#3a3a37", "marker": "X", "label": "lossless (str
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dataset", required=True)
+    parser.add_argument(
+        "--seed", default=None,
+        help="Only runs at this request seed (seed_<N> directories); default: every seed found. The addendum "
+        "(campaign/addendum/README.md) writes per-seed tables with it -- pass --tables-out and friends so the "
+        "campaign's own tables/results/graphs are not overwritten.",
+    )
     parser.add_argument("--runs-root", type=pathlib.Path, default=REPO_ROOT / "runs")
     parser.add_argument("--calibration-json", type=pathlib.Path, default=None)
     parser.add_argument("--tables-out", type=pathlib.Path, default=None)
     parser.add_argument("--results-out", type=pathlib.Path, default=None)
     parser.add_argument("--graph-out", type=pathlib.Path, default=None)
     parser.add_argument("--accuracy-graph-out", type=pathlib.Path, default=None)
+    parser.add_argument(
+        "--include-uncalibrated", action="store_true",
+        help="Also report arms with no chosen_alphas entry (two-knob alpha<a>_beta<b> runs from cascade/run.sh, "
+        "guard variants), one results row per (method, params) keyed <method>_<extra>. Off by default so the "
+        "campaign's own results/graphs only change when a method has been through calibration.",
+    )
     return parser.parse_args()
 
 
@@ -175,14 +190,19 @@ def grade_accuracy(runs_root: pathlib.Path, dataset: str) -> dict[tuple[str, str
     prompt_root = REPO_ROOT / "prompts" / dataset
     dataset_root = runs_root / dataset
     kwargs = spec["kwargs"](module) if callable(spec["kwargs"]) else spec["kwargs"]
-    out: dict[tuple[str, str, str], bool] = {}
+    # Keyed by (method, params, case, seed): multi-seed sweeps (cascade/
+    # E1F, E1P) have one verdict per seed, and keying by case alone let the
+    # last-graded seed's verdict stand in for all three (found 2026-09-16:
+    # longbench_v2 strict reported 63% where the true count was 54/90 = 60%).
+    out: dict[tuple[str, str, str, str], bool] = {}
     for run_json in sorted(dataset_root.glob("*/*/*/seed_*/run.json")):
         run_dir = run_json.parent
         row = module.grade(run_dir, prompt_root, **kwargs)
         if row is None:
             continue
         method, params, case = row["method"], row["params"], row["case"]
-        out[(method, params, case)] = row["verdict"] in spec["correct_verdicts"]
+        seed = run_dir.name.replace("seed_", "")
+        out[(method, params, case, seed)] = row["verdict"] in spec["correct_verdicts"]
     return out
 
 
@@ -196,6 +216,8 @@ def main() -> int:
 
     # --- 1. per-case table: every run found, calibration + full sweep alike ---
     all_rows = load_all_runs(args.runs_root, args.dataset)
+    if args.seed is not None:
+        all_rows = [row for row in all_rows if row["seed"] == str(args.seed)]
     if not all_rows:
         print(f"no runs found yet under {args.runs_root / args.dataset}")
         return 0
@@ -218,7 +240,8 @@ def main() -> int:
     def accuracy_of(cases: list[dict]) -> float | None:
         if not accuracy_map:
             return None
-        verdicts = [accuracy_map[(c["method"], c["params"], c["case"])] for c in cases if (c["method"], c["params"], c["case"]) in accuracy_map]
+        keys = [(c["method"], c["params"], c["case"], c["seed"]) for c in cases]
+        verdicts = [accuracy_map[k] for k in keys if k in accuracy_map]
         return mean([1.0 if v else 0.0 for v in verdicts]) if verdicts else None
 
     by_method_alpha: dict[tuple[str, float], list[dict]] = {}
@@ -230,7 +253,11 @@ def main() -> int:
                 by_method_alpha.setdefault((row["method"], alpha), []).append(row)
 
     result_rows = []
-    for method in METHOD_ORDER:
+    # The five taxonomy methods first, in their fixed order, then any other
+    # calibrated method (cascade-workspace variants run through
+    # campaign_run.py --methods ..., which merges into chosen_alphas).
+    calibrated_methods = METHOD_ORDER + sorted(m for m in chosen_alphas if m not in METHOD_ORDER)
+    for method in calibrated_methods:
         for alpha in chosen_alphas.get(method, []):
             cases = by_method_alpha.get((method, alpha), [])
             result_rows.append(
@@ -244,6 +271,37 @@ def main() -> int:
                     "accuracy": accuracy_of(cases),
                 }
             )
+
+    # Arms that never went through calibration (e.g. spec_casc_opt_head's
+    # alpha<a>_beta<b> runs from cascade/run.sh, or the guard variants):
+    # one row per (method, params), keyed as "<method>_<extra params>" so
+    # two betas never collide, alpha = the leading alpha of the params dir.
+    # Methods that DO have a chosen_alphas entry keep their probe-only grid
+    # points excluded, as before.
+    uncalibrated: dict[tuple[str, str], list[dict]] = {}
+    for row in all_rows if args.include_uncalibrated else []:
+        if row["status"] != "ok" or row["method"] in chosen_alphas or row["method"] == "strict":
+            continue
+        if not row["params"].startswith("alpha"):
+            continue
+        uncalibrated.setdefault((row["method"], row["params"]), []).append(row)
+    for (method, params), cases in sorted(uncalibrated.items()):
+        head, _, extra = params.partition("_")
+        try:
+            alpha = float(head.removeprefix("alpha").replace("neg", "-"))
+        except ValueError:
+            continue
+        result_rows.append(
+            {
+                "dataset": args.dataset,
+                "method": f"{method}_{extra}" if extra else method,
+                "alpha": alpha,
+                "n_cases": len(cases),
+                "mean_l_bar": mean([c["l_bar"] for c in cases]),
+                "mean_completion_length": mean([c["output_tokens"] for c in cases]),
+                "accuracy": accuracy_of(cases),
+            }
+        )
 
     # Lossless reference: no alpha axis (method_and_params_for() maps
     # "strict" -> params "strict" too), no calibration/chosen_alphas entry
@@ -300,8 +358,16 @@ def render_graph(
     # completion-length graph but garbled into overlapping text on
     # low-case-count accuracy graphs (see campaign/JOURNAL.md).
     label_offsets = [(6, 4), (6, -14), (6, 16), (6, -24)]
-    for idx, method in enumerate(METHOD_ORDER):
-        style = METHOD_STYLE[method]
+    # Methods outside the fixed five (cascade-workspace variants, guard
+    # arms) get a neutral grey fallback series each, distinguished by
+    # marker/linestyle and their end-label, so the paper's five keep their
+    # palette slots untouched.
+    extra_methods = sorted({r["method"] for r in result_rows} - set(METHOD_ORDER) - {"strict"})
+    for idx, method in enumerate(METHOD_ORDER + extra_methods):
+        style = METHOD_STYLE.get(method) or {
+            "color": "#7a7a75", "marker": EXTRA_MARKERS[(idx - len(METHOD_ORDER)) % len(EXTRA_MARKERS)],
+            "linestyle": EXTRA_LINESTYLES[(idx - len(METHOD_ORDER)) % len(EXTRA_LINESTYLES)], "label": method,
+        }
         points = sorted(
             ((r["mean_l_bar"], r[y_field]) for r in result_rows if r["method"] == method and r["mean_l_bar"] is not None and r[y_field] is not None),
         )

@@ -2513,3 +2513,159 @@ Append-only. One entry per work session. See `campaign/PLAN.md` for the design.
   everywhere except this explicitly-authorized reuse mode, whose data
   carries its own `server_request_ordinal` marker per run for anyone
   who wants to check position-dependence later).
+
+## 2026-09-29 (NAACL-2027 addendum campaign, steps 0-1)
+
+Addendum plan, manifest and all new outputs live in `campaign/addendum/`
+(README, `manifest.csv`, `PROGRESS.md`); branch `addendum-oct2026`. The
+paper's own tables (`campaign/tables`, `campaign/results`) are untouched.
+
+- **Step 0.1, Nibi smoke test passed** (job 22873241, g1, H100 80GB HBM3):
+  GPT-OSS gsm8k case_001 through `persistent_arm_replay.py` at `strict`,
+  request seed 7, into a scratch run root deleted afterwards. 522.9 s from
+  launch to a healthy server (patch switch to the spec-casc-opt carrier +
+  its self-test + server start), 1.04 s of generation (68 tokens, l_bar
+  2.24, final channel reached, ordinal 1).
+- **Step 0.2 blocked**: the consolidated V2 sampler is not on Nibi (both
+  venvs pristine `bfaec14e...`) nor on this Mac; only the old box has it.
+  Every Qwen3 row of the manifest is `blocked` (135 of 253); the install +
+  smoke path is scripted (`scripts/addendum_v2_install.py`) for when the
+  file arrives.
+- **Step 0.3**: Qwen/Qwen3-8B, RedHatAI/Qwen3-8B-speculator.eagle3,
+  Qwen/Qwen3-0.6B pre-downloaded into the Nibi HF cache; the GPT-OSS pair
+  was already there.
+- **Step 0.4**: two lanes, not three (user: "like 2 GPUs"; a third repo +
+  venv copy would cost ~100K of the 500K /project file quota for a lane
+  that has nothing to run while Qwen3 is blocked). Lane A = the
+  `lossy-token-eff` copy on g1-g14, lane B = `lossy-token-eff-lane2` on
+  g15-g28. Each lane writes to its own clean run root on scratch because
+  the Nibi copies' own `runs/` already hold the September E1/E1F/E1P runs
+  at campaign paths (e.g. gsm8k strict seeds 0-2) -- different runs from
+  the Mac's seed-0 data that skip-if-done would otherwise have reused.
+- **Found and avoided**: `cascade/cluster/sync_to_nibi.sh` passes
+  `--delete-excluded` with `/runs/`, `/logs/`, `.venv*` excluded, which
+  deletes exactly those on the receiving side. Code now goes over with tar.
+- **Speed**: Nibi (H100 SXM) is ~3x faster per token than the old box
+  (strict seed 0: 2.2-2.4 vs 7.1 ms/token); longbench_v2 ~15x (prefill).
+  Added step 0.5 `nibiref` (strict seed 0 on Nibi) as the hardware-matched
+  time denominator for Nibi-produced cells. Per-arm overhead is ~5 min, of
+  which ~3 min was `apply.sh` re-running a method's self-test on an
+  already-installed patch -- now skippable (hash-verified) in the lanes.
+- **mentored-dec on Nibi**: its self-test also checks the V2 module, so the
+  first switch to it failed (job 22880871, 06:23Z). V1 kernel checks all
+  passed; the V2 plumbing check is now scoped to V1 for GPT-OSS items only.
+- **Step 1 (zero-GPU analyses)** in `campaign/addendum/analysis/`. The
+  regrade of all 18,265 campaign runs on Nibi (CPU job 22892393, 5 min)
+  matches the paper's accuracy in all 135 graded cells. Eq. 4 vs measured
+  over the 60 loosest cells reproduces the paper's counts exactly (33 Eq. 4
+  wins, 38 rounds wins, 27 time wins; 6 and 11 time losses); new: 20 cells
+  are time losses beyond the 95% paired bootstrap interval, but only 1 of
+  the 6 Eq. 4-win/time-loss cells and 2 of the 11 rounds-win/time-loss
+  cells are. GPT-OSS inflation is almost all thinking (93-103% of the extra
+  characters; AIME24 answers get shorter); Spearman(lambda, time-per-round
+  ratio) = 0.58 over the 60 cells. Step 1.9 (MT-Bench judge) is written and
+  dry-run, blocked on an Anthropic API key.
+
+- **2026-09-29, addendum step 3 (GPT-OSS half) done** (lane B, jobs
+  22881159): strict at N_draft 2/3/4/8/10, gsm8k + livecodebench, seed 0,
+  all cases, plus the Nibi N=6 reference (`nibiref`). Shorter drafts are a
+  little faster (N 2-4: 0.91-0.95x the N=6 time, not significant at 95%),
+  longer ones significantly slower (N 10: 1.22-1.24x); l_bar 1.43 -> 2.88 on
+  gsm8k. Tables: `campaign/addendum/tables/nspec__*.csv`. The Qwen3 half is
+  blocked on the V2 sampler.
+
+- **2026-09-29, addendum step 4.1 (GPT-OSS half) done** (lane B): strict at
+  T 1.2 and 1.5, gsm8k + livecodebench, seed 0, all cases. Lossless T 1.2
+  inflates gsm8k by 1.27x (accuracy unchanged) and livecodebench by 1.07x;
+  T 1.5 inflates 3.9x / 1.8x with gsm8k accuracy 0.31 (48% cap-outs).
+  Tables: `campaign/addendum/tables/temp__*.csv`. Qwen3 half blocked.
+
+- **2026-09-29, addendum step 2.1 (GPT-OSS half) done** (lane A, job
+  22880871): seeds 1 and 2 of strict + the five rules at their loosest alpha
+  on gsm8k, humaneval, mtbench, livecodebench, all cases (48 arms); AIME24
+  seeds 1-2 (step 2.2) also done on lane B. lambda, rounds ratio and
+  accuracy replicate (median seed sd 0.09, 0.06, 2.2 points); the time
+  ratio does not: 1.18 on the old-box seed 0 vs 1.00 / 1.02 on the Nibi
+  seeds. Traced to a ~3 ms-per-emitted-token cost on the old box (absent on
+  Nibi's H100 SXM), which made relaxed rules' rounds 13% slower there
+  (`campaign/addendum/analysis/{seed_shift,hardware_tpr_model,
+  hardware_tpr_ratio}.csv`, `scripts/addendum_hardware.py`).
+
+- **2026-09-29, addendum step 6 (GPT-OSS half) done** (lane B): AIME24
+  seeds 3-4 for strict + the five rules at their loosest alpha (seeds 1-2
+  came from step 2.2). Accuracy over seeds 0-4: strict 0.79, mentored_dec
+  0.68, spec_casc_tok 0.68, cactus 0.51, r_fuzzy 0.48, spec_casc_opt 0.39
+  (`campaign/addendum/aime24_repeats.csv`). Qwen3 half blocked.
+
+- **2026-09-29, addendum step 2.2 (GPT-OSS half) done** (lane B, jobs
+  22881159, 22881281; 2.2 GPU-h): longbench_v2 seeds 1-2 for strict,
+  mentored_dec, spec_casc_opt and r_fuzzy at their loosest alpha, all 150
+  cases (AIME24 seeds 1-2 are in the step 6 entry). lambda replicates
+  (mean over seeds 0-2: mentored_dec 1.53, spec_casc_opt 1.79, r_fuzzy
+  1.65; sd 0.04-0.07) and so does the accuracy cost (strict 0.56 / 0.57 /
+  0.55 vs mentored_dec 0.51 / 0.52 / 0.53, spec_casc_opt 0.47 / 0.45 /
+  0.51, r_fuzzy 0.40 / 0.42 / 0.51). The time ratio moves the other way
+  from the step 2.1 datasets: spec_casc_opt 1.07 on the old box vs 1.29 /
+  1.24 on Nibi -- longbench_v2 was prefill-bound on the old box (72.6 vs
+  4.7 s per strict case), which diluted the relaxed rules' extra decode
+  time there. `campaign/addendum/seeds/summary.csv`. spec_casc_opt seed 2
+  was collected in two sessions (job 22881159 hit its 12 h limit after 59
+  cases; 22881281 quarantined the one partial run dir, case_060, and ran
+  the other 91).
+
+- **2026-09-29, addendum step 5 (GPT-OSS half) done** (lane A; 5.1 in job
+  22880871, 3.5 GPU-h; 5.2 in job 22931500, 2.4 GPU-h). 5.1 filled the 18
+  missing seed-0 cells, so every GPT-OSS dataset now has mentored_dec at
+  0.15/0.35/0.55/0.75 and spec_casc_tok at 0.15/0.35/0.55/0.8; the fills ran
+  on Nibi, so their time ratios are taken against the Nibi strict reference.
+  5.2 picked, per dataset and rule, the alpha with the lowest seed-0 time
+  ratio among those within 2 accuracy points of strict (mtbench: rounds
+  ratio < 1) -- mentored_dec 0.55 everywhere but mtbench (0.75),
+  spec_casc_tok 0.55 / 0.35 / 0.15 -- and re-ran it at seed 1 on Nibi against
+  Nibi strict seed 1. 7 of 12 hold (gsm8k both, mentored_dec time ratio 0.75;
+  humaneval both; livecodebench spec_casc_tok; mtbench both). 5 do not:
+  aime24 mentored_dec (accuracy 0.70 vs 0.80), aime24 spec_casc_tok (time
+  1.12), livecodebench mentored_dec (0.87 vs 0.90), longbench_v2 both (time
+  1.03 / 1.04, rounds 1.09). `campaign/addendum/best_setting.csv`. Qwen3 half
+  blocked on the V2 sampler.
+
+- **2026-09-29, addendum step 1 done** (step 1.9, the MT-Bench judge; this
+  supersedes the "blocked on an Anthropic API key" note above). FastChat
+  single-answer grading of turn 1, judge claude-fable-5-1 at effort medium
+  through the Message Batches API (2070 requests, $45.16; the batch sat
+  unprocessed for ~9 h, then ran in ~1 h). Seed 0, loosest alpha, mean
+  score out of 10 (`campaign/addendum/analysis/mtbench_judge_summary.csv`):
+  GPT-OSS strict 7.29 vs spec_casc_tok 7.49, mentored_dec 6.41,
+  spec_casc_opt 5.74, r_fuzzy 4.58, cactus 4.51; Qwen3 strict 6.94 vs
+  spec_casc_tok 7.21, mentored_dec 6.40, spec_casc_opt 3.95, r_fuzzy 3.05,
+  cactus 2.99. So the rules that inflate MT-Bench length most also cost the
+  most quality; spec_casc_tok costs none. Also refreshed: per_request.csv
+  now covers all 27,096 runs with a machine column (seed-0 tables
+  unchanged).
+
+- **2026-09-30, addendum step 7 (SPEED-Bench, GPT-OSS half, non-HLE
+  cases) done** (lanes A + B, jobs 22931500, 22881281; 4.2 GPU-h).
+  Qualitative split, strict + the five rules at their loosest alpha, seed
+  0, token budget 8192 (the reasoning pilot saw 0/20 strict cap-outs).
+  672 of 880 prompts: the 208 from cais/hle (most of Math, Humanities,
+  STEM) wait for a Hugging Face token. Over all 672 cases every rule saves
+  rounds and time despite longer completions -- lambda 1.09-1.26, rounds
+  0.63-0.95, time 0.62-0.92, all beyond the 95% interval; cactus saves most
+  (time 0.62), spec_casc_tok least (0.92). Writing and roleplay save most
+  (cactus rounds 0.36 / 0.53); multilingual is where length inflation wins
+  (spec_casc_opt and r_fuzzy lambda 1.87 / 1.86, time 1.32 / 1.30, both
+  beyond the interval). On Nibi the rounds and time verdicts never disagree
+  in any category. `campaign/addendum/tables/speedbench{,_eq4,_eq4_summary,
+  _pilot}__gpt-oss-20b.csv`.
+
+- **2026-09-30, addendum step 0.2 done: the consolidated V2 sampler is back.**
+  Bill recovered `rejection_sampler_utils.py` from the old H100 box. The copy
+  arrived with CRLF line endings and no final newline (sha256 a031ce63...);
+  normalized, it is byte-identical to the recorded final state 68d0a904...
+  (alpha-gate fix, mask fix, gated debug prints; `patches/HASHES.txt`). It is
+  now `patches/vllm-0.26.0-v2-consolidated.patch` (diff against pristine
+  vLLM 0.26.0, round trip verified) and installed in both lane venvs.
+  Qwen3 smoke test on lane A (gsm8k_qwen3 case_001, seed 7): strict and
+  mentored_dec 0.75 both ok, and the server log shows `[MENTORED-DEC PATCH V2
+  (re-added)] alpha=0.75` in the engine process. All 141 Qwen3 rows (plus
+  Qwen3's own SPEED-Bench pilot) queued over lanes A and B, ~37 GPU-h each.

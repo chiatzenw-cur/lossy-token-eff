@@ -92,6 +92,8 @@ def request_many(
     ]
     if arm not in ("baseline", "strict"):
         command += ["--lossy-method", arm, "--alpha", f"{fsr.alpha_for(args, arm):g}"]
+    if args.top_k is not None:
+        command += ["--top-k", str(args.top_k)]
     if args.overwrite:
         command.append("--overwrite")
     return subprocess.run(command, cwd=REPO_ROOT, check=False)

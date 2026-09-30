@@ -35,8 +35,26 @@ ALPHA_GRIDS: dict[str, list[float]] = {
     "spec_casc_opt": [-0.3, -0.1, -0.02, 0.05],
     "r_fuzzy": [0.03, 0.08, 0.15, 0.25],
     "spec_casc_tok": [0.15, 0.35, 0.55, 0.8],
+    # Cascade-workspace variants (cascade/README.md): opt-in via --methods,
+    # never part of the default five-method campaign. First-guess grids --
+    # spec_casc_tok_lt reuses spec_casc_tok's alpha semantics; spec_casc_opt_ent
+    # compares entropies in nats, so spec_casc_opt's grid does not transfer.
+    # Both need the calibration stage before their l̄ band is known.
+    "spec_casc_tok_lt": [0.15, 0.35, 0.55, 0.8],
+    "spec_casc_opt_ent": [-2.0, -0.5, 0.0, 0.5],
+    # Source-paper baseline deferral rules (cascade/METHODS.md). diff shares
+    # opt's grid (constant margin instead of alpha*TV: stricter than opt at the
+    # same negative alpha, looser at positive); chow's alpha is a drafter
+    # confidence threshold (trust iff max q >= 1-alpha).
+    "spec_casc_diff": [-0.3, -0.1, -0.02, 0.05],
+    "spec_casc_chow": [0.1, 0.3, 0.5, 0.7],
+    # spec_casc_opt_head has a second knob (beta) that this single-knob
+    # calibration cannot place in the run directory; run it through
+    # cascade/run.sh (fresh_server_replay.py / persistent_arm_replay.py with
+    # --spec-casc-opt-head-beta) instead.
 }
-METHODS = list(ALPHA_GRIDS.keys())
+TAXONOMY_METHODS = ["mentored_dec", "cactus", "spec_casc_opt", "r_fuzzy", "spec_casc_tok"]
+METHODS = TAXONOMY_METHODS  # the default --methods; every ALPHA_GRIDS key is an allowed choice
 
 # dataset -> --max-new-tokens budget (campaign/PLAN.md's "Per-dataset token budget" table)
 TOKEN_BUDGETS: dict[str, int] = {
@@ -111,7 +129,7 @@ def model_family_for(dataset: str) -> tuple[str, str, str, str]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dataset", required=True, choices=sorted(TOKEN_BUDGETS.keys()))
-    parser.add_argument("--methods", nargs="+", default=METHODS, choices=METHODS)
+    parser.add_argument("--methods", nargs="+", default=METHODS, choices=list(ALPHA_GRIDS.keys()))
     parser.add_argument("--full-cases", type=int, default=12, help="Total cases in the full sweep.")
     parser.add_argument("--calib-cases", type=int, default=3, help="Leading subset of --full-cases used for calibration.")
     parser.add_argument("--num-targets", type=int, default=3)
@@ -123,6 +141,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-strict", action="store_true",
         help="Skip the lossless (`strict`) reference pass. On by default since 2026-08-15 (user request) -- pass this to opt out.",
+    )
+    parser.add_argument(
+        "--retarget", action="store_true",
+        help="Recompute the shared l̄ targets from THIS run's methods instead of reusing the targets already "
+        "recorded in campaign/calibration/<dataset>.json. Default (reuse) keeps an add-on --methods run on the "
+        "same matched-l̄ band as the methods already in the file; either way the file is merged, never "
+        "overwritten, so other methods' chosen alphas survive.",
     )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -277,12 +302,9 @@ def mean(values: list[float]) -> float | None:
     return sum(values) / len(values) if values else None
 
 
-def pick_targets_and_alphas(
-    grid_results: dict[str, list[tuple[float, float]]], num_targets: int
-) -> tuple[list[float], dict[str, list[float]]]:
-    """grid_results: method -> [(alpha, mean_l_bar), ...] sorted by alpha,
-    only points with a real measurement. See campaign/PLAN.md's
-    'Target-selection rule' for what this implements."""
+def pick_targets(grid_results: dict[str, list[tuple[float, float]]], num_targets: int) -> list[float]:
+    """The shared l̄ band across methods -> num_targets target values. See
+    campaign/PLAN.md's 'Target-selection rule'."""
     mins = {m: min(l for _, l in pts) for m, pts in grid_results.items() if pts}
     maxs = {m: max(l for _, l in pts) for m, pts in grid_results.items() if pts}
     if not mins:
@@ -291,8 +313,24 @@ def pick_targets_and_alphas(
     if hi <= lo:  # ranges don't overlap across every method -- fall back to the global span
         lo, hi = min(mins.values()), max(maxs.values())
     fractions = [0.2, 0.55, 0.9] if num_targets == 3 else [i / (num_targets - 1) for i in range(num_targets)]
-    targets = [lo + f * (hi - lo) for f in fractions[:num_targets]]
+    return [lo + f * (hi - lo) for f in fractions[:num_targets]]
 
+
+def pick_targets_and_alphas(
+    grid_results: dict[str, list[tuple[float, float]]], num_targets: int
+) -> tuple[list[float], dict[str, list[float]]]:
+    """grid_results: method -> [(alpha, mean_l_bar), ...] sorted by alpha,
+    only points with a real measurement. See campaign/PLAN.md's
+    'Target-selection rule' for what this implements."""
+    targets = pick_targets(grid_results, num_targets)
+    return targets, pick_alphas(grid_results, targets, num_targets)
+
+
+def pick_alphas(
+    grid_results: dict[str, list[tuple[float, float]]], targets: list[float], num_targets: int
+) -> dict[str, list[float]]:
+    """Per method, the grid alpha whose measured l̄ is nearest each target
+    (falling back to the grid extremes when targets collapse onto one point)."""
     chosen: dict[str, list[float]] = {}
     for method, pts in grid_results.items():
         if not pts:
@@ -307,7 +345,7 @@ def pick_targets_and_alphas(
                 if len(distinct) >= num_targets:
                     break
         chosen[method] = distinct[:num_targets]
-    return targets, chosen
+    return chosen
 
 
 def main() -> int:
@@ -367,8 +405,25 @@ def main() -> int:
                 print(f"warning: no usable l_bar for method={method} alpha={alpha} -- excluded from calibration", file=sys.stderr)
         grid_results[method] = points
 
-    targets, chosen_alphas = pick_targets_and_alphas(grid_results, args.num_targets)
-    print(f"targets (l_bar): {[round(t, 3) for t in targets]}")
+    # Merge into an existing calibration file, never overwrite it: a
+    # --methods subset run (e.g. one cascade-workspace variant) must not
+    # erase the other methods' chosen alphas, which campaign_report.py
+    # builds results/graphs from. By default the new methods are matched to
+    # the targets already on file, so every method in the dataset sits on
+    # the same l̄ band; --retarget recomputes the band from this run alone.
+    existing: dict = {}
+    if calibration_out.is_file():
+        try:
+            existing = json.loads(calibration_out.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"warning: could not read existing {calibration_out} ({exc}); starting fresh", file=sys.stderr)
+    if existing.get("targets_l_bar") and not args.retarget:
+        targets = [float(t) for t in existing["targets_l_bar"]]
+        chosen_alphas = pick_alphas(grid_results, targets, args.num_targets)
+        print(f"reusing targets (l_bar) from {calibration_out.name}: {[round(t, 3) for t in targets]} (--retarget to recompute)")
+    else:
+        targets, chosen_alphas = pick_targets_and_alphas(grid_results, args.num_targets)
+        print(f"targets (l_bar): {[round(t, 3) for t in targets]}")
     for method, alphas in chosen_alphas.items():
         print(f"  {method}: chosen alphas = {alphas}")
 
@@ -381,10 +436,14 @@ def main() -> int:
                 "probe_cases": probe_cases,
                 "full_cases": full_cases,
                 "max_new_tokens": max_new_tokens,
-                "alpha_grids": ALPHA_GRIDS,
-                "grid_results": {m: [{"alpha": a, "mean_l_bar": l} for a, l in pts] for m, pts in grid_results.items()},
+                "last_run_methods": list(args.methods),
+                "alpha_grids": {**existing.get("alpha_grids", {}), **{m: ALPHA_GRIDS[m] for m in args.methods}},
+                "grid_results": {
+                    **existing.get("grid_results", {}),
+                    **{m: [{"alpha": a, "mean_l_bar": l} for a, l in pts] for m, pts in grid_results.items()},
+                },
                 "targets_l_bar": targets,
-                "chosen_alphas": chosen_alphas,
+                "chosen_alphas": {**existing.get("chosen_alphas", {}), **chosen_alphas},
             },
             indent=2,
         ) + "\n",

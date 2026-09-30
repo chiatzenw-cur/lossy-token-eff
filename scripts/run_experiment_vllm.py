@@ -62,6 +62,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seeds", nargs="+", type=int, default=[0])
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top-p", type=float, default=1.0)
+    parser.add_argument("--top-k", type=int, default=None,
+                        help="Optional top-k; omitted from the request unless given (addendum step 4.2: Qwen3 recommended sampler).")
     parser.add_argument("--max-new-tokens", type=int, default=9000)
     parser.add_argument("--timeout", type=float, default=3600.0)
     parser.add_argument("--runs-root", type=pathlib.Path, default=pathlib.Path("runs"))
@@ -587,6 +589,8 @@ def run_one(
         "spaces_between_special_tokens": False,
         "stream": False,
     }
+    if args.top_k is not None:
+        request_payload["top_k"] = args.top_k
 
     config = {
         "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -598,6 +602,7 @@ def run_one(
         "seed": seed,
         "temperature": args.temperature,
         "top_p": args.top_p,
+        **({"top_k": args.top_k} if args.top_k is not None else {}),
         "max_new_tokens": args.max_new_tokens,
         "input_tokens_archived": prompt_metadata.get("input_tokens"),
         "prompt_case": case,
