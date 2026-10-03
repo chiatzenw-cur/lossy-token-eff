@@ -99,5 +99,29 @@ Note on the defer_mask OR: spec_casc_opt's own alpha is a TV-based switch.
 The real-kernel aggressive-alpha test (0.05, 0.999-confident draft) passed
 on GPU, so the OR-in is confirmed load-bearing in that regime.
 
-## mentored_dec -- pending
+## mentored_dec (alpha=0.75) -- complete 8-case screen, length win with one accuracy flip
+
+Threshold 22000 (PROPOSAL.md 4B's AIME24 value, budget-relative to the 32,768
+cap). The arm's alpha must be passed as `--mentored-dec-force-commit-alpha`;
+an earlier attempt that passed the plain-arm flag ran at the default 0.37 and
+was killed. Its partial output in `cross_method_runs/` is at the wrong alpha
+and is excluded from this table.
+
+| | baseline | mentored_dec_force_commit (t=22000) |
+|---|---:|---:|
+| mean completion tokens | 20,782.3 | **17,594.3 (-15.3%)** |
+| accuracy | 5/8 | 5/8 (case_002 wrong->correct, case_007 correct->wrong) |
+| cap hits (32,768) | 3/8 | **1/8** |
+| wrong / no_answer | 3 / 0 | 2 / 1 |
+
+Per-case: case_001, case_005, case_006, case_008 byte-identical. case_002
+32,768 (cap, wrong) -> 23,264 (stop, correct). case_004 32,768 (cap, wrong)
+-> 22,119 (no_answer, stop). case_003 stays capped at 32,768 with 4 final
+tokens. case_007 is NOT capped at baseline (29,389, correct) and was touched
+at 22,000: it finishes at 24,038 but flips to wrong. That is the cost of a
+threshold that sits inside a healthy run's length range. It is the only
+healthy-case perturbation in the screen, and it costs one correct answer.
+
+Net accuracy is unchanged (5/8 both arms), but the correct set changed.
+Clears the screen bar on length, with a caveat on accuracy.
 
