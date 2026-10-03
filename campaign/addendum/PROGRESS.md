@@ -24,11 +24,14 @@ for what is done; this file records every action and failure.
    alphas, so comparability would rest on that file being a no-op at neutral
    alphas. Not done without your say-so.
 2. ~~MT-Bench judge API key (step 1.9)~~ -- resolved 2026-09-29 13:29Z (`~/.config/lossy-token-eff/judge.env`, now mode 600).
-3. **Duo.** The Nibi link is one ControlMaster session opened 2026-09-29
-   05:25Z with a keepalive channel. If it drops, queued jobs keep running on
-   Nibi (lanes are chained up to ~48 h ahead) but nothing is pulled back or
-   resubmitted until one more Duo push is approved.
-4. **SPEED-Bench HLE prompts (step 7) -- 208 of 880 cases.** Humanities
+3. **Duo.** Each cluster link (Nibi, and Killarney since 2026-09-30) is one
+   ControlMaster session with a keepalive channel. When this Mac sleeps both
+   drop; queued jobs keep running, but nothing is pulled back, graded or
+   resubmitted until Bill approves one Duo push per cluster (last done
+   2026-10-02 14:07Z, both).
+4. ~~SPEED-Bench HLE prompts~~ -- closed 2026-10-02: Bill decided not to run
+   them (not essential; README deviation 21). Original ask, for the record:
+   **SPEED-Bench HLE prompts (step 7) -- 208 of 880 cases.** Humanities
    (72/80), Math (62/80) and STEM (74/80) come from `cais/hle`, a gated
    Hugging Face dataset (auto-approved on request). Ask: accept the terms at
    https://huggingface.co/datasets/cais/hle with your HF account, create a
@@ -42,11 +45,8 @@ for what is done; this file records every action and failure.
    succeeded, 10 h after submission; 2.95M in / 1.22M out tokens, $45.16 at
    batch price). The 230 step-5.1 MT-Bench runs added since went in a top-up
    batch `msgbatch_015tcqGs9bFB5aEJwmuAZKTw` (~$5) at 2026-09-30 00:24Z.
-6. **Duo (again).** The Nibi ControlMaster dropped at about 2026-09-29 21:19Z
-   (last keepalive 21:18:43Z; this Mac was not running the session from
-   then until 00:20Z). The lanes do not depend on it; their finished runs
-   wait on Nibi. Ask: approve one Duo push so the collect / grading / plan
-   loop can reconnect.
+6. ~~Duo (again)~~ -- resolved: the 2026-09-29 21:19Z Nibi drop and every
+   later one (both clusters) were reconnected with one push each; see item 3.
 
 ## Log
 
@@ -523,3 +523,500 @@ for what is done; this file records every action and failure.
 - 2026-09-30T19:14:48Z lane B: submitted job 22982401 (afterany:22982392); lane has 48 work items, est. 26.5 GPU-h
 - 2026-09-30T19:14:55Z lane B: submitted job 22982407 (afterany:22982401); lane has 48 work items, est. 26.5 GPU-h
 - 2026-09-30T19:15:17Z Lanes: the 12 h successors (22948709 A, 22948722 B) sat PENDING 13:24Z-19:20Z (Nibi: ~850 pending H100 jobs; our fair-share 0.23). Cancelled the six pending 12 h jobs; resubmitted 3 h chains (A: 22982359 -> 22982360 -> 22982365 -> 22982368; B: 22982379 -> 22982392 -> 22982401 -> 22982407). README deviation 11.
+- 2026-09-30T21:56:41Z grading: uploaded 0 run dir(s) to the Nibi mirror, submitted CPU grading job 22992464
+- 2026-09-30T21:56:43Z grading: pulled 36632 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-09-30T23:00:28Z Killarney lane K1: Qwen3 smoke (gsm8k_qwen3 case_001 seed 7, strict + mentored_dec 0.75) submitted as job 5819283
+- 2026-09-30T23:11:26Z moved 94 Qwen3 row(s) to Killarney (K1: 46, K2: 48; est. K1 25.5 GPU-h, K2 25.7 GPU-h); kept on Nibi: steps 2.1
+- 2026-09-30T23:14:34Z lane K1: synced prompts/speedbench (7.1 MB tar) to the lane repo
+- 2026-09-30T23:14:45Z lane K2: synced prompts/speedbench (7.1 MB tar) to the lane repo
+- 2026-09-30T23:15:01Z lane K1: synced prompts/speedbench_qwen3 (7.1 MB tar) to the lane repo
+- 2026-09-30T23:15:17Z lane K2: synced prompts/speedbench_qwen3 (7.1 MB tar) to the lane repo
+- 2026-09-30T23:15:37Z lane K1: submitted job 5819349; lane has 45 work items, est. 25.4 GPU-h
+- 2026-09-30T23:15:38Z lane K1: submitted job 5819350 (afterany:5819349); lane has 45 work items, est. 25.4 GPU-h
+- 2026-09-30T23:15:40Z lane K1: submitted job 5819351 (afterany:5819350); lane has 45 work items, est. 25.4 GPU-h
+- 2026-09-30T23:15:42Z lane K1: submitted job 5819352 (afterany:5819351); lane has 45 work items, est. 25.4 GPU-h
+- 2026-09-30T23:15:43Z lane K2: submitted job 5819353; lane has 48 work items, est. 25.7 GPU-h
+- 2026-09-30T23:15:45Z lane K2: submitted job 5819354 (afterany:5819353); lane has 48 work items, est. 25.7 GPU-h
+- 2026-09-30T23:15:46Z lane K2: submitted job 5819355 (afterany:5819354); lane has 48 work items, est. 25.7 GPU-h
+- 2026-09-30T23:15:47Z lane K2: submitted job 5819356 (afterany:5819355); lane has 48 work items, est. 25.7 GPU-h
+- 2026-09-30T23:16:33Z Killarney (aip-hongyanz) lanes K1/K2 up: env built (vLLM 0.26.0, V2 patch 68d0a904 in both copies), Qwen3 smoke on kn173 bit-identical to Nibi's; move-qwen3 moved 94 Qwen3 rows (K1 46, K2 48, ~25.5 GPU-h each; step 2.1's last 4 arms stay on Nibi). K1 chain 5819349->...52, K2 chain 5819353->...56 (3 h each). Nibi chains trimmed to 22982359 (A) and 22982379 (B). README deviation 12.
+- 2026-09-30T23:33:35Z lane K1: pulled 8 new run dir(s) into runs/
+- 2026-09-30T23:34:53Z grading: uploaded 8 run dir(s) to the Nibi mirror, submitted CPU grading job 22998412
+- 2026-09-30T23:34:57Z grading: pulled 36632 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-09-30T23:53:30Z lane K1: pulled 14 new run dir(s) into runs/
+- 2026-09-30T23:53:31Z lane K2: pulled 5 new run dir(s) into runs/
+- 2026-09-30T23:54:42Z grading: uploaded 19 run dir(s) to the Nibi mirror, submitted CPU grading job 22999877
+- 2026-09-30T23:54:45Z grading: pulled 36640 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T00:12:30Z lane K1: pulled 9 new run dir(s) into runs/
+- 2026-10-01T00:12:30Z lane K2: pulled 13 new run dir(s) into runs/
+- 2026-10-01T00:12:37Z step 2.2 main aime24_qwen3 strict alpha=strict seed=1: done, 30/30 cases (jobs 5819349, 0.85 GPU-h)
+- 2026-10-01T00:13:12Z grading: uploaded 22 run dir(s) to the Nibi mirror, submitted CPU grading job 23001726
+- 2026-10-01T00:13:15Z grading: pulled 36659 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T00:14:13Z Nibi: moved lane B's 6 open row(s) to lane A (speedbench_pilot|speedbench|strict|strict|0, speedbench|speedbench|strict|strict|0, speedbench|speedbench|spec_casc_opt|0.05|0, speedbench|speedbench|mentored_dec|0.75|0, main|livecodebench_qwen3|r_fuzzy|0.25|1, main|livecodebench_qwen3|spec_casc_tok|0.8|1); lane B's pending job cancelled, so at most three lane jobs run at once (K1, K2, A)
+- 2026-10-01T00:31:50Z lane K1: pulled 13 new run dir(s) into runs/
+- 2026-10-01T00:31:50Z lane K2: pulled 11 new run dir(s) into runs/
+- 2026-10-01T00:32:33Z grading: uploaded 24 run dir(s) to the Nibi mirror, submitted CPU grading job 23002271
+- 2026-10-01T00:32:35Z grading: pulled 36681 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T00:51:02Z lane K1: pulled 13 new run dir(s) into runs/
+- 2026-10-01T00:51:15Z lane K2: pulled 16 new run dir(s) into runs/
+- 2026-10-01T00:51:23Z step 2.2 main aime24_qwen3 spec_casc_opt alpha=0.05 seed=1: done, 30/30 cases (jobs 5819353, 0.95 GPU-h)
+- 2026-10-01T00:53:47Z grading: uploaded 29 run dir(s) to the Nibi mirror, submitted CPU grading job 23002867
+- 2026-10-01T00:53:52Z grading: pulled 36705 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T01:10:51Z lane K1: pulled 11 new run dir(s) into runs/
+- 2026-10-01T01:10:55Z lane K2: pulled 16 new run dir(s) into runs/
+- 2026-10-01T01:11:02Z step 6 main aime24_qwen3 mentored_dec alpha=0.75 seed=1: done, 30/30 cases (jobs 5819349, 0.80 GPU-h)
+- 2026-10-01T01:11:02Z step 6 main aime24_qwen3 cactus alpha=0.35 seed=1: done, 30/30 cases (jobs 5819353, 0.50 GPU-h)
+- 2026-10-01T01:13:14Z grading: uploaded 27 run dir(s) to the Nibi mirror, submitted CPU grading job 23004730
+- 2026-10-01T01:13:17Z grading: pulled 36734 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T01:33:08Z lane K1: pulled 13 new run dir(s) into runs/
+- 2026-10-01T01:33:10Z lane K2: pulled 12 new run dir(s) into runs/
+- 2026-10-01T01:33:51Z grading: uploaded 25 run dir(s) to the Nibi mirror, submitted CPU grading job 23006073
+- 2026-10-01T01:33:54Z grading: pulled 36761 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T01:50:54Z lane A: pulled 8 new run dir(s) into runs/
+- 2026-10-01T01:51:46Z lane K1: pulled 10 new run dir(s) into runs/
+- 2026-10-01T01:51:47Z lane K2: pulled 8 new run dir(s) into runs/
+- 2026-10-01T01:51:54Z step 6 main aime24_qwen3 spec_casc_tok alpha=0.8 seed=1: done, 30/30 cases (jobs 5819349, 0.85 GPU-h)
+- 2026-10-01T01:53:18Z grading: uploaded 26 run dir(s) to the Nibi mirror, submitted CPU grading job 23006621
+- 2026-10-01T01:53:21Z grading: pulled 36786 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T02:10:45Z lane A: pulled 43 new run dir(s) into runs/
+- 2026-10-01T02:11:26Z lane K1: pulled 13 new run dir(s) into runs/
+- 2026-10-01T02:11:27Z lane K2: pulled 9 new run dir(s) into runs/
+- 2026-10-01T02:11:34Z step 2.1 main livecodebench_qwen3 r_fuzzy alpha=0.25 seed=1: done, 90/90 cases (jobs 22982359, 0.51 GPU-h)
+- 2026-10-01T02:11:35Z step 2.2 main aime24_qwen3 r_fuzzy alpha=0.25 seed=1: done, 30/30 cases (jobs 5819353, 1.08 GPU-h)
+- 2026-10-01T02:12:30Z grading: uploaded 65 run dir(s) to the Nibi mirror, submitted CPU grading job 23007033
+- 2026-10-01T02:12:35Z grading: pulled 36812 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T02:29:11Z lane A: pulled 33 new run dir(s) into runs/
+- 2026-10-01T02:29:50Z lane K1: pulled 9 new run dir(s) into runs/
+- 2026-10-01T02:29:51Z lane K2: pulled 12 new run dir(s) into runs/
+- 2026-10-01T02:31:02Z lane K1: submitted job 5821776 (afterany:5819352); lane has 42 work items, est. 23.5 GPU-h
+- 2026-10-01T02:31:55Z grading: uploaded 54 run dir(s) to the Nibi mirror, submitted CPU grading job 23007804
+- 2026-10-01T02:31:59Z grading: pulled 36877 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T02:49:30Z lane A: pulled 30 new run dir(s) into runs/
+- 2026-10-01T02:50:30Z lane K1: pulled 10 new run dir(s) into runs/
+- 2026-10-01T02:50:31Z lane K2: pulled 8 new run dir(s) into runs/
+- 2026-10-01T02:50:37Z step 2.1 main livecodebench_qwen3 r_fuzzy alpha=0.25 seed=2: done, 90/90 cases (jobs 22948693 22982359, 0.42 GPU-h)
+- 2026-10-01T02:50:38Z step 2.2 main aime24_qwen3 strict alpha=strict seed=2: done, 30/30 cases (jobs 5819349 5819350, 0.40 GPU-h)
+- 2026-10-01T02:50:53Z lane K2: submitted job 5821919 (afterany:5819356); lane has 45 work items, est. 23.7 GPU-h
+- 2026-10-01T02:51:09Z grading: uploaded 48 run dir(s) to the Nibi mirror, submitted CPU grading job 23009738
+- 2026-10-01T02:51:12Z grading: pulled 36931 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T03:08:39Z lane A: pulled 36 new run dir(s) into runs/
+- 2026-10-01T03:09:16Z lane K1: pulled 14 new run dir(s) into runs/
+- 2026-10-01T03:09:17Z lane K2: pulled 9 new run dir(s) into runs/
+- 2026-10-01T03:09:49Z grading: uploaded 59 run dir(s) to the Nibi mirror, submitted CPU grading job 23010389
+- 2026-10-01T03:09:55Z grading: pulled 36979 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T03:27:06Z lane A: pulled 33 new run dir(s) into runs/
+- 2026-10-01T03:27:50Z lane K1: pulled 11 new run dir(s) into runs/
+- 2026-10-01T03:27:52Z lane K2: pulled 22 new run dir(s) into runs/
+- 2026-10-01T03:27:58Z step 2.2 main aime24_qwen3 spec_casc_opt alpha=0.05 seed=2: done, 30/30 cases (jobs 5819353 5819354, 0.56 GPU-h)
+- 2026-10-01T03:28:28Z grading: uploaded 66 run dir(s) to the Nibi mirror, submitted CPU grading job 23011989
+- 2026-10-01T03:28:31Z grading: pulled 37038 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T03:45:01Z lane A: pulled 26 new run dir(s) into runs/
+- 2026-10-01T03:45:34Z lane K1: pulled 7 new run dir(s) into runs/
+- 2026-10-01T03:45:35Z lane K2: pulled 13 new run dir(s) into runs/
+- 2026-10-01T03:45:42Z step 2.1 main livecodebench_qwen3 spec_casc_tok alpha=0.8 seed=1: done, 90/90 cases (jobs 22982359, 0.91 GPU-h)
+- 2026-10-01T03:45:42Z step 6 main aime24_qwen3 mentored_dec alpha=0.75 seed=2: done, 30/30 cases (jobs 5819350, 0.83 GPU-h)
+- 2026-10-01T03:45:43Z step 6 main aime24_qwen3 cactus alpha=0.35 seed=2: done, 30/30 cases (jobs 5819354, 0.36 GPU-h)
+- 2026-10-01T03:46:13Z grading: uploaded 46 run dir(s) to the Nibi mirror, submitted CPU grading job 23013968
+- 2026-10-01T03:46:17Z grading: pulled 37104 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T03:51:26Z lane A: pulled 11 new run dir(s) into runs/
+- 2026-10-01T03:52:12Z lane K1: pulled 8 new run dir(s) into runs/
+- 2026-10-01T03:52:12Z lane K2: pulled 3 new run dir(s) into runs/
+- 2026-10-01T03:52:47Z grading: pulled 37104 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T04:03:26Z lane A: pulled 21 new run dir(s) into runs/
+- 2026-10-01T04:04:09Z lane K1: pulled 7 new run dir(s) into runs/
+- 2026-10-01T04:04:10Z lane K2: pulled 8 new run dir(s) into runs/
+- 2026-10-01T04:04:46Z grading: uploaded 36 run dir(s) to the Nibi mirror, submitted CPU grading job 23015826
+- 2026-10-01T04:04:48Z grading: pulled 37150 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T04:21:43Z lane A: pulled 32 new run dir(s) into runs/
+- 2026-10-01T04:22:30Z lane K1: pulled 10 new run dir(s) into runs/
+- 2026-10-01T04:22:31Z lane K2: pulled 10 new run dir(s) into runs/
+- 2026-10-01T04:22:38Z step 6 main aime24_qwen3 spec_casc_tok alpha=0.8 seed=2: done, 30/30 cases (jobs 5819350, 0.86 GPU-h)
+- 2026-10-01T04:23:08Z grading: uploaded 52 run dir(s) to the Nibi mirror, submitted CPU grading job 23016572
+- 2026-10-01T04:23:13Z grading: pulled 37208 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T04:39:41Z lane A: pulled 6 new run dir(s) into runs/
+- 2026-10-01T04:40:20Z lane K1: pulled 10 new run dir(s) into runs/
+- 2026-10-01T04:40:21Z lane K2: pulled 7 new run dir(s) into runs/
+- 2026-10-01T04:40:27Z step 2.1 main livecodebench_qwen3 spec_casc_tok alpha=0.8 seed=2: done, 90/90 cases (jobs 22982359, 0.90 GPU-h)
+- 2026-10-01T04:40:28Z step 2.2 main aime24_qwen3 r_fuzzy alpha=0.25 seed=2: done, 30/30 cases (jobs 5819354, 1.00 GPU-h)
+- 2026-10-01T04:40:54Z grading: uploaded 23 run dir(s) to the Nibi mirror, submitted CPU grading job 23017857
+- 2026-10-01T04:40:57Z grading: pulled 37260 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T14:13:03Z lane K1: pulled 1268 new run dir(s) into runs/
+- 2026-10-01T14:13:36Z lane K2: pulled 1214 new run dir(s) into runs/
+- 2026-10-01T14:13:44Z step 4.2 qwenT0.6 gsm8k_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5819352, 0.24 GPU-h)
+- 2026-10-01T14:13:45Z step 4.2 qwenT0.6 gsm8k_qwen3 spec_casc_opt alpha=0.05 seed=0: done, 150/150 cases (jobs 5819356, 0.26 GPU-h)
+- 2026-10-01T14:13:45Z step 4.2 qwenT0.6 gsm8k_qwen3 mentored_dec alpha=0.75 seed=0: done, 150/150 cases (jobs 5819352, 0.21 GPU-h)
+- 2026-10-01T14:13:46Z step 4.2 qwenT0.6 gsm8k_qwen3 cactus alpha=0.35 seed=0: done, 150/150 cases (jobs 5819356, 0.24 GPU-h)
+- 2026-10-01T14:13:46Z step 4.2 qwenT0.6 gsm8k_qwen3 r_fuzzy alpha=0.25 seed=0: done, 150/150 cases (jobs 5819352, 0.20 GPU-h)
+- 2026-10-01T14:13:46Z step 4.2 qwenT0.6 gsm8k_qwen3 spec_casc_tok alpha=0.8 seed=0: done, 150/150 cases (jobs 5819356, 0.24 GPU-h)
+- 2026-10-01T14:13:47Z step 4.2 qwenT0.6 livecodebench_qwen3 strict alpha=strict seed=0: done, 90/90 cases (jobs 5819352, 0.87 GPU-h)
+- 2026-10-01T14:13:47Z step 4.2 qwenT0.6 livecodebench_qwen3 spec_casc_opt alpha=0.05 seed=0: done, 90/90 cases (jobs 5819356, 0.75 GPU-h)
+- 2026-10-01T14:13:48Z step 4.2 qwenT0.6 livecodebench_qwen3 mentored_dec alpha=0.75 seed=0: done, 90/90 cases (jobs 5819352 5821776, 0.31 GPU-h)
+- 2026-10-01T14:13:48Z step 4.2 qwenT0.6 livecodebench_qwen3 cactus alpha=0.35 seed=0: done, 90/90 cases (jobs 5819356 5821919, 0.81 GPU-h)
+- 2026-10-01T14:13:48Z step 4.2 qwenT0.6 livecodebench_qwen3 r_fuzzy alpha=0.25 seed=0: done, 90/90 cases (jobs 5821776, 0.86 GPU-h)
+- 2026-10-01T14:13:49Z step 4.2 qwenT0.6 livecodebench_qwen3 spec_casc_tok alpha=0.8 seed=0: done, 90/90 cases (jobs 5821919, 0.92 GPU-h)
+- 2026-10-01T14:13:49Z step 4.3 lmdraft gsm8k_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5821776, 0.42 GPU-h)
+- 2026-10-01T14:13:50Z step 4.3 lmdraft gsm8k_qwen3 mentored_dec alpha=0.75 seed=0: done, 150/150 cases (jobs 5821919, 0.30 GPU-h)
+- 2026-10-01T14:13:50Z step 4.3 lmdraft gsm8k_qwen3 cactus alpha=0.35 seed=0: done, 150/150 cases (jobs 5821776, 0.28 GPU-h)
+- 2026-10-01T14:13:50Z step 4.3 lmdraft gsm8k_qwen3 spec_casc_tok alpha=0.8 seed=0: done, 150/150 cases (jobs 5821919, 0.33 GPU-h)
+- 2026-10-01T14:13:51Z step 6 main aime24_qwen3 strict alpha=strict seed=3: done, 30/30 cases (jobs 5819350, 0.77 GPU-h)
+- 2026-10-01T14:13:51Z step 6 main aime24_qwen3 spec_casc_opt alpha=0.05 seed=3: done, 30/30 cases (jobs 5819354, 1.02 GPU-h)
+- 2026-10-01T14:13:52Z step 6 main aime24_qwen3 mentored_dec alpha=0.75 seed=3: done, 30/30 cases (jobs 5819350 5819351, 0.69 GPU-h)
+- 2026-10-01T14:13:52Z step 6 main aime24_qwen3 cactus alpha=0.35 seed=3: done, 30/30 cases (jobs 5819354 5819355, 0.54 GPU-h)
+- 2026-10-01T14:13:52Z step 6 main aime24_qwen3 r_fuzzy alpha=0.25 seed=3: done, 30/30 cases (jobs 5819351, 1.07 GPU-h)
+- 2026-10-01T14:13:53Z step 6 main aime24_qwen3 spec_casc_tok alpha=0.8 seed=3: done, 30/30 cases (jobs 5819355, 0.86 GPU-h)
+- 2026-10-01T14:13:53Z step 6 main aime24_qwen3 strict alpha=strict seed=4: done, 30/30 cases (jobs 5819355, 0.95 GPU-h)
+- 2026-10-01T14:13:53Z step 6 main aime24_qwen3 spec_casc_opt alpha=0.05 seed=4: done, 30/30 cases (jobs 5819351, 0.94 GPU-h)
+- 2026-10-01T14:13:54Z step 6 main aime24_qwen3 mentored_dec alpha=0.75 seed=4: done, 30/30 cases (jobs 5819355 5819356, 0.35 GPU-h)
+- 2026-10-01T14:13:54Z step 6 main aime24_qwen3 cactus alpha=0.35 seed=4: done, 30/30 cases (jobs 5819351 5819352, 0.18 GPU-h)
+- 2026-10-01T14:13:55Z step 6 main aime24_qwen3 r_fuzzy alpha=0.25 seed=4: done, 30/30 cases (jobs 5819356, 1.02 GPU-h)
+- 2026-10-01T14:13:55Z step 6 main aime24_qwen3 spec_casc_tok alpha=0.8 seed=4: done, 30/30 cases (jobs 5819352, 0.71 GPU-h)
+- 2026-10-01T14:14:25Z lane K1: submitted job 5837975 (afterany:5821776); lane has 25 work items, est. 15.2 GPU-h
+- 2026-10-01T14:14:26Z lane K1: submitted job 5837976 (afterany:5837975); lane has 25 work items, est. 15.2 GPU-h
+- 2026-10-01T14:14:28Z lane K1: submitted job 5837978 (afterany:5837976); lane has 25 work items, est. 15.2 GPU-h
+- 2026-10-01T14:14:30Z lane K2: submitted job 5837981 (afterany:5821919); lane has 28 work items, est. 15.9 GPU-h
+- 2026-10-01T14:14:31Z lane K2: submitted job 5837983 (afterany:5837981); lane has 28 work items, est. 15.9 GPU-h
+- 2026-10-01T14:14:34Z lane K2: submitted job 5838004 (afterany:5837983); lane has 28 work items, est. 15.9 GPU-h
+- 2026-10-01T14:16:46Z grading: uploaded 2482 run dir(s) to the Nibi mirror, submitted CPU grading job 23059383
+- 2026-10-01T14:16:51Z grading: pulled 37283 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T14:19:47Z Qwen3 rows regrouped so each comparison (a strict reference and the arms timed against it) runs on one Killarney lane: lmdraft:livecodebench_qwen3 -> K1; ref:aime24_qwen3 -> K1; ref:gsm8k_qwen3 -> K1; ref:humaneval_qwen3 -> K2; ref:livecodebench_qwen3 -> K1; ref:longbench_v2_qwen3 -> K2; ref:mtbench_qwen3 -> K1; speedbench:speedbench_qwen3 -> K2 (est. K1 15.7 GPU-h, K2 15.6 GPU-h). Step 4.2 had strict on K1 (kn173, 9.5 ms/round) and cactus/spec_casc_opt/spec_casc_tok on K2 (kn176, 10.5-10.8 ms/round).
+- 2026-10-01T14:20:51Z grading: pulled 37283 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T14:25:51Z grading: pulled 39765 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T14:26:50Z JOURNAL: steps 2 and 6 (Qwen3 halves) and 4.2 written up; grades 39765 verdicts.
+- 2026-10-01T14:49:11Z lane K1: pulled 51 new run dir(s) into runs/
+- 2026-10-01T14:49:17Z lane K2: pulled 61 new run dir(s) into runs/
+- 2026-10-01T14:49:25Z step 4.3 lmdraft livecodebench_qwen3 strict alpha=strict seed=0: done, 90/90 cases (jobs 5821776 5837975, 0.12 GPU-h)
+- 2026-10-01T14:49:42Z lane K3: synced prompts/speedbench (7.1 MB tar) to the lane repo
+- 2026-10-01T14:49:56Z lane K4: synced prompts/speedbench (7.1 MB tar) to the lane repo
+- 2026-10-01T14:50:11Z lane K3: synced prompts/speedbench_qwen3 (7.1 MB tar) to the lane repo
+- 2026-10-01T14:50:24Z lane K4: synced prompts/speedbench_qwen3 (7.1 MB tar) to the lane repo
+- 2026-10-01T14:51:42Z lane K1: submitted job 5838962 (afterany:5837978); lane has 35 work items, est. 14.5 GPU-h
+- 2026-10-01T14:51:43Z lane K2: submitted job 5838981 (afterany:5838004); lane has 17 work items, est. 15.7 GPU-h
+- 2026-10-01T14:53:08Z grading: uploaded 112 run dir(s) to the Nibi mirror, submitted CPU grading job 23061785
+- 2026-10-01T14:53:10Z grading: pulled 39765 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-01T14:53:55Z Qwen3 rows regrouped so each comparison (a strict reference and the arms timed against it) runs on one Killarney lane: lmdraft:livecodebench_qwen3 -> K2; ref:aime24_qwen3 -> K4; ref:gsm8k_qwen3 -> K4; ref:humaneval_qwen3 -> K2; ref:livecodebench_qwen3 -> K3; ref:longbench_v2_qwen3 -> K2; ref:mtbench_qwen3 -> K2; speedbench:speedbench_qwen3 -> K1 (est. K1 12.5 GPU-h, K2 5.5 GPU-h, K3 7.6 GPU-h, K4 4.8 GPU-h). Step 4.2 had strict on K1 (kn173, 9.5 ms/round) and cactus/spec_casc_opt/spec_casc_tok on K2 (kn176, 10.5-10.8 ms/round).
+- 2026-10-01T14:56:38Z lane K1: pulled 15 new run dir(s) into runs/
+- 2026-10-01T14:56:40Z lane K2: pulled 13 new run dir(s) into runs/
+- 2026-10-01T14:56:46Z step 4.3 lmdraft livecodebench_qwen3 mentored_dec alpha=0.75 seed=0: done, 90/90 cases (jobs 5821919 5837981, 0.29 GPU-h)
+- 2026-10-01T14:57:15Z lane K3: submitted job 5839003; lane has 12 work items, est. 7.6 GPU-h
+- 2026-10-01T14:57:17Z lane K3: submitted job 5839004 (afterany:5839003); lane has 12 work items, est. 7.6 GPU-h
+- 2026-10-01T14:57:19Z lane K3: submitted job 5839005 (afterany:5839004); lane has 12 work items, est. 7.6 GPU-h
+- 2026-10-01T14:57:20Z lane K4: submitted job 5839006; lane has 16 work items, est. 4.8 GPU-h
+- 2026-10-01T14:57:22Z lane K4: submitted job 5839007 (afterany:5839006); lane has 16 work items, est. 4.8 GPU-h
+- 2026-10-01T14:57:57Z Killarney now four lanes (K1 kn169-171, K2 kn176-178, K3 kn172-173, K4 kn174-175): K3 chain 5839003->..05, K4 chain 5839006->..07; groups re-spread whole (K1 SPEED-Bench 12.5 h, K2 5.5 h, K3 7.6 h, K4 4.8 h est.). README deviation 14.
+- 2026-10-01T15:14:35Z lane K1: pulled 33 new run dir(s) into runs/
+- 2026-10-01T15:14:40Z lane K2: pulled 75 new run dir(s) into runs/
+- 2026-10-01T15:16:27Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T15:16:28Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T15:16:30Z lane K1: pulled 3 new run dir(s) into runs/
+- 2026-10-01T15:16:33Z lane K2: pulled 4 new run dir(s) into runs/
+- 2026-10-01T15:16:39Z step 4.3 lmdraft livecodebench_qwen3 cactus alpha=0.35 seed=0: done, 90/90 cases (jobs 5837975, 0.84 GPU-h)
+- 2026-10-01T15:16:52Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T15:17:37Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T15:17:38Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T15:17:41Z lane K2: pulled 4 new run dir(s) into runs/
+- 2026-10-01T15:17:59Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T15:33:59Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T15:34:00Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T15:34:03Z lane K1: pulled 95 new run dir(s) into runs/
+- 2026-10-01T15:34:05Z lane K2: pulled 49 new run dir(s) into runs/
+- 2026-10-01T15:34:28Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T15:37:31Z remote/stop_server.sh now job-scoped (own_pids: cgroup /job_<id>/); pushed to K1-K4; Killarney node exclusions removed (pending jobs' ExcNodeList cleared, new jobs without --exclude). README deviation 15.
+- 2026-10-01T15:52:50Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T15:52:51Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T15:52:54Z lane K1: pulled 124 new run dir(s) into runs/
+- 2026-10-01T15:52:57Z lane K2: pulled 31 new run dir(s) into runs/
+- 2026-10-01T15:52:58Z lane K3: pulled 8 new run dir(s) into runs/
+- 2026-10-01T15:53:05Z step 0.5 nibiref humaneval_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5837981, 0.73 GPU-h)
+- 2026-10-01T15:53:20Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T16:09:23Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T16:09:24Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T16:09:28Z lane K1: pulled 100 new run dir(s) into runs/
+- 2026-10-01T16:09:31Z lane K2: pulled 27 new run dir(s) into runs/
+- 2026-10-01T16:09:32Z lane K3: pulled 31 new run dir(s) into runs/
+- 2026-10-01T16:09:53Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T16:13:28Z Node sharing verified on kn176 (K2 5837981 + K3 5839003 side by side): separate per-job /tmp bind mounts; spec-casc-tok knob 0.8 in K2 vs -inf in K3; no failed items. Run dirs carry no node id -> final tables will map nodes from lanes/<lane>_status.jsonl and flag mixed-node time ratios (README deviation 15 caveat).
+- 2026-10-01T16:28:42Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T16:28:42Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T16:28:46Z lane K1: pulled 115 new run dir(s) into runs/
+- 2026-10-01T16:28:49Z lane K2: pulled 30 new run dir(s) into runs/
+- 2026-10-01T16:28:51Z lane K3: pulled 34 new run dir(s) into runs/
+- 2026-10-01T16:28:52Z lane K4: pulled 75 new run dir(s) into runs/
+- 2026-10-01T16:29:13Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T16:45:18Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T16:45:18Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T16:45:22Z lane K1: pulled 96 new run dir(s) into runs/
+- 2026-10-01T16:45:24Z lane K2: pulled 20 new run dir(s) into runs/
+- 2026-10-01T16:45:25Z lane K3: pulled 22 new run dir(s) into runs/
+- 2026-10-01T16:45:26Z lane K4: pulled 80 new run dir(s) into runs/
+- 2026-10-01T16:45:34Z step 0.5 nibiref gsm8k_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5839006, 0.26 GPU-h)
+- 2026-10-01T16:45:34Z step 0.5 nibiref livecodebench_qwen3 strict alpha=strict seed=0: done, 90/90 cases (jobs 5839003, 0.95 GPU-h)
+- 2026-10-01T16:45:35Z step 4.3 lmdraft livecodebench_qwen3 spec_casc_tok alpha=0.8 seed=0: done, 90/90 cases (jobs 5837981, 1.05 GPU-h)
+- 2026-10-01T16:45:48Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T17:02:46Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T17:02:47Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T17:02:51Z lane K1: pulled 102 new run dir(s) into runs/
+- 2026-10-01T17:02:55Z lane K2: pulled 81 new run dir(s) into runs/
+- 2026-10-01T17:02:56Z lane K3: pulled 34 new run dir(s) into runs/
+- 2026-10-01T17:02:57Z lane K4: pulled 14 new run dir(s) into runs/
+- 2026-10-01T17:03:05Z step 0.5 nibiref mtbench_qwen3 strict alpha=strict seed=0: done, 80/80 cases (jobs 5837981, 0.23 GPU-h)
+- 2026-10-01T17:03:18Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T17:19:08Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T17:19:09Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T17:19:13Z lane K1: pulled 93 new run dir(s) into runs/
+- 2026-10-01T17:19:16Z lane K2: pulled 70 new run dir(s) into runs/
+- 2026-10-01T17:19:17Z lane K3: pulled 31 new run dir(s) into runs/
+- 2026-10-01T17:19:18Z lane K4: pulled 8 new run dir(s) into runs/
+- 2026-10-01T17:19:35Z lane K1: submitted job 5840933 (afterany:5838962); lane has 5 work items, est. 10.0 GPU-h
+- 2026-10-01T17:19:41Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T17:22:25Z Rebalanced the critical path (README deviation 16): speedbench|speedbench_qwen3|r_fuzzy|0.25|0 -> K2; speedbench|speedbench_qwen3|cactus|0.35|0 -> K4 (est. K1 5.9, K2 5.3, K3 6.5, K4 5.9 GPU-h).
+- 2026-10-01T17:22:28Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T17:22:28Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T17:22:34Z lane K2: pulled 9 new run dir(s) into runs/
+- 2026-10-01T17:22:35Z lane K3: pulled 6 new run dir(s) into runs/
+- 2026-10-01T17:22:35Z lane K4: pulled 1 new run dir(s) into runs/
+- 2026-10-01T17:22:51Z lane K4: submitted job 5840988 (afterany:5839007); lane has 16 work items, est. 5.9 GPU-h
+- 2026-10-01T17:37:54Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T17:37:54Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T17:37:59Z lane K2: pulled 47 new run dir(s) into runs/
+- 2026-10-01T17:38:01Z lane K3: pulled 22 new run dir(s) into runs/
+- 2026-10-01T17:38:03Z lane K4: pulled 122 new run dir(s) into runs/
+- 2026-10-01T17:38:10Z step 0.5 nibiref aime24_qwen3 strict alpha=strict seed=0: done, 30/30 cases (jobs 5839006, 0.86 GPU-h)
+- 2026-10-01T17:38:11Z step 3 nspec2 livecodebench_qwen3 strict alpha=strict seed=0: done, 90/90 cases (jobs 5839003, 0.86 GPU-h)
+- 2026-10-01T17:38:26Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T17:54:33Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T17:54:34Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T17:54:38Z lane K1: pulled 62 new run dir(s) into runs/
+- 2026-10-01T17:54:41Z lane K2: pulled 21 new run dir(s) into runs/
+- 2026-10-01T17:54:42Z lane K3: pulled 32 new run dir(s) into runs/
+- 2026-10-01T17:54:44Z lane K4: pulled 180 new run dir(s) into runs/
+- 2026-10-01T17:54:52Z step 3 nspec2 gsm8k_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5839006, 0.23 GPU-h)
+- 2026-10-01T17:54:52Z step 3 nspec3 gsm8k_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5839006, 0.23 GPU-h)
+- 2026-10-01T17:54:53Z step 5.1 main humaneval_qwen3 mentored_dec alpha=0.35 seed=0: done, 150/150 cases (jobs 5837981 5837983, 0.13 GPU-h)
+- 2026-10-01T17:55:07Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T18:11:01Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T18:11:02Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T18:11:06Z lane K1: pulled 95 new run dir(s) into runs/
+- 2026-10-01T18:11:10Z lane K2: pulled 73 new run dir(s) into runs/
+- 2026-10-01T18:11:11Z lane K3: pulled 32 new run dir(s) into runs/
+- 2026-10-01T18:11:15Z lane K4: pulled 167 new run dir(s) into runs/
+- 2026-10-01T18:11:22Z step 3 nspec4 gsm8k_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5839006, 0.23 GPU-h)
+- 2026-10-01T18:11:36Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T18:27:19Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T18:27:20Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T18:27:25Z lane K1: pulled 81 new run dir(s) into runs/
+- 2026-10-01T18:27:29Z lane K2: pulled 54 new run dir(s) into runs/
+- 2026-10-01T18:27:30Z lane K3: pulled 24 new run dir(s) into runs/
+- 2026-10-01T18:27:34Z lane K4: pulled 141 new run dir(s) into runs/
+- 2026-10-01T18:27:42Z step 3 nspec3 livecodebench_qwen3 strict alpha=strict seed=0: done, 90/90 cases (jobs 5839003, 0.84 GPU-h)
+- 2026-10-01T18:27:42Z step 3 nspec8 gsm8k_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5839006, 0.25 GPU-h)
+- 2026-10-01T18:27:56Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T18:43:39Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T18:43:40Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T18:43:45Z lane K1: pulled 87 new run dir(s) into runs/
+- 2026-10-01T18:43:50Z lane K2: pulled 57 new run dir(s) into runs/
+- 2026-10-01T18:43:51Z lane K3: pulled 30 new run dir(s) into runs/
+- 2026-10-01T18:43:55Z lane K4: pulled 158 new run dir(s) into runs/
+- 2026-10-01T18:44:02Z step 4.1 temp1.2 gsm8k_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5839006, 0.24 GPU-h)
+- 2026-10-01T18:44:03Z step 5.1 main humaneval_qwen3 mentored_dec alpha=0.55 seed=0: done, 150/150 cases (jobs 5837983, 0.67 GPU-h)
+- 2026-10-01T18:44:20Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T18:46:49Z Killarney 'Reboot ASAP' on every H100 node (seen 18:45Z): kn169/171/173-178 draining for reboot, kn172 drained (reboot timed out), kn170 down (cooling). Running K1/K2/K4 continue to their limits (19:19Z / 20:39Z); K3's 5839004 waits ('nodes DOWN/DRAINED'). Earliest node back ~21:00Z (kn169, last job ends 20:44Z), then kn176 ~22:00Z, kn173/kn175 ~23:45Z, kn174 ~01:15Z; kn171/177/178 Oct 3-8. Expected delay ~2 h on the K3 critical path. Check the NVIDIA driver after the reboot (was 580.159.03).
+- 2026-10-01T19:01:57Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T19:01:58Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T19:02:03Z lane K1: pulled 98 new run dir(s) into runs/
+- 2026-10-01T19:02:07Z lane K2: pulled 75 new run dir(s) into runs/
+- 2026-10-01T19:02:09Z lane K3: pulled 16 new run dir(s) into runs/
+- 2026-10-01T19:02:13Z lane K4: pulled 139 new run dir(s) into runs/
+- 2026-10-01T19:02:20Z step 4.1 temp1.5 gsm8k_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5839006, 0.31 GPU-h)
+- 2026-10-01T19:02:30Z lane K3: submitted job 5843279 (afterany:5839005); lane has 9 work items, est. 5.2 GPU-h
+- 2026-10-01T19:02:45Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T19:07:53Z kn172 back early (K3 5839005 running there since 18:50Z); its first job 5839004 failed in 4 s (/cvmfs not mounted -> ELOOP on the venv python). Rebooted nodes run driver 580.178.04 (was 580.159.03). Guards pushed to K1-K4: sbatch waits for the venv python before module load; addendum_lane.py env_ready() stops if modules did not load. README deviation 17.
+- 2026-10-01T19:22:13Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T19:22:13Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T19:22:20Z lane K1: pulled 110 new run dir(s) into runs/
+- 2026-10-01T19:22:24Z lane K2: pulled 71 new run dir(s) into runs/
+- 2026-10-01T19:22:26Z lane K3: pulled 37 new run dir(s) into runs/
+- 2026-10-01T19:22:30Z lane K4: pulled 212 new run dir(s) into runs/
+- 2026-10-01T19:22:38Z step 5.1 main gsm8k_qwen3 mentored_dec alpha=0.35 seed=0: done, 150/150 cases (jobs 5839006, 0.24 GPU-h)
+- 2026-10-01T19:22:39Z step 5.1 main humaneval_qwen3 spec_casc_tok alpha=0.35 seed=0: done, 150/150 cases (jobs 5837983, 0.66 GPU-h)
+- 2026-10-01T19:22:52Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T19:39:05Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T19:39:05Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T19:39:11Z lane K1: pulled 81 new run dir(s) into runs/
+- 2026-10-01T19:39:15Z lane K2: pulled 70 new run dir(s) into runs/
+- 2026-10-01T19:39:17Z lane K3: pulled 22 new run dir(s) into runs/
+- 2026-10-01T19:39:19Z lane K4: pulled 13 new run dir(s) into runs/
+- 2026-10-01T19:39:25Z step 3 nspec4 livecodebench_qwen3 strict alpha=strict seed=0: done, 90/90 cases (jobs 5839003 5839004 5839005, 0.55 GPU-h)
+- 2026-10-01T19:39:40Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T19:42:09Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T19:42:10Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T19:42:13Z lane K1: pulled 18 new run dir(s) into runs/
+- 2026-10-01T19:42:16Z lane K2: pulled 9 new run dir(s) into runs/
+- 2026-10-01T19:42:17Z lane K3: pulled 5 new run dir(s) into runs/
+- 2026-10-01T19:42:19Z lane K4: pulled 37 new run dir(s) into runs/
+- 2026-10-01T19:42:52Z Qwen3 nspec10 gsm8k failed twice at server start (CUDA OOM in vLLM's sampler warmup, 2.12 GiB needed, 1.55 free at GPU_UTIL 0.85). Both Qwen3 nspec10 rows now carry GPU_UTIL=0.80 (README deviation 18); K3 reaches livecodebench nspec10 after nspec8, K4 retries gsm8k nspec10 in its next job.
+- 2026-10-01T19:58:10Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T19:58:10Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T19:58:16Z lane K1: pulled 96 new run dir(s) into runs/
+- 2026-10-01T19:58:21Z lane K2: pulled 35 new run dir(s) into runs/
+- 2026-10-01T19:58:22Z lane K3: pulled 25 new run dir(s) into runs/
+- 2026-10-01T19:58:27Z lane K4: pulled 174 new run dir(s) into runs/
+- 2026-10-01T19:58:34Z step 5.1 main gsm8k_qwen3 mentored_dec alpha=0.55 seed=0: done, 150/150 cases (jobs 5839006 5839007, 0.14 GPU-h)
+- 2026-10-01T19:58:35Z step 5.1 main gsm8k_qwen3 spec_casc_tok alpha=0.35 seed=0: done, 150/150 cases (jobs 5839007, 0.22 GPU-h)
+- 2026-10-01T19:58:36Z step 5.1 main humaneval_qwen3 spec_casc_tok alpha=0.55 seed=0: done, 150/150 cases (jobs 5837983, 0.65 GPU-h)
+- 2026-10-01T19:58:54Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T20:03:46Z Fixed a hardware label in addendum_tables.py: nibi_cases() counted any /project/ venv as Nibi, so Killarney-run Qwen3 step-5.1 cells read 'nibi' in best_setting.csv. Now run_machine()/cell_machine() use addendum_analysis.machine_of; the seed-0 time ratio pairs a cell with the step-0.5 strict reference on its own machine (Nibi for GPT-OSS, Killarney for Qwen3), and step 5.2 pairs seed 1 with strict seed 1 on the same machine (new s1_hardware / s1_strict_hardware; no time verdict across machines). Regression: GPT-OSS unchanged; 7 Qwen3 hardware_s0 labels nibi->killarney; no number or verdict changed.
+- 2026-10-01T20:14:09Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T20:14:10Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T20:14:16Z lane K1: pulled 92 new run dir(s) into runs/
+- 2026-10-01T20:14:21Z lane K2: pulled 25 new run dir(s) into runs/
+- 2026-10-01T20:14:23Z lane K3: pulled 27 new run dir(s) into runs/
+- 2026-10-01T20:14:25Z lane K4: pulled 10 new run dir(s) into runs/
+- 2026-10-01T20:14:48Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T20:30:40Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T20:30:40Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T20:30:46Z lane K1: pulled 98 new run dir(s) into runs/
+- 2026-10-01T20:30:53Z lane K2: pulled 101 new run dir(s) into runs/
+- 2026-10-01T20:30:55Z lane K3: pulled 20 new run dir(s) into runs/
+- 2026-10-01T20:30:59Z lane K4: pulled 12 new run dir(s) into runs/
+- 2026-10-01T20:31:07Z step 3 nspec8 livecodebench_qwen3 strict alpha=strict seed=0: done, 90/90 cases (jobs 5839005, 0.99 GPU-h)
+- 2026-10-01T20:31:07Z step 5.1 main mtbench_qwen3 mentored_dec alpha=0.35 seed=0: done, 80/80 cases (jobs 5837983, 0.21 GPU-h)
+- 2026-10-01T20:31:24Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T20:46:21Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T20:46:21Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T20:46:28Z lane K1: pulled 44 new run dir(s) into runs/
+- 2026-10-01T20:46:35Z lane K2: pulled 55 new run dir(s) into runs/
+- 2026-10-01T20:46:37Z lane K3: pulled 23 new run dir(s) into runs/
+- 2026-10-01T20:46:39Z lane K4: pulled 5 new run dir(s) into runs/
+- 2026-10-01T20:46:47Z step 5.1 main mtbench_qwen3 mentored_dec alpha=0.55 seed=0: done, 80/80 cases (jobs 5837983, 0.21 GPU-h)
+- 2026-10-01T20:46:48Z step 5.1 main aime24_qwen3 mentored_dec alpha=0.35 seed=0: done, 30/30 cases (jobs 5839007, 0.73 GPU-h)
+- 2026-10-01T20:47:04Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T20:48:55Z Judge batch msgbatch_01FkaxMnqLU6qE23uZdXnJ4G: 153 Qwen3 MT-Bench step-5.1 runs (md 0.35: 70, md 0.55: 66, tok 0.35: 17 so far; seed 0, ~$3.4, within task #10's plan). The rest of the tok 0.35/0.55 cells go in a second batch when K2 finishes them.
+- 2026-10-01T20:58:17Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T20:58:17Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T20:58:25Z lane K3: pulled 20 new run dir(s) into runs/
+- 2026-10-01T20:58:27Z lane K4: pulled 10 new run dir(s) into runs/
+- 2026-10-01T20:58:53Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T21:03:16Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T21:03:16Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T21:03:25Z lane K3: pulled 6 new run dir(s) into runs/
+- 2026-10-01T21:03:27Z lane K4: pulled 5 new run dir(s) into runs/
+- 2026-10-01T21:03:46Z lane K2: submitted job 5845269 (afterany:5838981); lane has 8 work items, est. 3.5 GPU-h
+- 2026-10-01T21:03:57Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T21:19:53Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T21:19:53Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T21:19:58Z lane K1: pulled 85 new run dir(s) into runs/
+- 2026-10-01T21:20:05Z lane K3: pulled 26 new run dir(s) into runs/
+- 2026-10-01T21:20:07Z lane K4: pulled 10 new run dir(s) into runs/
+- 2026-10-01T21:20:33Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T21:22:41Z Reboot guard tripped as intended on kn169 (K1 5837978, K2 5838004 at 20:57Z: env_not_ready after 300 s of ELOOP; successors 5838962/5838981 ran 2 s later). Private mount namespaces keep the pre-mount view for a job's life, so both waits cut to 30 s (sbatch loop, ENV_WAIT_S); README deviation 17 updated.
+- 2026-10-01T21:37:52Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T21:37:52Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T21:37:58Z lane K1: pulled 124 new run dir(s) into runs/
+- 2026-10-01T21:38:03Z lane K2: pulled 94 new run dir(s) into runs/
+- 2026-10-01T21:38:05Z lane K3: pulled 20 new run dir(s) into runs/
+- 2026-10-01T21:38:08Z lane K4: pulled 9 new run dir(s) into runs/
+- 2026-10-01T21:38:16Z step 3 nspec10 livecodebench_qwen3 strict alpha=strict seed=0: done, 90/90 cases (jobs 5839005, 1.04 GPU-h)
+- 2026-10-01T21:38:16Z step 5.1 main mtbench_qwen3 spec_casc_tok alpha=0.35 seed=0: done, 80/80 cases (jobs 5837983 5838981, 0.17 GPU-h)
+- 2026-10-01T21:38:17Z step 5.1 main aime24_qwen3 mentored_dec alpha=0.55 seed=0: done, 30/30 cases (jobs 5839007, 0.72 GPU-h)
+- 2026-10-01T21:38:32Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T21:54:50Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T21:54:51Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T21:54:57Z lane K1: pulled 93 new run dir(s) into runs/
+- 2026-10-01T21:55:03Z lane K2: pulled 93 new run dir(s) into runs/
+- 2026-10-01T21:55:05Z lane K3: pulled 20 new run dir(s) into runs/
+- 2026-10-01T21:55:07Z lane K4: pulled 13 new run dir(s) into runs/
+- 2026-10-01T21:55:16Z step 5.1 main mtbench_qwen3 spec_casc_tok alpha=0.55 seed=0: done, 80/80 cases (jobs 5838981, 0.22 GPU-h)
+- 2026-10-01T21:55:24Z lane K3: submitted job 5846458 (afterany:5843279); lane has 6 work items, est. 3.4 GPU-h
+- 2026-10-01T21:55:34Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T21:56:43Z Judge batch msgbatch_01FkaxMnqLU6qE23uZdXnJ4G ended 21:42Z: 153/153 succeeded, collected (mtbench_judge.csv 2714 rows). Qwen3 MT-Bench 5.1 grid complete; batch 2 msgbatch_01BFYYAVhetfq9PZwXe5ETKN: the remaining 119 answered runs (tok 0.35 x50, tok 0.55 x69), ~$2.6.
+- 2026-10-01T22:07:56Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T22:07:56Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T22:08:02Z lane K1: pulled 85 new run dir(s) into runs/
+- 2026-10-01T22:08:07Z lane K2: pulled 86 new run dir(s) into runs/
+- 2026-10-01T22:08:09Z lane K3: pulled 20 new run dir(s) into runs/
+- 2026-10-01T22:08:11Z lane K4: pulled 7 new run dir(s) into runs/
+- 2026-10-01T22:08:19Z step 5.1 main aime24_qwen3 spec_casc_tok alpha=0.35 seed=0: done, 30/30 cases (jobs 5839007, 0.68 GPU-h)
+- 2026-10-01T22:08:37Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-01T22:12:34Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T22:12:35Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-01T22:12:39Z lane K1: pulled 32 new run dir(s) into runs/
+- 2026-10-01T22:12:44Z lane K2: pulled 27 new run dir(s) into runs/
+- 2026-10-01T22:12:45Z lane K3: pulled 8 new run dir(s) into runs/
+- 2026-10-01T22:12:47Z lane K4: pulled 1 new run dir(s) into runs/
+- 2026-10-01T22:13:08Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-02T04:07:38Z lane A: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneA 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-02T04:07:39Z lane B: collect FAILED (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'cd /scratch/billxby/lossy-addendum/laneB 2>/dev/null || exit 0; T=$(date +%s); if [ -f .collect_marker ]; then F=\'-newer .collect_marker\'; else F=\'\'; fi; find runs -name run.json $F 2>/dev/null | xargs -r grep -l \'"status": "ok"\' ; echo "__T=$T"']' returned non-zero exit status 255.); will retry next cycle
+- 2026-10-02T04:07:55Z lane K1: pulled 422 new run dir(s) into runs/
+- 2026-10-02T04:08:16Z lane K2: pulled 468 new run dir(s) into runs/
+- 2026-10-02T04:08:29Z lane K3: pulled 467 new run dir(s) into runs/
+- 2026-10-02T04:08:53Z lane K4: pulled 808 new run dir(s) into runs/
+- 2026-10-02T04:09:02Z step 3 nspec10 gsm8k_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5839006 5839007 5840988, 0.40 GPU-h)
+- 2026-10-02T04:09:03Z step 4.1 temp1.2 livecodebench_qwen3 strict alpha=strict seed=0: done, 90/90 cases (jobs 5839005 5843279, 0.70 GPU-h)
+- 2026-10-02T04:09:03Z step 4.1 temp1.5 livecodebench_qwen3 strict alpha=strict seed=0: done, 90/90 cases (jobs 5843279, 1.35 GPU-h)
+- 2026-10-02T04:09:04Z step 5.1 main livecodebench_qwen3 mentored_dec alpha=0.35 seed=0: done, 90/90 cases (jobs 5843279, 0.88 GPU-h)
+- 2026-10-02T04:09:04Z step 5.1 main livecodebench_qwen3 mentored_dec alpha=0.55 seed=0: done, 90/90 cases (jobs 5843279 5846458, 0.82 GPU-h)
+- 2026-10-02T04:09:04Z step 5.1 main livecodebench_qwen3 spec_casc_tok alpha=0.35 seed=0: done, 90/90 cases (jobs 5846458, 0.88 GPU-h)
+- 2026-10-02T04:09:05Z step 5.1 main livecodebench_qwen3 spec_casc_tok alpha=0.55 seed=0: done, 90/90 cases (jobs 5846458, 0.87 GPU-h)
+- 2026-10-02T04:09:05Z step 5.1 main aime24_qwen3 spec_casc_tok alpha=0.55 seed=0: done, 30/30 cases (jobs 5839007 5840988, 0.40 GPU-h)
+- 2026-10-02T04:09:15Z lane K2: submitted job 5857990; lane has 5 work items, est. 0.9 GPU-h
+- 2026-10-02T04:09:25Z grading step failed (Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', 'nibi', 'mkdir -p /scratch/billxby/lossy-addendum/mirror/runs && cd /scratch/billxby/lossy-addendum/mirror/runs && tar -xf -']' returned non-zero exit status 255.); retried next poll
+- 2026-10-02T04:26:39Z Bill approved the longbench drafter fix. hf/local/Qwen3-8B-speculator.eagle3-maxpos65536 on Killarney (files identical to snapshot 08610ffa except config max_position_embeddings 65536); longbench_v2_qwen3 items use it plus VLLM_CACHE_ROOT=/scratch/billxby/vllm_cache_longdrafter (README deviation 19). New eagle_head kernel bound 65536. K2 job 5857990 ran nibiref strict, md 0.35, md 0.55 with the old work list (failed) before the push; tok 0.35 started 04:23:38 with the new drafter.
+- 2026-10-02T04:33:35Z grading: uploaded 4140 run dir(s) to the Nibi mirror, submitted CPU grading job 23110057
+- 2026-10-02T04:33:36Z grading: pulled 39877 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-02T04:47:08Z lane K2: pulled 57 new run dir(s) into runs/
+- 2026-10-02T04:49:18Z grading: uploaded 57 run dir(s) to the Nibi mirror, submitted CPU grading job 23110787
+- 2026-10-02T04:49:19Z grading: pulled 44017 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-02T04:50:26Z Rebalanced the critical path (README deviation 16): nibiref|longbench_v2_qwen3|strict|strict|0 -> K1; main|longbench_v2_qwen3|mentored_dec|0.35|0 -> K3; main|longbench_v2_qwen3|mentored_dec|0.55|0 -> K4 (est. K1 0.3, K2 0.3, K3 0.2, K4 0.2 GPU-h).
+- 2026-10-02T04:51:01Z step 5.2: 22 cells have an eligible best setting; added 11 seed-1 row(s): gsm8k_qwen3/mentored_dec/0.35 -> K1, gsm8k_qwen3/strict/strict (nibiref) -> K1, aime24_qwen3/mentored_dec/0.55 -> K2, aime24_qwen3/spec_casc_tok/0.35 -> K2, humaneval_qwen3/mentored_dec/0.55 -> K3, humaneval_qwen3/strict/strict (nibiref) -> K3, humaneval_qwen3/spec_casc_tok/0.35 -> K3, livecodebench_qwen3/mentored_dec/0.35 -> K4, livecodebench_qwen3/strict/strict (nibiref) -> K4, mtbench_qwen3/mentored_dec/0.55 -> K1, mtbench_qwen3/strict/strict (nibiref) -> K1
+- 2026-10-02T04:53:15Z lane K2: pulled 20 new run dir(s) into runs/
+- 2026-10-02T04:53:43Z lane K1: submitted job 5862541; lane has 1 work items, est. 0.3 GPU-h
+- 2026-10-02T04:53:44Z lane K3: submitted job 5862551; lane has 6 work items, est. 1.5 GPU-h
+- 2026-10-02T04:53:47Z lane K4: submitted job 5862558; lane has 4 work items, est. 1.4 GPU-h
+- 2026-10-02T04:54:20Z Rebalanced the critical path (README deviation 16): main|aime24_qwen3|mentored_dec|0.55|1 -> K1; main|aime24_qwen3|spec_casc_tok|0.35|1 -> K1; main|gsm8k_qwen3|mentored_dec|0.35|1 -> K2; nibiref|gsm8k_qwen3|strict|strict|1 -> K2; nibiref|humaneval_qwen3|strict|strict|1 -> K3; main|humaneval_qwen3|spec_casc_tok|0.35|1 -> K3; main|livecodebench_qwen3|mentored_dec|0.35|1 -> K4 (est. K1 0.9, K2 1.0, K3 1.2, K4 1.2 GPU-h).
+- 2026-10-02T04:56:02Z lane K2: pulled 8 new run dir(s) into runs/
+- 2026-10-02T04:57:26Z Step 5.2 Qwen3: 11 rows added (7 seed-1 arms + 4 Killarney strict seed-1 refs under nibiref), each dataset on one lane after its longbench item: K1 aime24, K2 gsm8k+mtbench, K3 humaneval, K4 livecodebench (README deviation 20). Longbench rows spread over K1-K4 (strict ref K1, md 0.35 K3, md 0.55 K4, tok on K2) since each longbench cell takes ~1 h. cmd_plan now honours an extra row's Killarney lane.
+- 2026-10-02T14:10:55Z lane K1: pulled 209 new run dir(s) into runs/
+- 2026-10-02T14:11:27Z lane K2: pulled 663 new run dir(s) into runs/
+- 2026-10-02T14:11:51Z lane K3: pulled 594 new run dir(s) into runs/
+- 2026-10-02T14:12:16Z lane K4: pulled 324 new run dir(s) into runs/
+- 2026-10-02T14:12:27Z step 0.5 nibiref longbench_v2_qwen3 strict alpha=strict seed=0: done, 150/150 cases (jobs 5862541, 0.97 GPU-h)
+- 2026-10-02T14:12:28Z step 5.1 main longbench_v2_qwen3 mentored_dec alpha=0.35 seed=0: done, 150/150 cases (jobs 5862551, 0.98 GPU-h)
+- 2026-10-02T14:12:29Z step 5.1 main longbench_v2_qwen3 mentored_dec alpha=0.55 seed=0: done, 150/150 cases (jobs 5862558, 0.98 GPU-h)
+- 2026-10-02T14:12:30Z step 5.1 main longbench_v2_qwen3 spec_casc_tok alpha=0.35 seed=0: done, 150/150 cases (jobs 5837983 5838981 5845269 5857990, 1.10 GPU-h)
+- 2026-10-02T14:12:30Z step 5.1 main longbench_v2_qwen3 spec_casc_tok alpha=0.55 seed=0: done, 150/150 cases (jobs 5837983 5838981 5845269 5857990, 1.03 GPU-h)
+- 2026-10-02T14:12:31Z step 5.2 main gsm8k_qwen3 mentored_dec alpha=0.35 seed=1: done, 150/150 cases (jobs 5857990, 0.25 GPU-h)
+- 2026-10-02T14:12:31Z step 5.2 nibiref gsm8k_qwen3 strict alpha=strict seed=1: done, 150/150 cases (jobs 5857990, 0.23 GPU-h)
+- 2026-10-02T14:12:32Z step 5.2 main aime24_qwen3 mentored_dec alpha=0.55 seed=1: done, 30/30 cases (jobs 5862541, 0.91 GPU-h)
+- 2026-10-02T14:12:32Z step 5.2 main aime24_qwen3 spec_casc_tok alpha=0.35 seed=1: done, 30/30 cases (jobs 5862541, 0.81 GPU-h)
+- 2026-10-02T14:12:33Z step 5.2 main humaneval_qwen3 mentored_dec alpha=0.55 seed=1: done, 150/150 cases (jobs 5862551, 0.68 GPU-h)
+- 2026-10-02T14:12:33Z step 5.2 nibiref humaneval_qwen3 strict alpha=strict seed=1: done, 150/150 cases (jobs 5862551, 0.65 GPU-h)
+- 2026-10-02T14:12:33Z step 5.2 main humaneval_qwen3 spec_casc_tok alpha=0.35 seed=1: done, 150/150 cases (jobs 5862551, 0.68 GPU-h)
+- 2026-10-02T14:12:34Z step 5.2 main livecodebench_qwen3 mentored_dec alpha=0.35 seed=1: done, 90/90 cases (jobs 5862558, 0.90 GPU-h)
+- 2026-10-02T14:12:34Z step 5.2 nibiref livecodebench_qwen3 strict alpha=strict seed=1: done, 90/90 cases (jobs 5862558, 0.91 GPU-h)
+- 2026-10-02T14:12:34Z step 5.2 main mtbench_qwen3 mentored_dec alpha=0.55 seed=1: done, 80/80 cases (jobs 5857990, 0.20 GPU-h)
+- 2026-10-02T14:12:35Z step 5.2 nibiref mtbench_qwen3 strict alpha=strict seed=1: done, 80/80 cases (jobs 5857990, 0.23 GPU-h)
+- 2026-10-02T14:14:31Z grading: uploaded 1818 run dir(s) to the Nibi mirror, submitted CPU grading job 23135057
+- 2026-10-02T14:14:35Z grading: pulled 44074 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-02T14:27:09Z grading: uploaded 0 run dir(s) to the Nibi mirror, submitted CPU grading job 23135224
+- 2026-10-02T14:27:12Z grading: pulled 45892 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-02T14:29:13Z step 5.2: 24 cells have an eligible best setting; added 3 seed-1 row(s): longbench_v2_qwen3/mentored_dec/0.75 -> K1, longbench_v2_qwen3/strict/strict -> K1, longbench_v2_qwen3/spec_casc_tok/0.55 -> K1
+- 2026-10-02T14:56:48Z lane K1: submitted job 5883236; lane has 2 work items, est. 0.4 GPU-h
+- 2026-10-02T14:56:51Z lane K2: submitted job 5883237; lane has 1 work items, est. 0.3 GPU-h
+- 2026-10-02T16:15:03Z lane K1: pulled 178 new run dir(s) into runs/
+- 2026-10-02T16:15:16Z lane K2: pulled 150 new run dir(s) into runs/
+- 2026-10-02T16:15:31Z step 5.2 main longbench_v2_qwen3 mentored_dec alpha=0.75 seed=1: done, 150/150 cases (jobs 5883237, 0.95 GPU-h)
+- 2026-10-02T16:15:32Z step 5.2 main longbench_v2_qwen3 strict alpha=strict seed=1: done, 150/150 cases (jobs 5883236, 0.96 GPU-h)
+- 2026-10-02T16:16:28Z grading: uploaded 328 run dir(s) to the Nibi mirror, submitted CPU grading job 23140383
+- 2026-10-02T16:16:30Z grading: pulled 45892 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-02T16:24:27Z lane K1: pulled 28 new run dir(s) into runs/
+- 2026-10-02T16:25:02Z grading: uploaded 28 run dir(s) to the Nibi mirror, submitted CPU grading job 23140530
+- 2026-10-02T16:25:04Z grading: pulled 46220 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-02T16:59:47Z lane K1: pulled 94 new run dir(s) into runs/
+- 2026-10-02T16:59:56Z step 5.2 main longbench_v2_qwen3 spec_casc_tok alpha=0.55 seed=1: done, 150/150 cases (jobs 5883236, 0.94 GPU-h)
+- 2026-10-02T17:00:31Z grading: uploaded 94 run dir(s) to the Nibi mirror, submitted CPU grading job 23142301
+- 2026-10-02T17:00:35Z grading: pulled 46248 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-02T17:05:51Z grading: uploaded 0 run dir(s) to the Nibi mirror, submitted CPU grading job 23142818
+- 2026-10-02T17:05:53Z grading: pulled 46342 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-02T17:13:10Z grading: uploaded 0 run dir(s) to the Nibi mirror, submitted CPU grading job 23143323
+- 2026-10-02T17:13:12Z grading: pulled 46342 verdicts into campaign/addendum/analysis/grades.csv
+- 2026-10-02T23:13:21Z Bill dropped the SPEED-Bench HLE prompts (not essential): the 14 step-7 rows stay blocked with that reason (README deviation 21). Campaign closed: 278 done, 14 blocked.

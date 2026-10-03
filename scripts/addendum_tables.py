@@ -21,7 +21,9 @@ draft_rounds ratio, time ratio = mean wall_time_seconds ratio. Intervals are
 from __future__ import annotations
 
 import argparse
+import collections
 import csv
+import datetime as dt
 import json
 import math
 import pathlib
@@ -29,6 +31,8 @@ import subprocess
 import sys
 
 import numpy as np
+
+from addendum_analysis import machine_of
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 RUNS = REPO / "runs"
@@ -126,8 +130,113 @@ def accuracy(runs: list[dict]) -> float | None:
     return sum(vals) / len(vals)
 
 
+# ------------------------------------------------------------------ nodes
+# A lane's next 3 h job may land on another node (README deviations 13, 15, 17), and time per round depends on the
+# node (kn176 vs kn169/kn173 in step 4.2) and the driver. Run directories do not record their node; the lane journals
+# that every poll archives (campaign/addendum/lanes/<lane>_status.jsonl) do, per item.
+
+LANES_DIR = ADD / "lanes"
+_intervals: dict[str, list[tuple[float, float, str]]] | None = None
+_configs: dict[str, dict] = {}
+
+
+def utc_seconds(stamp: str) -> float:
+    return dt.datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+
+
+def norm_alpha(alpha: str) -> str:
+    try:
+        return f"{float(alpha):g}"
+    except ValueError:
+        return alpha
+
+
+def norm_key(item: str) -> str:
+    """A journal item id (condition|dataset|method|alpha|seed[@budget]) with its alpha written as params_dir does."""
+    parts = item.split("@")[0].split("|")
+    if len(parts) == 5:
+        parts[3] = norm_alpha(parts[3])
+    return "|".join(parts)
+
+
+def item_intervals() -> dict[str, list[tuple[float, float, str]]]:
+    """Row key -> [(start, end, host)]: one interval per item_start in the archived lane journals, closed by its
+    item_end or by the lane's next item_start / job_start (a job cut off mid-item)."""
+    global _intervals
+    if _intervals is None:
+        _intervals = {}
+        for path in sorted(LANES_DIR.glob("*_status.jsonl")):
+            open_item = None
+            for line in path.read_text(encoding="utf-8").splitlines():
+                try:
+                    e = json.loads(line)
+                    t = utc_seconds(e["t"])
+                except (json.JSONDecodeError, KeyError, ValueError):
+                    continue
+                if open_item and e.get("event") in ("item_start", "item_end", "job_start"):
+                    key, start, host = open_item
+                    _intervals.setdefault(key, []).append((start, t, host))
+                    open_item = None
+                if e.get("event") == "item_start":
+                    open_item = (norm_key(e.get("item", "")), t, e.get("host", ""))
+            if open_item:  # still running when the journal was archived
+                key, start, host = open_item
+                _intervals.setdefault(key, []).append((start, math.inf, host))
+    return _intervals
+
+
+def run_config(run: dict) -> dict:
+    rel = run["_rel"]
+    if rel not in _configs:
+        try:
+            _configs[rel] = json.loads((RUNS / rel / "config.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            _configs[rel] = {}
+    return _configs[rel]
+
+
+def run_node(run: dict) -> str:
+    """The node a run ran on, matched by its config.json timestamp to its item's interval in the lane journals
+    ('' when no journal covers it)."""
+    parts = run["_rel"].split("/")
+    if parts[0] == "addendum":  # runs/addendum/<condition>/[<target>/ for step 7]<dataset>/...
+        condition, rest = parts[1], parts[3:] if parts[1].startswith("speedbench") else parts[2:]
+    else:
+        condition, rest = "main", parts
+    stamp = run_config(run).get("timestamp_utc")
+    if len(rest) < 5 or not stamp:
+        return ""
+    ds, method, params, _case, seed = rest[:5]
+    alpha = params if params == method else norm_alpha(params.removeprefix("alpha").replace("neg", "-"))
+    t = utc_seconds(stamp)
+    for start, end, host in item_intervals().get(f"{condition}|{ds}|{method}|{alpha}|{seed.removeprefix('seed_')}", []):
+        if start - 5 <= t <= end + 5:
+            return host
+    return ""
+
+
+def node_label(run: dict) -> str:
+    """run_node, with old-box runs as 'oldbox' and a Nibi / Killarney run no journal covers as '?'."""
+    return run_node(run) or ("oldbox" if run_machine(run) in ("oldbox", "") else "?")
+
+
+def node_summary(labels: list[str]) -> str:
+    """'kn176' when every run is on one node, else 'kn169:120+kn176:30'."""
+    counts = collections.Counter(labels)
+    return next(iter(counts), "") if len(counts) <= 1 else "+".join(f"{n}:{k}" for n, k in counts.most_common())
+
+
+def cell_nodes(runs: list[dict]) -> tuple[str, set[str] | None]:
+    """(node_summary, the node set -- None when any run's node is unknown)."""
+    labels = [node_label(r) for r in runs]
+    return node_summary(labels), (None if "?" in labels else set(labels))
+
+
 def compare(relaxed: dict[str, dict], strict: dict[str, dict], rng=None) -> dict:
-    """Paired comparison of two cells (case -> run)."""
+    """Paired comparison of two cells (case -> run). `nodes` / `nodes_strict` say where each side ran;
+    `same_node_pairs` counts the cases whose relaxed and strict runs share a node, `same_node` is True when all do
+    (both None when a run's node is unknown), and `time_ratio_same_node` is the time ratio over those cases alone
+    (with at least 10 of them). time_per_round_ratio = time ratio / rounds ratio, the node-sensitive part."""
     cases = sorted(set(relaxed) & set(strict))
     if not cases:
         return {"n_pairs": 0}
@@ -147,6 +256,16 @@ def compare(relaxed: dict[str, dict], strict: dict[str, dict], rng=None) -> dict
         "capout_rate": float(np.mean([r.get("finish_reason") == "length" for r in R])),
         "capout_rate_strict": float(np.mean([s.get("finish_reason") == "length" for s in S])),
     }
+    out["time_per_round_ratio"] = out["time_ratio"] / out["rounds_ratio"] if out["rounds_ratio"] else None
+    nr, ns = [node_label(r) for r in R], [node_label(s) for s in S]
+    out["nodes"], out["nodes_strict"] = node_summary(nr), node_summary(ns)
+    if "?" in nr or "?" in ns:
+        out["same_node_pairs"] = out["same_node"] = None
+    else:
+        same = np.array([a == b for a, b in zip(nr, ns)])
+        out["same_node_pairs"], out["same_node"] = int(same.sum()), bool(same.all())
+        if same.sum() >= 10:
+            out["time_ratio_same_node"] = float(Tr[same].mean() / Ts[same].mean())
     if rng is not None:
         out["lambda_ci_lo"], out["lambda_ci_hi"] = boot_ratio_ci(Lr, Ls, rng)
         out["rounds_ratio_ci_lo"], out["rounds_ratio_ci_hi"] = boot_ratio_ci(Rr, Rs, rng)
@@ -246,9 +365,11 @@ def sweep_table(kind: str, values: list, condition: callable, extra_label: str) 
                 runs = load_cell(ds, "strict", "strict", 0, run_root=f"runs/addendum/{condition(v)}")
                 if runs:
                     row = point_row({extra_label: v, "source": condition(v) + " (Nibi)"}, runs, rng)
+                    row["nodes"] = cell_nodes(list(runs.values()))[0]
                     if ref:  # paired against the Nibi reference at the campaign setting, same cases
                         c = compare(runs, ref, rng)
-                        for k in ("n_pairs", "lambda", "rounds_ratio", "time_ratio"):
+                        for k in ("n_pairs", "lambda", "rounds_ratio", "time_ratio", "time_per_round_ratio", "same_node",
+                                  "same_node_pairs", "time_ratio_same_node"):
                             row[f"{k}_vs_nibiref"] = c.get(k)
                         for k in ("lambda", "rounds_ratio", "time_ratio"):
                             row[f"{k}_vs_nibiref_ci_lo"] = c.get(f"{k}_ci_lo")
@@ -256,7 +377,8 @@ def sweep_table(kind: str, values: list, condition: callable, extra_label: str) 
                     rows.append(row)
             default = {"nspec": 6, "temp": 1.0}[kind]
             if ref:
-                rows.append(point_row({extra_label: default, "source": "nibiref (Nibi, campaign settings)"}, ref, rng))
+                rows.append({**point_row({extra_label: default, "source": "nibiref (Nibi, campaign settings)"}, ref, rng),
+                             "nodes": cell_nodes(list(ref.values()))[0]})
             old = load_cell(ds, "strict", "strict", 0)
             if old:
                 rows.append(point_row({extra_label: default, "source": "campaign seed 0 (old box, H100 PCIe)"}, old, rng))
@@ -307,24 +429,25 @@ def cmd_lmdraft(args) -> int:
 GRID = {"mentored_dec": ["0.15", "0.35", "0.55", "0.75"], "spec_casc_tok": ["0.15", "0.35", "0.55", "0.8"]}
 
 
-def nibi_cases(cell: dict[str, dict]) -> set[str]:
-    """Cases of a seed-0 cell that ran on Nibi (step 5.1 fills): config.json vllm.site_packages under /project."""
-    out = set()
-    for case, run in cell.items():
-        cfg = RUNS / run["_rel"] / "config.json"
-        try:
-            site = json.loads(cfg.read_text(encoding="utf-8")).get("vllm", {}).get("site_packages", "")
-        except (OSError, json.JSONDecodeError):
-            site = ""
-        if site.startswith("/project/") or "/projects/def-hongyanz/" in site:
-            out.add(case)
-    return out
+def run_machine(run: dict) -> str:
+    """oldbox / nibi / killarney for one run: addendum_analysis.machine_of on its config.json. (Until 2026-10-01
+    this tested for a /project/ venv path, which Killarney's /project/6101837 also matches: its runs read "nibi".)"""
+    cfg = run_config(run)
+    return machine_of(cfg.get("timestamp_utc") or "", cfg.get("vllm", {}).get("site_packages", ""))
+
+
+def cell_machine(cell: dict[str, dict]) -> str:
+    """The machine most of a cell's cases ran on ("" for an empty cell)."""
+    machines = [run_machine(run) for run in cell.values()]
+    return max(set(machines), key=machines.count) if machines else ""
 
 
 def select_best(ds: str, method: str) -> tuple[str | None, list[dict]]:
     base = ds.removesuffix("_qwen3")
     strict = load_cell(ds, "strict", "strict", 0)
     nibiref = load_cell(ds, "strict", "strict", 0, run_root="runs/addendum/nibiref")
+    # the step-0.5 strict reference's machine: Nibi for GPT-OSS, Killarney for Qwen3 (README deviation 12)
+    ref_machine = cell_machine(nibiref) or "nibi"
     cands = []
     for alpha in GRID[method]:
         cell = load_cell(ds, method, alpha, 0)
@@ -332,13 +455,15 @@ def select_best(ds: str, method: str) -> tuple[str | None, list[dict]]:
             cands.append({"alpha": alpha, "complete": False})
             continue
         c = compare(cell, strict)
-        on_nibi = nibi_cases(cell)
-        hw = "nibi" if len(on_nibi) > len(cell) / 2 else "old_box"
-        if hw == "nibi":  # hardware-matched time ratio: Nibi cases vs the Nibi strict reference
-            sub = {k: v for k, v in cell.items() if k in on_nibi}
+        on_ref = {case for case, run in cell.items() if run_machine(run) == ref_machine}
+        hw = ref_machine if len(on_ref) > len(cell) / 2 else "old_box"
+        if hw != "old_box":  # hardware-matched time ratio: this machine's cases vs its own strict reference
+            sub = {k: v for k, v in cell.items() if k in on_ref}
             t = compare(sub, nibiref)
             c["time_ratio"] = t.get("time_ratio")
-            c["time_ratio_basis"] = f"nibiref, {t.get('n_pairs', 0)} Nibi cases"
+            c["time_ratio_basis"] = f"nibiref, {t.get('n_pairs', 0)} {ref_machine.capitalize()} cases"
+            c.update({k: t.get(k) for k in ("time_per_round_ratio", "nodes", "nodes_strict", "same_node",
+                                            "same_node_pairs", "time_ratio_same_node")})
         else:
             c["time_ratio_basis"] = "campaign strict seed 0 (old box)"
         c.update({"alpha": alpha, "complete": True, "hardware": hw})
@@ -382,11 +507,26 @@ def cmd_best(args) -> int:
                     for k in ("lambda", "rounds_ratio", "time_ratio", "accuracy", "accuracy_strict", "n_pairs"):
                         row[f"s0_{k}"] = s0.get(k)
                     row["s0_hardware"], row["s0_time_ratio_basis"] = s0["hardware"], s0["time_ratio_basis"]
-                    s1 = compare(load_cell(ds, method, best, 1), load_cell(ds, "strict", "strict", 1))
+                    for k in ("time_per_round_ratio", "nodes", "nodes_strict", "same_node", "same_node_pairs",
+                              "time_ratio_same_node"):
+                        row[f"s0_{k}"] = s0.get(k)
+                    s1_arm, s1_ref = load_cell(ds, method, best, 1), load_cell(ds, "strict", "strict", 1)
+                    arm_m, ref_m = cell_machine(s1_arm), cell_machine(s1_ref)
+                    if arm_m and ref_m and arm_m != ref_m:
+                        # step 5.2 adds a strict seed 1 on the arm's machine under runs/addendum/nibiref (task #11)
+                        alt = load_cell(ds, "strict", "strict", 1, run_root="runs/addendum/nibiref")
+                        if cell_machine(alt) == arm_m:
+                            s1_ref, ref_m = alt, arm_m
+                    s1 = compare(s1_arm, s1_ref)
                     for k in ("lambda", "rounds_ratio", "time_ratio", "accuracy", "accuracy_strict", "n_pairs"):
                         row[f"s1_{k}"] = s1.get(k)
-                    # step 5.2 verdict: does the seed-0 choice hold on seed 1 (Nibi, paired with Nibi strict)?
-                    if s1.get("n_pairs") == N_CASES[base]:
+                    row["s1_hardware"], row["s1_strict_hardware"] = arm_m, ref_m
+                    for k in ("time_per_round_ratio", "nodes", "nodes_strict", "same_node", "same_node_pairs",
+                              "time_ratio_same_node"):
+                        row[f"s1_{k}"] = s1.get(k)
+                    # step 5.2 verdict: does the seed-0 choice hold on seed 1, paired with strict seed 1 on the same
+                    # machine? A cross-machine time ratio gives no time verdict.
+                    if s1.get("n_pairs") == N_CASES[base] and arm_m == ref_m:
                         row["s1_time_win"] = s1["time_ratio"] < 1
                         if base in GRADED:
                             row["s1_accuracy_ok"] = (None if s1["accuracy"] is None or s1["accuracy_strict"] is None
@@ -513,6 +653,8 @@ def cmd_speedbench(args) -> int:
                     **{k: c.get(k) for k in ("lambda", "lambda_ci_lo", "lambda_ci_hi", "rounds_ratio", "rounds_ratio_ci_lo",
                                              "rounds_ratio_ci_hi", "time_ratio", "time_ratio_ci_lo", "time_ratio_ci_hi")},
                     "capout_rate": c["capout_rate"], "capout_rate_strict": c["capout_rate_strict"],
+                    **{k: c.get(k) for k in ("time_per_round_ratio", "nodes", "nodes_strict", "same_node",
+                                             "same_node_pairs", "time_ratio_same_node")},
                 })
                 gain = (c["l_bar"] + 1) / (c["l_bar_strict"] + 1)
                 eq4.append({
@@ -524,6 +666,7 @@ def cmd_speedbench(args) -> int:
                     "eq4_predicts_win": int(gain / c["lambda"] > 1), "rounds_win": int(c["rounds_ratio"] < 1),
                     "time_win": int(c["time_ratio"] < 1),
                     "time_loss_beyond_ci": int(c.get("time_ratio_ci_lo") is not None and c["time_ratio_ci_lo"] > 1),
+                    "same_node": c.get("same_node"), "same_node_pairs": c.get("same_node_pairs"),
                 })
         write_csv(ADD / "tables" / f"speedbench__{family}.csv", rows)
         write_csv(ADD / "tables" / f"speedbench_eq4__{family}.csv", eq4)

@@ -204,9 +204,11 @@ def load_runs(runs_root: pathlib.Path) -> list[dict]:
                 rounds = run.get("draft_rounds")
                 wall = run.get("wall_time_seconds")
                 try:
-                    stamp = json.loads((run_dir / "config.json").read_text(encoding="utf-8")).get("timestamp_utc") or ""
+                    cfg = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
                 except (OSError, json.JSONDecodeError):
-                    stamp = ""
+                    cfg = {}
+                stamp = cfg.get("timestamp_utc") or ""
+                site = (cfg.get("vllm") or {}).get("site_packages") or ""
                 rows.append({
                     "target": target, "dataset": base, "method": method, "alpha": alpha_of(params), "params": params,
                     "case": case, "seed": int(run_dir.name.removeprefix("seed_")),
@@ -220,7 +222,7 @@ def load_runs(runs_root: pathlib.Path) -> list[dict]:
                     "verdict": verdict, "status": run.get("status"), "input_tokens": run.get("input_tokens"),
                     "draft_tokens": run.get("draft_tokens"),
                     "time_per_round": (wall / rounds) if (wall and rounds) else None,
-                    "timestamp_utc": stamp, "machine": machine_of(stamp),
+                    "timestamp_utc": stamp, "machine": machine_of(stamp, site),
                     "relpath": rel, "_text": text,
                 })
     return rows
@@ -229,8 +231,13 @@ def load_runs(runs_root: pathlib.Path) -> list[dict]:
 ADDENDUM_START = "2026-09-29"  # the campaign ran on the old box through 2026-09-16; addendum runs are on Nibi
 
 
-def machine_of(stamp: str) -> str:
-    """oldbox = the campaign's H100 PCIe box (the paper's data); nibi = Nibi H100 SXM (addendum runs)."""
+def machine_of(stamp: str, site: str = "") -> str:
+    """oldbox = the campaign's H100 PCIe box (the paper's data); nibi = Nibi H100 SXM, killarney = Killarney
+    H100 (addendum runs), told apart by the venv path config.json records (vllm.site_packages)."""
+    if "/6101837/" in site or "/aip-hongyanz/" in site:
+        return "killarney"
+    if "/6071935/" in site or "/def-hongyanz/" in site:
+        return "nibi"
     if not stamp:
         return ""
     return "nibi" if stamp[:10] >= ADDENDUM_START else "oldbox"

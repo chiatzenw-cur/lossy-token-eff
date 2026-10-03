@@ -165,3 +165,157 @@ alpha grows).
    cancelled and every lane now chains 3 h jobs (`JOB_TIME` in
    `scripts/addendum_campaign.py`); a job ending mid-arm loses only the case
    in progress (its partial dir is quarantined, the rest is skip-if-done).
+12. **Qwen3 moved to Killarney (PAICE allocation `aip-hongyanz`), 2026-09-30
+   ~23:15Z, with Bill's go-ahead.** On Nibi our fair-share had fallen to 0.23
+   after 2.5 days of continuous use and the lane jobs sat 6 h+ in a queue of
+   ~2,200 GPU jobs; on Killarney the account's fair-share is 0.58 (no usage
+   yet), which ranks our jobs above every pending H100 job there (priority
+   2.9M vs 2.7M). Environment: `cascade/cluster/setup_nibi.sh` with
+   `PROJECT_DIR=~/projects/aip-hongyanz/billxby` and the three Qwen3 models
+   (vLLM 0.26.0, torch 2.11.0+cu129), the consolidated V2 patch applied
+   (68d0a904), two lane copies: K1 on kn169-kn173, K2 on kn174-kn178 (NVIDIA
+   H100 80GB HBM3, driver 580.159). Smoke test (gsm8k_qwen3 case_001, seed
+   7, strict and mentored_dec 0.75): bit-identical to the same test on Nibi
+   (772 / 736 tokens, same l_bar), V2 alpha line printed. Every not-done
+   Qwen3 row moved (`addendum_campaign.py move-qwen3`) except step 2.1's last
+   four arms, which stay on Nibi so that step's pairs share one machine.
+   Runs record their venv path, so `per_request.csv` labels them (machine =
+   killarney). Step 7 Qwen3: the first 40 cases per arm ran on Nibi, the
+   rest run on Killarney (each case's pair on one machine). Step 0.5's
+   Qwen3 reference runs on Killarney, the machine of the Qwen3 cells it
+   serves (steps 3, 4.1, 5.1/5.2).
+13. **Killarney nodes differ in time per round; comparisons are kept on one
+   lane (2026-10-01 14:30Z).** Step 4.2 (Qwen3 at T 0.6) ran strict,
+   mentored_dec and r_fuzzy on K1 (kn173/kn169: 9.5-9.6 ms per round, the
+   relaxed arms within 1% of strict) and cactus, spec_casc_opt and
+   spec_casc_tok on K2 (kn176: 10.5-10.8 ms per round), so those three time
+   ratios carry a ~11% node penalty; their rounds ratios and lambda do not
+   (README deviation 12 had spread rows over K1/K2 one by one). Every
+   not-yet-started Qwen3 row was then regrouped so that each comparison --
+   a dataset's step-0.5 reference with its step-3, 4.1 and 5.1 rows; each
+   step-4.3 dataset; Qwen3 SPEED-Bench -- sits on one lane (K1: gsm8k,
+   livecodebench, mtbench, aime24 and step 4.3 livecodebench; K2: humaneval,
+   longbench_v2, SPEED-Bench). A lane still moves between nodes of its set
+   from one 3 h job to the next, so a group can span nodes; the rounds ratio
+   is the hardware-independent comparison throughout.
+14. **Four Killarney lanes from 2026-10-01 ~15:00Z, at Bill's suggestion**
+   (beyond the plan's "at most three jobs running", which was set with
+   Nibi's queue in mind). Disjoint H100 node sets: K1 kn169-kn171, K2
+   kn176-kn178, K3 kn172-kn173, K4 kn174-kn175 (the pending K1/K2 jobs were
+   narrowed in place with `scontrol update ExcNodeList`); K3/K4 are copies of
+   K1's repo + patched venv (V2 68d0a904). The comparison groups were
+   re-spread over the four lanes whole (README deviation 13): K1 Qwen3
+   SPEED-Bench, K2 step-4.3 livecodebench + humaneval + longbench_v2 +
+   mtbench, K3 livecodebench, K4 aime24 + gsm8k.
+15. **Killarney lanes may share a node (2026-10-01 ~15:50Z).** The disjoint
+   node sets of deviation 14 left K3/K4 (two nodes each) waiting for a GPU.
+   The two reasons for disjoint sets do not hold on Killarney once
+   `remote/stop_server.sh` is job-scoped: every job gets a private /tmp
+   (`JobContainerType=job_container/tmpfs`), so the patched sampler's /tmp
+   knob files are per job; and the stop script now signals only processes
+   whose cgroup path names this job (`/job_<SLURM_JOB_ID>/`; checked in a
+   dry run inside K1's job, which found exactly its own server) -- its
+   nvidia-smi step already saw only the job's GPU, and outside Slurm it
+   behaves as before. Ports differ per job (`30000 + SLURM_JOB_ID % 20000`
+   in `cascade/cluster/addendum_lane.sbatch`). All pending Killarney jobs had
+   their ExcNodeList cleared; new ones are submitted without --exclude.
+   Verified at 16:10Z with K2 (job 5837981, lmdraft spec_casc_tok 0.8) and K3
+   (job 5839003, strict) running side by side on kn176: their /tmp are
+   separate bind mounts (`/slurm/tmpfs/<jobid>/.<jobid>/_tmp`), the same knob
+   file `/tmp/lossy-token-eff-spec-casc-tok-alpha-<uid>` read 0.8 in K2 and
+   -inf in K3, K3's knob writes (15:44:18Z) left K2's files untouched
+   (15:40:42Z), and neither lane logged a failed or quarantined item.
+   Caveat (extends deviation 13): a lane's next 3 h job may now land on any
+   of the ten H100 nodes, so a comparison group is more likely to span nodes.
+   Run directories do not record their node; the lane journals do (host per
+   item), and the poll archives them in `lanes/<lane>_status.jsonl`. The
+   final tables use them to name each Killarney arm's node(s) and to flag
+   time ratios whose arm and reference ran on different nodes; rounds
+   ratios are unaffected.
+16. **Qwen3 SPEED-Bench arms spread over lanes (2026-10-01 ~17:25Z).** With
+   the whole SPEED-Bench group on K1 (deviation 14), K1 held 10.0 of the
+   ~24 remaining GPU-h while K2 and K4 would have idled after 3-4 h. Since
+   deviation 15 a lane's next job may land on any node, so one lane no
+   longer means one node, and step 4.3 showed no node penalty between
+   kn169 and kn176 (JOURNAL). The two relaxed arms with only their first-40
+   cases done (already pulled, so nothing reruns) moved whole: r_fuzzy to K2
+   and cactus to K4, each after that lane's other work; spec_casc_opt
+   (mid-run), mentored_dec and spec_casc_tok stay on K1. Estimated remaining
+   GPU-h: K1 5.9, K2 5.3, K3 6.4, K4 5.9 (was 10.0 / 3.0 / 6.5 / 4.1). The
+   final tables name each arm's node(s) and flag mixed-node time ratios
+   (deviation 15); rounds ratios are unaffected.
+17. **Killarney rebooted every H100 node from 2026-10-01 ~18:40Z** ("Reboot
+   ASAP": each node drains and reboots once its last job ends). Rebooted
+   nodes run NVIDIA driver 580.178.04 (was 580.159.03; kernel 6.8.0-136
+   after), so time per round may differ before and after a node's reboot.
+   Every job's Slurm log records its driver (`nvidia-smi` at job start); the
+   final tables flag time ratios whose arm and reference straddle the
+   change, alongside the node flags of deviation 15. Rounds ratios are
+   unaffected. The first job on a freshly rebooted node (K3's 5839004 on
+   kn172) failed after 4 s: /cvmfs was not mounted yet, `module load` failed
+   without stopping the batch script, and the venv python (a link into
+   /cvmfs) raised ELOOP. The next job in the chain started 4 s later and ran
+   normally. Two guards since ~19:20Z: the batch script waits for the venv
+   python before `module load`, and `scripts/addendum_lane.py` stops before
+   taking work if the modules did not load (no EBROOTCUDA), so no item runs
+   in a partial environment. The guard tripped as intended on kn169 at
+   20:57Z (K1 5837978, K2 5838004), but waiting does not help: each job has
+   a private mount namespace, and a job created before /cvmfs was mounted
+   saw ELOOP for its whole 300 s wait while the next jobs, 2 s later, ran
+   normally. Since ~21:25Z both waits are 30 s, so such a job hands over to
+   the next one in its chain within about a minute.
+18. **Qwen3 step-3 nspec10 runs at `--gpu-memory-utilization 0.80`.** The
+   first Qwen3 nspec10 item (gsm8k, K4 job 5839007, 2026-10-01 19:31Z)
+   failed twice at server start: vLLM's sampler warmup over Qwen3's
+   152k-token vocabulary at 10 draft tokens needed 2.12 GiB after the KV
+   cache had taken 0.85 of the GPU (1.55 GiB free). GPT-OSS's nspec10 rows
+   ran at the default on Nibi. The two Qwen3 nspec10 rows (gsm8k,
+   livecodebench) pass `GPU_UTIL=0.80` to `remote/run_server_vllm.sh`; every
+   other row keeps 0.85. The KV pool's size does not change a single
+   request's computation (prefix caching off, one request at a time), and
+   0.80 still holds a full max-length request.
+19. **Qwen3 longbench_v2 drafts with a copy of the EAGLE-3 drafter whose
+   config allows 65536 positions (2026-10-02, approved by Bill).** Every
+   Killarney longbench_v2_qwen3 item crashed once a sequence passed 40960
+   positions: CUDA device-side assert `index out of bounds ... < 40960`. The
+   bound sat in the drafter's compiled rope kernel (vllm_cache/
+   torch_compile_cache/<hash>/rank_0_0/eagle_head; the target's kernels had
+   65536). `--hf-overrides` raises the target's max_position_embeddings to
+   65536 alongside YaRN (2026-08-22), but RedHatAI/Qwen3-8B-speculator.eagle3
+   builds its rope table from its own transformer_layer_config
+   (max_position_embeddings 40960, rope_scaling null; snapshot 08610ffa, the
+   config unchanged since the 2025-10 upload). The old box ran 339 longbench
+   cases past 40960 positions with the same drafter; nothing in the repo
+   records how. The longbench_v2_qwen3 rows now use
+   `hf/local/Qwen3-8B-speculator.eagle3-maxpos65536` on Killarney: the
+   snapshot's files byte-identical except config.json's
+   max_position_embeddings 40960 -> 65536. Plain RoPE continues past 40960
+   with the same theta, so every position below 40960 gets exactly the values
+   it had before (the 13 earlier Killarney longbench runs stay comparable).
+   These items get their own compile cache (`VLLM_CACHE_ROOT=/scratch/
+   billxby/vllm_cache_longdrafter`); its drafter kernel's bound is 65536.
+20. **Qwen3 step 5.2 pairs each seed-1 arm with a Killarney strict seed 1
+   (2026-10-02 ~04:55Z).** The Qwen3 seed-1 arms run on Killarney, but the
+   strict seed 1 they are judged against ran on Nibi (step 2.1) for gsm8k,
+   humaneval, livecodebench and mtbench; only aime24's (step 2.2) ran on
+   Killarney. `add52` now adds, for those datasets, a strict seed 1 under
+   `runs/addendum/nibiref` on the arm's lane (the step 0.5 idea, one seed
+   on), and `addendum_tables.py best` pairs seed 1 by machine. That gives
+   7 seed-1 arms with graded grids (gsm8k md 0.35; aime24 md 0.55, tok 0.35;
+   humaneval md 0.55, tok 0.35; livecodebench md 0.35; mtbench md 0.55) and
+   4 strict references. Cells whose chosen alpha is the campaign's own
+   (tok 0.8 on gsm8k, livecodebench, mtbench) already have their seed-1 pair
+   from step 2.1 on Nibi. Each dataset's rows share one lane: K1 aime24, K2
+   gsm8k + mtbench, K3 humaneval, K4 livecodebench, each after that lane's
+   longbench_v2 item. `cmd_plan` now honours an extra row's named Killarney
+   lane (it used to spread every new Qwen3 row by load, which split the
+   pairs until they were moved back). Longbench's step-5.2 rows follow once
+   its grid is complete and graded.
+21. **SPEED-Bench's 208 HLE prompts are not run (2026-10-02, Bill's
+   decision).** They come from the gated `cais/hle` dataset (a Hugging Face
+   token was never set up) and were judged not essential: every arm of both
+   models has the other 672 of the 880 qualitative-split prompts, all eight
+   other categories are complete (80 each), and no other step uses them.
+   Humanities, Math and STEM keep only their non-HLE prompts (8, 18 and 6
+   per arm), so their per-category ratios are thin; RESULTS.md gives n per
+   cell. The 14 step-7 rows stay `blocked` in the manifest with this reason.

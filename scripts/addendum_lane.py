@@ -43,6 +43,7 @@ import time
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 MIN_FREE_GB = 2
 MAX_ATTEMPTS_PER_JOB = 2
+ENV_WAIT_S = 30  # how long a job waits for the CVMFS software stack after a node reboot (see Lane.env_ready)
 
 
 def utc_now() -> str:
@@ -156,8 +157,38 @@ class Lane:
             cmd += [f"--{item['method'].replace('_', '-')}-alpha", str(item["alpha"])]
         return cmd
 
+    def env_ready(self) -> bool:
+        """Right after a node reboot /cvmfs may not be mounted yet when a job starts: `module load` then fails
+        without stopping the batch script, this driver comes up on the system python, and the venv python -- a
+        link into /cvmfs -- cannot be executed (ELOOP; job 5839004 on kn172, 2026-10-01). The job's private mount
+        namespace (job_container/tmpfs) keeps that state for the job's life -- K1/K2's first jobs on kn169 saw
+        ELOOP for 300 s while the next jobs, 2 s later, ran -- but the attempt mounts /cvmfs on the node. So wait
+        only briefly, and if the modules did not load (no EBROOTCUDA) stop rather than run vLLM in a partial
+        environment: the next job in the chain starts in a new namespace."""
+        deadline = time.time() + ENV_WAIT_S
+        while True:
+            try:
+                ok = subprocess.run([self.args.python, "-c", "pass"], check=False).returncode == 0
+                error = "" if ok else "venv python exited nonzero"
+            except OSError as exc:
+                ok, error = False, str(exc)
+            if ok:
+                break
+            if time.time() > deadline:
+                self.journal(event="env_not_ready", reason=f"venv python not runnable after {ENV_WAIT_S} s: {error}")
+                return False
+            time.sleep(10)
+        if not os.environ.get("EBROOTCUDA"):
+            self.journal(event="env_not_ready", reason="module load did not take effect (no EBROOTCUDA)",
+                         python=sys.executable)
+            return False
+        return True
+
     def run(self) -> int:
         self.journal(event="job_start", work=str(self.args.work))
+        if not self.env_ready():
+            self.journal(event="job_end", failures=1)
+            return 1
         attempts: dict[str, int] = {}
         failures = 0
         idle_since = None

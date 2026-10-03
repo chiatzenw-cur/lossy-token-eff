@@ -15,9 +15,9 @@
 #            --output=$SCRATCH/lossy-addendum/laneA/slurm/%x-%j.out \
 #            cascade/cluster/addendum_lane.sbatch
 #
-# Lanes must run on disjoint node sets: remote/stop_server.sh kills every
-# vllm.entrypoints process of this user on the node, and the patched sampler
-# reads node-local /tmp knob files.
+# The patched sampler reads /tmp knob files, so lanes need a per-job /tmp
+# (Killarney: job_container/tmpfs, README deviation 15) or disjoint node sets
+# (Nibi); remote/stop_server.sh stops only this job's vLLM processes.
 set -euo pipefail
 
 LANE="${LANE:?LANE (A, B, ...)}"
@@ -26,6 +26,15 @@ REPO_DIR="${REPO_DIR:?REPO_DIR (the repo + .venv-vllm copy of this lane)}"
 LANE_ROOT="${LANE_ROOT:-$SCRATCH/lossy-addendum/lane$LANE}"
 MODULES="${MODULES:-StdEnv/2023 python/3.12 cuda/12.9}"
 
+# right after a node reboot /cvmfs may not be mounted yet, and `module load`
+# then fails without stopping this script (job 5839004 on kn172, 2026-10-01).
+# A job that starts before the mount keeps that view for its life (private mount
+# namespace), so wait only briefly; scripts/addendum_lane.py then stops and the
+# next job in the chain starts with /cvmfs mounted.
+for _ in $(seq 1 3); do
+  "$REPO_DIR/.venv-vllm/bin/python" -c pass 2>/dev/null && break
+  sleep 10
+done
 # shellcheck disable=SC2086
 module load $MODULES
 # the python module's PYTHONPATH would shadow the venv's packages (setup_nibi.sh)

@@ -2669,3 +2669,118 @@ paper's own tables (`campaign/tables`, `campaign/results`) are untouched.
   mentored_dec 0.75 both ok, and the server log shows `[MENTORED-DEC PATCH V2
   (re-added)] alpha=0.75` in the engine process. All 141 Qwen3 rows (plus
   Qwen3's own SPEED-Bench pilot) queued over lanes A and B, ~37 GPU-h each.
+
+- **2026-10-01, addendum step 2 (Qwen3 half) done** (2.1 on Nibi lanes A/B,
+  jobs 22948693, 22948719, 22982359; 2.2 AIME24 seeds 1-2 on Killarney K1/K2).
+  lambda replicates across seeds 0-2 for every cell (sd <= 0.10; e.g.
+  humaneval spec_casc_opt 1.72 / 1.60 / 1.67, gsm8k 1.33 / 1.29 / 1.32), and
+  so do the accuracy collapses: humaneval r_fuzzy 0.16 / 0.13 / 0.12 and
+  livecodebench r_fuzzy 0.02 / 0.00 / 0.02 against strict 0.83-0.84 and
+  0.69-0.71; spec_casc_opt 0.48-0.51 on gsm8k and humaneval. As for GPT-OSS,
+  the time ratio is lower on the Nibi seeds than on the old-box seed 0
+  (humaneval r_fuzzy 1.41 vs 1.22 / 1.19, mtbench cactus 0.75 vs 0.62 /
+  0.64). `campaign/addendum/seeds/summary.csv`.
+
+- **2026-10-01, addendum step 6 (Qwen3 half) done** (Killarney K1/K2):
+  AIME24 seeds 3-4 for strict and the five rules (1-2 from step 2.2).
+  Accuracy over seeds 0-4 (`campaign/addendum/aime24_repeats.csv`): strict
+  0.72 [0.57, 0.85], mentored_dec 0.72, spec_casc_tok 0.73 -- no loss, unlike
+  GPT-OSS's ~10 points -- while r_fuzzy 0.35, spec_casc_opt 0.32 and cactus
+  0.21 lose 37-51 points on every seed.
+
+- **2026-10-01, addendum step 4.2 done** (Qwen3-8B at its recommended sampler,
+  T 0.6 / top-p 0.95 / top-k 20, gsm8k + livecodebench, seed 0, Killarney):
+  the phenomenon is not a T = 1.0 artifact. spec_casc_opt still inflates
+  (lambda 1.52 / 1.48) and now caps out on 87% / 99% of cases, accuracy 0.20
+  / 0.00 vs strict 0.79 / 0.67; r_fuzzy falls to 0.64 / 0.10. mentored_dec,
+  cactus and spec_casc_tok stay at lambda 1.00-1.04 with accuracy at or above
+  strict. `campaign/addendum/tables/qwenT0.6__*.csv`; time ratios of the K2
+  arms carry a ~11% node penalty (README deviation 13), rounds ratios
+  0.75-0.97.
+
+- **2026-10-01, addendum step 4.3 done** (Qwen3-8B drafting with Qwen3-0.6B
+  as a separate draft model, `SPEC_METHOD=draft_model`, in place of the
+  EAGLE-3 head; gsm8k + livecodebench, seed 0, Killarney K1/K2). With a
+  full LM drafter no rule inflates length: lambda 0.93-0.95 in all six
+  cells, mean tokens below strict. Every rule saves rounds -- cactus 0.75 /
+  0.69, mentored_dec 0.80 / 0.73, spec_casc_tok 0.90 / 0.87 (gsm8k /
+  livecodebench) -- and time (0.69 / 0.68, 0.71 / 0.71, 0.83 / 0.85). gsm8k
+  accuracy is 0.83 for all three against strict 0.77: the relaxed arms cap
+  out less (0.19-0.22 vs 0.27). livecodebench accuracy waits for grading on
+  Nibi. Strict and cactus ran on kn169 and mentored_dec / spec_casc_tok on
+  kn176, yet the kn176 arms' time per round relative to strict (time ratio
+  / rounds ratio: 0.88 / 0.97 and 0.93 / 0.98) matches same-node cactus's
+  (0.93 / 0.98), so no node penalty shows in this group, unlike step 4.2.
+  `campaign/addendum/tables/lmdraft__*.csv`; nodes from
+  `campaign/addendum/lanes/K{1,2}_status.jsonl`.
+
+- **2026-10-02, addendum step 3 (Qwen3 half) done; step 3 complete**
+  (Killarney K3/K4): strict at N_draft 2/3/4/8/10, gsm8k + livecodebench,
+  seed 0, against the Killarney N=6 reference (`nibiref`). As for GPT-OSS,
+  short drafts cost no time and long ones do: N 2-4 time 0.97-1.01x
+  (gsm8k) and 0.90-0.93x (livecodebench) despite 1-21% more rounds; N 8
+  1.08x on both; N 10 1.16x / 1.14x. EAGLE-3's acceptance saturates early
+  on Qwen3: l_bar 1.11 -> 1.53 on gsm8k (N 2 -> 8; N 6 1.50) and 0.94 ->
+  1.14 on livecodebench, so rounds stay at 1.00-1.02x beyond N 6. N 10 ran
+  at GPU_UTIL 0.80 (README deviation 18), and N 8 livecodebench / both N 10
+  points ran on kn172 after its reboot against a kn176 reference; the
+  same-node N 8 gsm8k point (1.08x) matches the cross-node livecodebench
+  one. Accuracy 0.73-0.81 / 0.70-0.74, within noise of the reference.
+  `campaign/addendum/tables/nspec__*_qwen3.csv` (node columns: README
+  deviations 15-17).
+
+- **2026-10-02, addendum step 4.1 (Qwen3 half) done; step 4 complete**
+  (Killarney K3/K4): lossless strict at T 1.2 and 1.5. Unlike GPT-OSS
+  (lambda 1.27x / 3.9x on gsm8k), Qwen3's length barely moves (lambda
+  1.02-1.04 on both datasets); the cost is acceptance: l_bar 1.50 -> 1.28
+  -> 0.82 on gsm8k and 1.13 -> 0.90 -> 0.49 on livecodebench, so rounds and
+  time rise to 1.12x / 1.42x (gsm8k) and 1.15x / 1.49x (livecodebench) at T
+  1.2 / 1.5. Accuracy holds at T 1.2 (0.81 vs 0.80; 0.72 vs 0.73) and
+  slips at T 1.5 (0.77; 0.64). The livecodebench points ran on kn172 after
+  its reboot (time and rounds ratios agree, 1.14 / 1.15 and 1.49 / 1.49).
+  `campaign/addendum/tables/temp__*_qwen3.csv`. With 4.2 and 4.3 (above),
+  step 4 is complete for both models.
+
+- **2026-10-02, addendum step 7 (Qwen3 half) done; step 7 complete except
+  the HLE prompts** (Killarney K1/K2/K4 after a Nibi first-40 phase): all
+  six arms on SPEED-Bench's qualitative split, 672 of 880 prompts (the 208
+  HLE prompts need a Hugging Face token; PROGRESS.md Needs Bill), token
+  budget 8192. Overall: cactus saves the most despite inflating (lambda 1.35,
+  rounds 0.67, time 0.68, a rounds and time win in all 11 categories);
+  spec_casc_tok (lambda 1.01, rounds 0.95, time 0.95) and r_fuzzy (1.20 /
+  0.95 / 0.96) save a little; spec_casc_opt's inflation cancels its
+  acceptance (lambda 1.40, rounds 1.02, time 1.13; math lambda 2.04, rounds
+  1.47). mentored_dec (lambda 1.07, rounds 0.93) shows time 1.02 over all
+  672 pairs but 0.91 over its 249 same-node pairs: 423 of its cases ran on
+  kn176 against a kn169 strict -- the node artifact the new `same_node_pairs`
+  / `time_ratio_same_node` columns catch, and the likely reason 4 of its 11
+  categories show a rounds win with a time loss. Unlike GPT-OSS, where
+  multilingual was the one category that inflated past a win, Qwen3's
+  failures concentrate in spec_casc_opt on math, humanities and
+  multilingual. `campaign/addendum/tables/speedbench{,_eq4,_eq4_summary}__
+  qwen3-8b.csv`.
+
+- **2026-10-02, addendum step 5 (Qwen3 half) done; step 5 complete** (5.1
+  on Killarney K2-K4, 2026-10-01/02; 5.2 on Killarney K1-K4, 2026-10-02;
+  README deviations 19, 20). 5.1 filled mentored_dec and spec_casc_tok at
+  0.35 / 0.55 on all six Qwen3 datasets (longbench_v2 with the
+  extended-position drafter); their seed-0 time ratios are taken against
+  the Killarney strict reference. 5.2 picked the alpha with the lowest
+  seed-0 time ratio within 2 accuracy points of strict (mtbench: rounds
+  ratio < 1) and ran it at seed 1 against a Killarney strict seed 1 --
+  except where the pick was the campaign's alpha (spec_casc_tok 0.8 on
+  gsm8k, livecodebench, mtbench), whose seed-1 pair already existed from
+  step 2.1 on Nibi. 8 of 12 hold: gsm8k both (mentored_dec 0.35 time 0.965,
+  accuracy 0.85 vs 0.81; spec_casc_tok 0.8 0.971), aime24 mentored_dec 0.55
+  (0.997, 0.80 vs 0.77), livecodebench spec_casc_tok 0.8 (0.973), mtbench
+  both (mentored_dec 0.55 0.901, spec_casc_tok 0.8 0.959) and longbench_v2
+  both (mentored_dec 0.75 0.965 on cross-node pairs with rounds 0.996;
+  spec_casc_tok 0.55 0.992 with rounds 1.005) -- several of these by a
+  percent or less. 4 do not: aime24 spec_casc_tok 0.35 (accuracy 0.70 vs
+  0.77), livecodebench mentored_dec 0.35 (0.73 vs 0.76), and humaneval both
+  (time 1.020 / 1.030 at seed 1). On humaneval the seed-0 picks rested on
+  time 0.90 with rounds 1.07-1.08: a node artifact that the same-node
+  seed-1 pairs (150 / 150) remove. The time-based picks often differ from
+  the rounds-based ones (`chosen_alpha_by_rounds_ratio`; e.g. aime24 0.15 /
+  0.8, humaneval 0.75 / 0.8). `campaign/addendum/best_setting.csv` (columns
+  `s1_*`, incl. `s1_same_node_pairs`).

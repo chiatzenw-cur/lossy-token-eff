@@ -190,12 +190,17 @@ def section_best() -> list[str]:
     out += [f"Source: `{rel(path)}`, one row per (target, dataset, method). Chosen alpha = the grid alpha with the "
             "lowest seed-0 time ratio among those whose accuracy is within 2 points of strict (mtbench, ungraded: "
             "rounds ratio < 1); `chosen_alpha_by_rounds_ratio` = the same choice made on the rounds ratio. Time "
-            "ratios of Nibi-run cells (the step-5.1 additions) are taken against the Nibi strict reference "
-            "(`s0_time_ratio_basis`). Seed 1 = the step-5.2 validation run on Nibi, paired with Nibi strict seed 1 "
-            "('-' = not complete yet); validated = seed-1 time ratio < 1 and the same accuracy rule holds on seed 1.", "",
+            "ratios of the step-5.1 additions are taken against the step-0.5 strict reference on the same machine "
+            "(Nibi for GPT-OSS, Killarney for Qwen3; `s0_time_ratio_basis`, `hardware_s0_*`). Seed 1 = the step-5.2 "
+            "validation run, paired with strict seed 1 on the same machine (`s1_hardware`, `s1_strict_hardware`; "
+            "'-' = not complete yet); validated = seed-1 time ratio < 1 and the same accuracy rule holds on seed 1. "
+            "s1 same node = seed-1 pairs whose arm and strict ran on one node (`s1_same_node_pairs`; README "
+            "deviations 13-17): a seed-1 time verdict on cross-node pairs carries the node effect, the rounds ratio "
+            "does not.", "",
             "| target | dataset | method | grid complete | chosen alpha (by rounds) | s0 lambda | s0 rounds ratio | "
-            "s0 time ratio | s0 acc / strict | s1 lambda | s1 rounds ratio | s1 time ratio | s1 acc / strict | validated |",
-            "|---|---|---|---|---|---:|---:|---:|---|---:|---:|---:|---|---|"]
+            "s0 time ratio | s0 acc / strict | s1 lambda | s1 rounds ratio | s1 time ratio | s1 acc / strict | "
+            "s1 same node | validated |",
+            "|---|---|---|---|---|---:|---:|---:|---|---:|---:|---:|---|---:|---|"]
     for r in b:
         s1_full = int(float(r.get("s1_n_pairs") or 0)) == N_CASES.get(r["dataset"], -1)  # all cases paired
         s1 = (lambda k: f(r.get(k)) if s1_full else "-")
@@ -204,6 +209,7 @@ def section_best() -> list[str]:
                    f"{f(r.get('s0_rounds_ratio'))} | {f(r.get('s0_time_ratio'))} | {pct(r.get('s0_accuracy'))} / "
                    f"{pct(r.get('s0_accuracy_strict'))} | {s1('s1_lambda')} | {s1('s1_rounds_ratio')} | {s1('s1_time_ratio')} | "
                    + (f"{pct(r.get('s1_accuracy'))} / {pct(r.get('s1_accuracy_strict'))}" if s1_full else "-")
+                   + (f" | {r.get('s1_same_node_pairs') or '?'}/{r.get('s1_n_pairs')}" if s1_full else " | -")
                    + f" | {({'True': 'yes', 'False': 'no'}).get(r.get('validated') or '', '-')} |")
     return out + [""]
 
@@ -237,8 +243,18 @@ def arrow(lo, hi) -> str:
     return "↓" if float(hi) < 1 else ("↑" if float(lo) > 1 else "")
 
 
+def same_node_note(r: dict) -> str:
+    """' · T same-node 0.91 (249 pairs)' or ' · cross-node' when a row's pairs did not all run on one node."""
+    if r.get("same_node") != "False":
+        return ""
+    if r.get("time_ratio_same_node"):
+        return f" · T same-node {f(r['time_ratio_same_node'])} ({r['same_node_pairs']} pairs)"
+    return " · cross-node"
+
+
 def section_speedbench() -> list[str]:
-    out = ["## Step 7: SPEED-Bench qualitative split (seed 0, Nibi)", ""]
+    out = ["## Step 7: SPEED-Bench qualitative split (seed 0; GPT-OSS on Nibi, Qwen3's first 40 prompts per arm on Nibi "
+           "and the rest on Killarney)", ""]
     found = False
     for family in ("gpt-oss-20b", "qwen3-8b"):
         path = ADD / "tables" / f"speedbench__{family}.csv"
@@ -263,7 +279,10 @@ def section_speedbench() -> list[str]:
                 f"Source: `{rel(path)}`, one row per (method, category); Eq. 4 per (method, category): `{rel(eq4_path)}`; "
                 f"per-method counts: `{rel(sum_path)}`. Cell = lambda (completion tokens relaxed / strict) · R = verifier "
                 "rounds ratio · T = wall-time ratio, all vs strict on the same cases; ↓/↑ = the 95% paired bootstrap "
-                "interval lies entirely below/above 1. Strict column: mean completion tokens and cap-out rate.", "",
+                "interval lies entirely below/above 1. Strict column: mean completion tokens and cap-out rate. Where "
+                "not every pair ran its arm and its strict case on one node (`same_node` False; README deviations "
+                "13-17), the cell adds T over the same-node pairs and their count (`time_ratio_same_node`, "
+                "`same_node_pairs`), or 'cross-node' when fewer than 10 pairs share a node; R is hardware-independent.", "",
                 "| category | strict tokens (cap-out) | " + " | ".join(f"{m} ({next(r['alpha'] for (mm, _), r in by.items() if mm == m)})"
                                                            for m in methods) + " |",
                 "|---|---:|" + "---|" * len(methods)]
@@ -280,7 +299,7 @@ def section_speedbench() -> list[str]:
                 cells.append(f"λ {f(r['lambda'])}{arrow(r['lambda_ci_lo'], r['lambda_ci_hi'])} · "
                              f"R {f(r['rounds_ratio'])}{arrow(r['rounds_ratio_ci_lo'], r['rounds_ratio_ci_hi'])} · "
                              f"T {f(r['time_ratio'])}{arrow(r['time_ratio_ci_lo'], r['time_ratio_ci_hi'])} "
-                             f"(n={r['n_pairs']})")
+                             f"(n={r['n_pairs']}){same_node_note(r)}")
             out.append(f"| {cat} | {f(s['mean_completion_tokens'], 0)} ({pct(s['capout_rate'])}) | " + " | ".join(cells) + " |")
         out.append("")
         e = rows(eq4_path)
@@ -290,12 +309,15 @@ def section_speedbench() -> list[str]:
             saves_r = [x["category"] for x in cats if x["rounds_win"] == "1"]
             saves_t = [x["category"] for x in cats if x["time_win"] == "1"]
             lam = sorted(cats, key=lambda x: float(x["lambda"]))
+            overall = by.get((m, "all"), {})
+            node = (f" Over all categories T {f(overall.get('time_ratio'))}{same_node_note(overall)}"
+                    f" (`{rel(path)}` row `{m}`, category `all`)." if overall.get("same_node") == "False" else "")
             out.append(f"- **{m}** (alpha {r['alpha']}, `{rel(sum_path)}` row `{m}`): fewer verifier rounds in "
                        f"{r['rounds_wins']}/{r['categories']} categories ({', '.join(saves_r) or 'none'}); less wall time in "
                        f"{r['time_wins']}/{r['categories']} ({', '.join(saves_t) or 'none'}); Eq. 4 predicts a win in "
                        f"{r['eq4_wins']}/{r['categories']}; completions longer by lambda {f(lam[0]['lambda'])} "
                        f"({lam[0]['category']}) to {f(lam[-1]['lambda'])} ({lam[-1]['category']}); rounds and time "
-                       f"disagree in: {r['rounds_time_disagree'] or 'none'}.")
+                       f"disagree in: {r['rounds_time_disagree'] or 'none'}.{node}")
         out.append("")
     return out + ([] if found else ["Pending.", ""])
 
@@ -307,7 +329,8 @@ def section_seeds() -> list[str]:
         return out + ["Pending.", ""]
     seeds = sorted({k.split("_s")[-1] for k in s[0] if k.startswith("lambda_s")})
     out += [f"Source: `{rel(ADD / 'seeds' / 'summary.csv')}` (per-seed tables `campaign/addendum/seeds/<dataset>__seed<k>.csv`). "
-            "Seed 0 is the campaign's run (old box, H100 PCIe); seeds 1-2 ran on Nibi (H100 SXM). Ratios pair each seed's "
+            "Seed 0 is the campaign's run (old box, H100 PCIe); seeds 1-2 ran on Nibi (H100 SXM), except Qwen3 aime24's "
+            "(Killarney H100, step 2.2; README deviation 12). Ratios pair each seed's "
             "relaxed arm with strict of the same seed; '-' = that seed is not complete yet.", "",
             "| target | dataset | method | alpha | " + " | ".join(f"lambda s{k}" for k in seeds) + " | lambda mean (sd) | "
             + " | ".join(f"time ratio s{k}" for k in seeds) + " | time mean (sd) | " + " | ".join(f"acc s{k}" for k in seeds) + " |",
