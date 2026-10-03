@@ -60,15 +60,37 @@ value of this result is for the cross-method generalization claim (force-
 commit's mechanism isn't spec_casc_tok-specific), not a recommendation to
 use cactus.
 
-## mentored_dec, r_fuzzy, spec_casc_opt
+## r_fuzzy (alpha=0.25) -- PARTIAL, blocked mid-run by host disk exhaustion
+
+Baseline (8/8 complete): case_001 5,832 (stop), case_002 32,768 (cap),
+case_003 32,768 (cap), case_004 23,639 (stop), case_005 27,530 (stop),
+case_006 32,768 (cap), case_007 32,768 (cap), case_008 4,315 (stop) --
+4/8 cap hits, an even higher baseline cap-hit rate than cactus's 3/8.
+
+r_fuzzy_force_commit (t=28000): case_001 5,832 (stop) -- byte-identical to
+baseline; case_002 **29,233 (stop)** -- cap hit eliminated, matches the same
+win shape as cactus/spec_casc_tok. Run crashed starting case_003's server:
+host root filesystem hit 100% full (644K free of 96G) mid-torch-compile,
+`RuntimeError: server exited with code 120` / `[Errno 28] No space left on
+device`. This is a host infrastructure issue, unrelated to the patch itself
+(verified: `git fsck` clean, no corrupt partial run directory left behind
+for case_003, case_002's data complete and valid). Not a force-commit
+problem -- disk pressure predates this session (see the large pending
+`old_runs/`/`runs_old_backup/` deletions already in the working tree at
+session start) and needs to be resolved (free space / resolve those pending
+deletions) before any further GPU work, cross-method or otherwise, can run.
+Flagging rather than attempting to free space myself: those deletions are
+pre-existing, uncommitted user state I don't have context to act on, and
+identifying what else is consuming the other ~90G (model weights, caches,
+sibling-repo data) needs a human decision, not a one-shot guess.
+
+## mentored_dec, spec_casc_opt -- not started
 
 Patches ported and fully verified (unit tests + real-kernel GPU adversarial
 tests, including the aggressive-alpha defer_mask-OR confirmation for
-r_fuzzy/spec_casc_opt -- see the `force-commit: mechanically port...`
-commit). 8-case AIME24 screens for these three were not completed in this
-pass (GPU time -- each screen is ~2x8 fresh-server runs, ~45-75 min
-depending on the method's own length distribution at its aggressive alpha).
-Next step, in priority order (highest expected no-final rate first, per
-`reasoning_vs_output_all_datasets.md`'s own strict->relaxed no-final counts
-on aime24): r_fuzzy (alpha=0.25, 2->9 of 30), spec_casc_opt (alpha=0.05,
-2->13 of 30), mentored_dec (alpha=0.75, 2->6 of 30).
+spec_casc_opt -- see the `force-commit: mechanically port...` commit).
+8-case AIME24 screens blocked by the same disk-full condition above.
+Priority once disk space is available, by expected no-final rate
+(`reasoning_vs_output_all_datasets.md`'s own strict->relaxed no-final
+counts on aime24): spec_casc_opt (alpha=0.05, 2->13 of 30), mentored_dec
+(alpha=0.75, 2->6 of 30).
