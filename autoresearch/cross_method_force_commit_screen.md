@@ -79,13 +79,25 @@ The first attempt was interrupted at case_003 by host disk exhaustion
 (unrelated to the patch); cases 001-002 from that attempt were kept
 (complete, valid), 003-008 rerun fresh. Disk has since been freed.
 
-## mentored_dec, spec_casc_opt -- pending
+## spec-casc-opt (alpha=0.05) -- complete 8-case screen, clears the bar
 
-Patches ported and fully verified (unit tests + real-kernel GPU adversarial
-tests, including the aggressive-alpha defer_mask-OR confirmation for
-spec_casc_opt -- see the `force-commit: mechanically port...` commit).
-8-case AIME24 screens blocked by the same disk-full condition above.
-Priority once disk space is available, by expected no-final rate
-(`reasoning_vs_output_all_datasets.md`'s own strict->relaxed no-final
-counts on aime24): spec_casc_opt (alpha=0.05, 2->13 of 30), mentored_dec
-(alpha=0.75, 2->6 of 30).
+| | baseline | spec_casc_opt_force_commit (t=28000) |
+|---|---:|---:|
+| mean completion tokens | 27,139.4 | **24,611.0 (-9.3%)** |
+| accuracy | 2/8 | 2/8 (identical correct set: 001, 008) |
+| cap hits (32,768) | 6/8 | **1/8** |
+| wrong / no_answer | 6 / 0 | 4 / 2 |
+
+Per-case: case_001, case_008 byte-identical. Five capped runs (002, 004,
+005, 006, 007) now terminate at 28-30k tokens. case_003 stays capped at
+32,768 with only 3 final-channel tokens -- it still does not commit, so the
+forcing did not rescue it. Same threshold-vs-noise caveat as cactus's
+case_006: landing close to the threshold means the forced boundary is doing
+the work.
+
+Note on the defer_mask OR: spec_casc_opt's own alpha is a TV-based switch.
+The real-kernel aggressive-alpha test (0.05, 0.999-confident draft) passed
+on GPU, so the OR-in is confirmed load-bearing in that regime.
+
+## mentored_dec -- pending
+
