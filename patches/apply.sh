@@ -24,9 +24,9 @@ HASHES="$here/HASHES.txt"
 
 METHOD="${1:-}"
 case "$METHOD" in
-  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard|spec-casc-tok-autoguard) ;;
+  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard|spec-casc-tok-autoguard|cactus-force-commit|mentored-dec-force-commit|r-fuzzy-force-commit|spec-casc-opt-force-commit) ;;
   *)
-    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard|spec-casc-tok-autoguard>" >&2
+    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard|spec-casc-tok-autoguard|cactus-force-commit|mentored-dec-force-commit|r-fuzzy-force-commit|spec-casc-opt-force-commit>" >&2
     exit 2
     ;;
 esac
@@ -274,6 +274,18 @@ select alpha by writing it to:
     "yes" force-injects a pivot phrase (or force-commit's final-channel
     push if the budget is nearly exhausted). See the patch's module
     comment and analysis/semantic_guard/README.md)
+  cactus-force-commit:        /tmp/lossy-token-eff-cactus-force-commit-alpha-\$(id -u) (own file, not cactus's plain one; alpha >= 0; 0.0 = strict)
+                            /tmp/lossy-token-eff-cactus-force-commit-threshold-\$(id -u) (positive int; default 28000 if missing)
+  mentored-dec-force-commit: /tmp/lossy-token-eff-mentored-dec-force-commit-alpha-\$(id -u) (own file, not mentored-dec's plain one; alpha in [0,1); 0.0 = strict)
+                            /tmp/lossy-token-eff-mentored-dec-force-commit-threshold-\$(id -u) (positive int; default 28000 if missing)
+  r-fuzzy-force-commit:      /tmp/lossy-token-eff-r-fuzzy-force-commit-alpha-\$(id -u) (own file, not r-fuzzy's plain one; any real; -inf = strict)
+                            /tmp/lossy-token-eff-r-fuzzy-force-commit-threshold-\$(id -u) (positive int; default 28000 if missing)
+  spec-casc-opt-force-commit: /tmp/lossy-token-eff-spec-casc-opt-force-commit-alpha-\$(id -u) (own file, not spec-casc-opt's plain one; any real; -inf = strict)
+                            /tmp/lossy-token-eff-spec-casc-opt-force-commit-threshold-\$(id -u) (positive int; default 28000 if missing)
+    (same force-commit mechanism as spec-casc-tok-force-commit, mechanically
+    ported onto each method's own base -- see patches/HASHES.txt's own entry
+    for the full port writeup, including why r-fuzzy/spec-casc-opt also OR
+    force_commit_mask into their own switch-based defer_mask)
 remote/run_server_vllm.sh writes all ten for every mode (baseline/strict/lossy)
 so a stale value from a previous run cannot silently leak into a control arm.
 EOF

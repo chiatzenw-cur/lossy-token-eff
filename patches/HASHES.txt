@@ -733,6 +733,56 @@ b86e0f3643a715b7f15c7a3fa0e314baa40aa00dc3af5ceeaf26cd5ad146804b  hidden-state-c
 # investigation, is SAFE even when wrong).
 
 a5c55528c77f5c36ebb401a2a00bed1af59d17ee00f5801f611fdc7d5658da13  spec-casc-tok-autoguard
+
+# added 2026-10-03, force-commit mechanically ported from spec-casc-tok-
+# force-commit onto the other 4 methods' own bases -- cross-method
+# validation requested after FINDINGS.md's own scope-limit note (force-
+# commit was previously only shown to work for spec-casc-tok). Mechanism
+# is additive at a shared anchor present in every method's own patch
+# (right after the common `target_probs = target_logits.softmax(...);
+# assert target_probs.is_contiguous()` pristine lines, before any
+# method-specific relaxation math reads target_probs) -- verified
+# mechanical by diffing spec-casc-tok-force-commit against plain
+# spec-casc-tok and confirming the ENTIRE diff is additive at exactly
+# that anchor plus the _TRACER.record call and the final return. Each
+# variant gets its own alpha-knob file (e.g.
+# cactus-force-commit-alpha, not cactus's plain cactus-alpha) -- same
+# "own file, never alias" rule spec-casc-tok-force-commit's own entry
+# above already documents, extended here rather than re-broken.
+#
+# cactus and mentored-dec are direct ports with no further change: both
+# methods' own accept tests are continuous functions of target_probs with
+# no "trust the draft unconditionally" escape hatch (cactus's own gamma_x
+# blend, mentored-dec's own unconditional scaled ratio), so one-hot-forcing
+# target_probs before their math runs propagates exactly like it does for
+# spec-casc-tok.
+#
+# r-fuzzy and spec-casc-opt are SWITCH-based (a per-token defer_mask picks
+# between "run the strict ratio test" and "always accept the draft, no
+# target_probs check at all"). Forcing target_probs to one-hot numerically
+# pushes their own switch condition (JSD for r-fuzzy, a TV-based margin for
+# spec-casc-opt) toward "defer to strict" in the common case, but this is
+# not guaranteed for every alpha/draft-confidence combination -- verified
+# by hand for spec-casc-opt: at a small positive alpha against an EXTREMELY
+# confident (0.999) draft, the TV-based margin can numerically stay False
+# even with target_probs forced elsewhere, which would silently make the
+# force a no-op. Fixed by explicitly OR-ing force_commit_mask into each
+# method's own defer_mask right after it's computed, so a forced position
+# ALWAYS takes the strict branch regardless of the numeric edge case --
+# confirmed by a real-kernel end-to-end test at each method's own
+# aggressive AIME24 sweep alpha (r-fuzzy 0.25, spec-casc-opt 0.05) against
+# an 0.999-confident competing draft token
+# (patches/test_r_fuzzy_force_commit.py /
+# patches/test_spec_casc_opt_force_commit.py's own
+# test_end_to_end_real_kernel_forces_full_pattern_under_aggressive_alpha).
+#
+# Round-trip verified: each new patch applies cleanly to a freshly-
+# reconstructed pristine rejection_sampler.py and reproduces the grafted
+# file byte-for-byte; hashes below are of that reproduced file.
+57cb258370388df8efcc5d11aceac0481551952942cd74e0def1c72a39bb19dd  cactus-force-commit
+21d968fe07a41585e3b0d7f4c9d5159d8e3859113371c0658530f4e4eebb81fb  mentored-dec-force-commit
+8fe4dac3cd5e2442169c5aa8aa85f0b42d53fed5df1d5b89d8cb2d4c523d9651  r-fuzzy-force-commit
+6be37559762d97b4896517f48a1117c5440261db772d94733c7e3646035d13fb  spec-casc-opt-force-commit
 # added 2026-09-02, for autoresearch/ (Karpathy-style autonomous experiment
 # loop -- see autoresearch/README.md and autoresearch/program.md). A
 # verbatim copy of spec-casc-tok-semantic-guard's patch with ONE change:

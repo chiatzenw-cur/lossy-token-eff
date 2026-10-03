@@ -88,6 +88,16 @@ def parse_args() -> argparse.Namespace:
         default=28000,
         help="spec_casc_tok_force_commit only: cumulative token count before forcing a final-channel-open.",
     )
+    # force-commit mechanically ported onto the other 4 methods' own bases
+    # (see patches/HASHES.txt's 2026-10-03 entry) -- own threshold flag per
+    # variant, same convention as spec_casc_tok_force_commit's own above.
+    for _fc_method in ("cactus", "mentored-dec", "r-fuzzy", "spec-casc-opt"):
+        parser.add_argument(
+            f"--{_fc_method}-force-commit-threshold",
+            type=int,
+            default=28000,
+            help=f"{_fc_method.replace('-', '_')}_force_commit only: cumulative token count before forcing a final-channel-open.",
+        )
     parser.add_argument(
         "--spec-casc-tok-self-check-interval",
         type=int,
@@ -271,6 +281,14 @@ def method_and_params_for(args: argparse.Namespace, arm: str) -> tuple[str, str]
         params += f"_k{args.spec_casc_tok_semantic_guard_future_guard_and_k}"
     if arm == "spec_casc_tok_force_commit":
         params += f"_t{args.spec_casc_tok_force_commit_threshold}"
+    if arm == "cactus_force_commit":
+        params += f"_t{args.cactus_force_commit_threshold}"
+    if arm == "mentored_dec_force_commit":
+        params += f"_t{args.mentored_dec_force_commit_threshold}"
+    if arm == "r_fuzzy_force_commit":
+        params += f"_t{args.r_fuzzy_force_commit_threshold}"
+    if arm == "spec_casc_opt_force_commit":
+        params += f"_t{args.spec_casc_opt_force_commit_threshold}"
     if arm == "spec_casc_tok_self_check":
         params += f"_i{args.spec_casc_tok_self_check_interval}"
     if arm == "spec_casc_tok_hsr_guard":
@@ -456,6 +474,14 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
             env["SPEC_CASC_TOK_FUTURE_GUARD_AND_K"] = str(args.spec_casc_tok_semantic_guard_future_guard_and_k)
         if arm == "spec_casc_tok_force_commit":
             env["SPEC_CASC_TOK_FORCE_COMMIT_THRESHOLD"] = str(args.spec_casc_tok_force_commit_threshold)
+        if arm == "cactus_force_commit":
+            env["CACTUS_FORCE_COMMIT_THRESHOLD"] = str(args.cactus_force_commit_threshold)
+        if arm == "mentored_dec_force_commit":
+            env["MENTORED_DEC_FORCE_COMMIT_THRESHOLD"] = str(args.mentored_dec_force_commit_threshold)
+        if arm == "r_fuzzy_force_commit":
+            env["R_FUZZY_FORCE_COMMIT_THRESHOLD"] = str(args.r_fuzzy_force_commit_threshold)
+        if arm == "spec_casc_opt_force_commit":
+            env["SPEC_CASC_OPT_FORCE_COMMIT_THRESHOLD"] = str(args.spec_casc_opt_force_commit_threshold)
         if arm == "spec_casc_tok_self_check":
             env["SPEC_CASC_TOK_SELF_CHECK_INTERVAL"] = str(args.spec_casc_tok_self_check_interval)
             env["SPEC_CASC_TOK_SELF_CHECK_FINAL_THRESHOLD"] = str(args.spec_casc_tok_self_check_final_threshold)
