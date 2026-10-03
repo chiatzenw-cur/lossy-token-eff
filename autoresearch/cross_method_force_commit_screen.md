@@ -60,31 +60,26 @@ value of this result is for the cross-method generalization claim (force-
 commit's mechanism isn't spec_casc_tok-specific), not a recommendation to
 use cactus.
 
-## r_fuzzy (alpha=0.25) -- PARTIAL, blocked mid-run by host disk exhaustion
+## r_fuzzy (alpha=0.25) -- complete 8-case screen, clean win
 
-Baseline (8/8 complete): case_001 5,832 (stop), case_002 32,768 (cap),
-case_003 32,768 (cap), case_004 23,639 (stop), case_005 27,530 (stop),
-case_006 32,768 (cap), case_007 32,768 (cap), case_008 4,315 (stop) --
-4/8 cap hits, an even higher baseline cap-hit rate than cactus's 3/8.
+| | baseline | r_fuzzy_force_commit (t=28000) |
+|---|---:|---:|
+| mean completion tokens | 24,048.5 | **21,905.4 (-8.9%)** |
+| accuracy | 2/8 | 2/8 (identical correct set) |
+| cap hits (32,768) | 4/8 | **0/8** |
+| wrong / no_answer | 6 / 0 | 3 / 3 |
 
-r_fuzzy_force_commit (t=28000): case_001 5,832 (stop) -- byte-identical to
-baseline; case_002 **29,233 (stop)** -- cap hit eliminated, matches the same
-win shape as cactus/spec_casc_tok. Run crashed starting case_003's server:
-host root filesystem hit 100% full (644K free of 96G) mid-torch-compile,
-`RuntimeError: server exited with code 120` / `[Errno 28] No space left on
-device`. This is a host infrastructure issue, unrelated to the patch itself
-(verified: `git fsck` clean, no corrupt partial run directory left behind
-for case_003, case_002's data complete and valid). Not a force-commit
-problem -- disk pressure predates this session (see the large pending
-`old_runs/`/`runs_old_backup/` deletions already in the working tree at
-session start) and needs to be resolved (free space / resolve those pending
-deletions) before any further GPU work, cross-method or otherwise, can run.
-Flagging rather than attempting to free space myself: those deletions are
-pre-existing, uncommitted user state I don't have context to act on, and
-identifying what else is consuming the other ~90G (model weights, caches,
-sibling-repo data) needs a human decision, not a one-shot guess.
+Per-case: case_001, case_004, case_005, case_008 byte-identical. case_002
+32,768 (cap, wrong) -> 29,233 (stop); case_003 32,768 (cap) -> 28,361
+(no_answer); case_006 32,768 -> 28,058 (no_answer); case_007 32,768 ->
+28,275 (no_answer). Every capped run now terminates. Same win shape as
+cactus, on a switch-based (defer_mask) accept rule.
 
-## mentored_dec, spec_casc_opt -- not started
+The first attempt was interrupted at case_003 by host disk exhaustion
+(unrelated to the patch); cases 001-002 from that attempt were kept
+(complete, valid), 003-008 rerun fresh. Disk has since been freed.
+
+## mentored_dec, spec_casc_opt -- pending
 
 Patches ported and fully verified (unit tests + real-kernel GPU adversarial
 tests, including the aggressive-alpha defer_mask-OR confirmation for
