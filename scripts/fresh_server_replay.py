@@ -232,6 +232,12 @@ def parse_args() -> argparse.Namespace:
         "e.g. '{\"rope_type\":\"yarn\",\"factor\":1.6,\"original_max_position_embeddings\":40960}'). "
         "Empty (default) = no override, matches every model whose native window already covers --max-new-tokens.",
     )
+    parser.add_argument(
+        "--warm-server",
+        action="store_true",
+        help="Start one server per (arm, alpha, threshold) group and reuse it across cases. "
+        "Per-case proposals.jsonl tracing is off in this mode.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -527,7 +533,7 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
 
 def request_once(
     args: argparse.Namespace, arm: str, case: str, seed: int, tag: str, method: str, params: str,
-    runs_root: pathlib.Path, log_path: pathlib.Path,
+    runs_root: pathlib.Path, log_path: pathlib.Path, assert_fresh: bool = True,
 ) -> subprocess.CompletedProcess:
     mode = "baseline" if arm == "baseline" else ("strict" if arm == "strict" else "lossy")
     command = [
@@ -547,7 +553,7 @@ def request_once(
         "--timeout", str(args.request_timeout),
         "--server-url", f"http://127.0.0.1:{args.port}",
         "--server-log", str(log_path),
-        "--assert-fresh-server",
+        *(["--assert-fresh-server"] if assert_fresh else []),
         "--model", args.served_model_name,
         "--draft-model", args.draft_model_path,
     ]
@@ -556,6 +562,78 @@ def request_once(
     if args.overwrite:
         command.append("--overwrite")
     return subprocess.run(command, cwd=REPO_ROOT, check=False)
+
+
+def write_manifest(args: argparse.Namespace, runs_root: pathlib.Path, results: list) -> None:
+    manifest = runs_root / "fresh_server_replay.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    previous = []
+    if manifest.is_file():
+        try:
+            previous = json.loads(manifest.read_text(encoding="utf-8")).get("batches", [])
+        except (OSError, json.JSONDecodeError):
+            previous = []
+    previous.append(
+        {
+            "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "arms": args.arms,
+            "alphas": {name: alpha_for(args, name) for name in METHODS},
+            "warm_server": bool(args.warm_server),
+            "command": sys.argv,
+            "runs": results,
+        }
+    )
+    manifest.write_text(json.dumps({"batches": previous}, indent=2) + "\n", encoding="utf-8")
+
+
+def run_warm(args: argparse.Namespace, todo: list, runs_root: pathlib.Path) -> tuple[list, int]:
+    results = []
+    failures = 0
+    process = None
+    current = None
+    log_path = None
+    set_trace_destination(None)
+    set_hidden_state_destination(None)
+    try:
+        for index, (case, seed, arm, tag, method, params) in enumerate(todo, start=1):
+            key = (arm, method, params)
+            if key != current:
+                stop_server()
+                if process is not None and process.poll() is None:
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                log_path = REPO_ROOT / args.log_root / f"{tag}_warm_seed{seed}_{stamp}.log"
+                print(f"\n[warm server] {arm} {method}/{params} -> {log_path}", flush=True)
+                process = start_server(args, arm, log_path)
+                current = key
+            print(f"[{index}/{len(todo)}] {case} seed={seed} arm={arm}", flush=True)
+            started = time.perf_counter()
+            completed = request_once(
+                args, arm, case, seed, tag, method, params, runs_root, log_path, assert_fresh=False
+            )
+            elapsed = time.perf_counter() - started
+            status = "ok" if completed.returncode == 0 else f"request failed (exit {completed.returncode})"
+            if completed.returncode != 0:
+                failures += 1
+            print(f"[{index}/{len(todo)}] {status} in {elapsed:.0f}s", flush=True)
+            results.append(
+                {
+                    "case": case,
+                    "seed": seed,
+                    "arm": arm,
+                    "tag": tag,
+                    "method": method,
+                    "params": params,
+                    "status": status,
+                    "wall_time_seconds": round(elapsed, 1),
+                    "server_log": os.path.relpath(log_path, REPO_ROOT),
+                }
+            )
+    finally:
+        stop_server()
+        if process is not None and process.poll() is None:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    return results, failures
 
 
 def main() -> int:
@@ -589,6 +667,12 @@ def main() -> int:
         return 0
     if not todo:
         return 0
+
+    if args.warm_server:
+        results, failures = run_warm(args, todo, runs_root)
+        write_manifest(args, runs_root, results)
+        print(f"\nwrote manifest; {len(results) - failures}/{len(results)} ok")
+        return 1 if failures else 0
 
     if args.capture_hidden_states:
         ensure_hidden_state_capture_applied()
@@ -671,25 +755,8 @@ def main() -> int:
             }
         )
 
-    manifest = runs_root / "fresh_server_replay.json"
-    manifest.parent.mkdir(parents=True, exist_ok=True)
-    previous = []
-    if manifest.is_file():
-        try:
-            previous = json.loads(manifest.read_text(encoding="utf-8")).get("batches", [])
-        except (OSError, json.JSONDecodeError):
-            previous = []
-    previous.append(
-        {
-            "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
-            "arms": args.arms,
-            "alphas": {name: alpha_for(args, name) for name in METHODS},
-            "command": sys.argv,
-            "runs": results,
-        }
-    )
-    manifest.write_text(json.dumps({"batches": previous}, indent=2) + "\n", encoding="utf-8")
-    print(f"\nwrote {manifest}; {len(results) - failures}/{len(results)} ok")
+    write_manifest(args, runs_root, results)
+    print(f"\nwrote {runs_root / 'fresh_server_replay.json'}; {len(results) - failures}/{len(results)} ok")
     return 1 if failures else 0
 
 
