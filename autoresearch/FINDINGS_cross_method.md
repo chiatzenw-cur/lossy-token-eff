@@ -209,3 +209,21 @@ The four capped spec_casc_tok runs (cases 063, 120, 140, 148) never open the fin
 - All 8 force-commit runs past 30,000 tokens contain the final channel, so forcing fired on each. Baseline cap hits 5 -> 0.
 - Flips, reported as warm-server descriptive only: case_006 correct -> not-correct (7,475 -> 30,136, a healthy baseline run that diverged on the warm sequence), case_030 correct -> not-correct (5,682 -> 30,097), case_026 not-correct -> correct (cap -> 31,516).
 - **Caveat.** The warm baseline and force-commit arms still diverge sequence-wide (history dependence, per the earlier diagnostic), so per-case flips are not claimed as force-commit effects. The mean (+0.6%) and cap-hit change (5 -> 0) are the reportable deltas. Correct count moved -1 with flips in both directions, which noise can produce.
+
+## gsm8k, 150 cases, warm, fixed force patches, threshold 1843 (pre-registered 0.9 x 2048)
+
+Ledger: `autoresearch/cross_method_metrics/gsm8k.csv` (all four arms, record_valid True). Raw outputs deleted after grading; run.json kept.
+
+| method | arm | mean tokens | Δ | cap hits (2048) | correct /150 |
+|---|---|---:|---:|---:|---:|
+| spec_casc_tok α0.8 | baseline (warm) | 333.6 | | 4 | 143 |
+| spec_casc_tok α0.8 | force-commit (warm, fixed) | 343.6 | +3.0% | 2 | 143 |
+| mentored_dec α0.75 | baseline (warm) | 395.6 | | 4 | 141 |
+| mentored_dec α0.75 | force-commit (warm, fixed) | 384.4 | −2.8% | 2 | 142 |
+
+- **Mechanism.** Every run that reaches 1,843 tokens in a force arm contains the final channel (spec 5/5, mentored 5/5). At baseline, the four runs past 1,843 tokens (all capped) have no final channel (0/4). Forcing fires on each.
+- **Caveat.** These are warm-server paired arms and carry the history caveat. Token counts match between arms in only 63 of 150 cases. Flips are descriptive, not per-case effects.
+- spec_casc_tok flips: case_074 not-correct -> correct; case_140 and case_148 not-correct -> correct; case_086, case_101, case_126 correct -> not-correct. Net 0.
+- mentored_dec flips: case_064 not-correct -> correct; case_148 not-correct -> correct; case_140 correct -> not-correct. Net +1.
+- Two capped force runs (spec case_063 no_answer, mentored case_120 no_answer, and spec case_086 / mentored case_140 for their own arms) reached the final channel and ran out of budget during the answer.
+- mtbench is token-only (no grader). Not run in this pass yet.
