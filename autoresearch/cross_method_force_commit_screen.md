@@ -99,29 +99,33 @@ Note on the defer_mask OR: spec_casc_opt's own alpha is a TV-based switch.
 The real-kernel aggressive-alpha test (0.05, 0.999-confident draft) passed
 on GPU, so the OR-in is confirmed load-bearing in that regime.
 
-## mentored_dec (alpha=0.75) -- complete 8-case screen, length win with one accuracy flip
+## mentored_dec (alpha=0.75) -- 8-case screen at two thresholds
 
-Threshold 22000 (PROPOSAL.md 4B's AIME24 value, budget-relative to the 32,768
-cap). The arm's alpha must be passed as `--mentored-dec-force-commit-alpha`;
-an earlier attempt that passed the plain-arm flag ran at the default 0.37 and
-was killed. Its partial output in `cross_method_runs/` is at the wrong alpha
-and is excluded from this table.
+Baseline (shared): mean 20,782.3 tokens, 5/8 correct, 3/8 cap hits.
 
-| | baseline | mentored_dec_force_commit (t=22000) |
-|---|---:|---:|
-| mean completion tokens | 20,782.3 | **17,594.3 (-15.3%)** |
-| accuracy | 5/8 | 5/8 (case_002 wrong->correct, case_007 correct->wrong) |
-| cap hits (32,768) | 3/8 | **1/8** |
-| wrong / no_answer | 3 / 0 | 2 / 1 |
+| threshold | mean tokens | Δ tokens | cap hits | accuracy | wrong / no_answer |
+|---|---:|---:|---:|---:|---:|
+| 22000 (PROPOSAL 4B) | 17,594.3 | **-15.3%** | 3 -> 1 | 5/8 | 2 / 1 |
+| 30000 (4C: above longest correct baseline run, case_007 = 29,389) | 19,905.6 | **-4.2%** | 3 -> 0 | **6/8** | 1 / 1 |
 
-Per-case: case_001, case_005, case_006, case_008 byte-identical. case_002
-32,768 (cap, wrong) -> 23,264 (stop, correct). case_004 32,768 (cap, wrong)
--> 22,119 (no_answer, stop). case_003 stays capped at 32,768 with 4 final
-tokens. case_007 is NOT capped at baseline (29,389, correct) and was touched
-at 22,000: it finishes at 24,038 but flips to wrong. That is the cost of a
-threshold that sits inside a healthy run's length range. It is the only
-healthy-case perturbation in the screen, and it costs one correct answer.
+**t=30000 per-case** (verdict = baseline -> forced):
+- case_001, case_005, case_006, case_008: byte-identical to baseline.
+- case_002: capped wrong (32,768) -> correct at 31,024 (stop). It is still a
+  healthy finish, now just under the cap.
+- case_003: capped wrong (32,768) -> no_answer at 30,138 (stop).
+- case_004: capped wrong (32,768) -> wrong at 30,129 (stop).
+- case_007: correct at 29,389 -> correct at 29,389. Byte-identical. The
+  22000 perturbation is gone.
 
-Net accuracy is unchanged (5/8 both arms), but the correct set changed.
-Clears the screen bar on length, with a caveat on accuracy.
+**t=22000 per-case**, kept as evidence: case_007 is touched (29,389 correct
+-> 24,038 wrong). Its net length gain comes from cutting the 3 capped runs
+harder, and it costs one correct answer.
+
+**Read-out.** t=30000 is the clean configuration: zero healthy-case
+perturbation (7 of 8 byte-identical; the 8th, case_002, is a capped run
+that now finishes), 3 -> 0 cap hits, and accuracy up by one with no flips
+against a correct answer. The length saving is smaller, -4.2% vs -15.3%,
+because the threshold now sits near the cap and fewer runs get forced.
+The -15.3% at t=22000 is real but costs a correct answer on a healthy run,
+so it is not the adoptable point.
 
