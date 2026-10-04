@@ -131,3 +131,25 @@ cap-hit reduction with three recovered correct answers and no lost ones. The
 length saving is small (-3.1%) because the forced runs finish at 30k-32k, close
 to the cap, so the saving per case is limited to the difference between the cap and
 the threshold.
+
+## spec_casc_tok (alpha=0.8), 30-case AIME24, threshold 30000 -- WARM-SERVER
+
+**Labelling.** Every number in this section comes from warm-server runs: one vLLM server per arm, reused across cases, per-request seed 0. Per-case outputs are not byte-reproducible across server histories. The first divergence from a fresh server is at case_002, which is why the per-case flips below should not be read as individual effects.
+
+| metric | baseline | force-commit t=30000 | paired change |
+|---|---:|---:|---:|
+| mean completion tokens | 12,514.5 | 12,662.9 | +1.2% (+148 tok) |
+| cap hits (32,768) | 5 | 5 | 0 |
+| correct | 24 | 22 | -2 |
+
+Byte-identical (tokens and verdict) in only 4 of 30 cases; 26 differ in token count. Accuracy flips:
+- case_007: correct -> not-correct (8,906 -> 32,768, cap)
+- case_014: correct -> not-correct (31,242 -> 32,768, cap)
+- case_019: not-correct -> correct (32,768 cap -> 23,295)
+- case_023: correct -> not-correct (3,273 -> 18,110)
+
+**Read-out.** The mean (+1.2%), the cap count (5 -> 5), and the net correct count (-2) are all within what the warm-server divergence could produce. On this setup the force-commit arm does not show a measurable effect on spec_casc_tok. The per-case flips are consistent with run-to-run noise and are not claimed as effects. A valid paired comparison needs fresh servers per case, which is not what this section measures.
+
+## mentored_dec (alpha=0.75), 30-case AIME24, threshold 30000 -- FRESH (unchanged)
+
+See the earlier section above: each case ran on its own fresh server, so this pair is per-case reproducible and not affected by the warm-server caveat.
