@@ -172,3 +172,24 @@ The four capped spec_casc_tok runs (cases 063, 120, 140, 148) never open the fin
 ## Status
 - Warm-server baselines (spec_casc_tok, mentored_dec) are usable as baselines with the history caveat.
 - All warm-server force-commit results are invalid. The fix is per-request state reset, or fresh-per-case servers for the force arms. The mentored_dec aime24 pair stays fresh and valid.
+
+## Force-state fix (V1 GPT-OSS force-commit), 2026-10-04
+
+**Cause.** The force-commit state was one process-global dict. The patch reset it only on warmup batches (size > 8). On a warm server every request is batch 1, so after the first request opened the final channel, forcing was disabled for every later request. Warm force-commit results were therefore not measurements of the mechanism. They are recorded as invalid in `cross_method_metrics/invalid_warm_force_pre_fix.csv` (330 rows: 30 aime24, 300 gsm8k) and have been archived out of the campaign tree.
+
+**Fix.** State is keyed by the runner's request id for batch slot 0. The model runner passes `input_batch.req_ids` to the sampler before each sampling step (`patches/vllm-0.26.0-force-commit-model-runner.patch`, a second file for this arm, registered in `HASHES.txt` and `apply.sh`). The sampler's state is created fresh for each new request id. The warmup reset clears all states. The superseded global-state patch is kept as `vllm-0.26.0-spec-casc-tok-force-commit-superseded-global-state.patch`. Its hash stays in HASHES.txt under its own label, so it can't be installed under the current name.
+
+**Why not `output_token_ids`.** SamplingMetadata's `output_token_ids` is an empty list whenever penalties are off, which is the GPT-OSS config, so it cannot identify requests. The runner's request ids are the only source.
+
+**Plumbing test.** `patches/test_spec_casc_tok_force_commit.py` passes, including a new per-request-id reset test (`bash patches/apply.sh spec-casc-tok-force-commit`, exit 0, self-test passed; the GPU end-to-end test skips without a GPU). The startup probe in `remote/run_server_vllm.sh` now checks `_FORCE_COMMIT_STATES`.
+
+**3-case check, warm server, aime24 cases 002, 003, 004.**
+- Threshold 30000 (pre-registered): only case_002 ran past the threshold, and its final-channel boundary is present. Cases 003 and 004 finished naturally below the threshold, so this run does not test later requests.
+- Threshold 2000 (mechanism check, not a result, not pre-registered): all three requests ended at 2,276 to 2,774 tokens with the forced boundary present in the output. Their baseline trajectories run to 15,000+ tokens, so none would end this early without forcing. Under the old state bug, requests 2 and 3 would have run unforced.
+- Result: force fires on each request, and state does not carry over between requests. The check passes.
+
+**Which earlier runs were warm (checked from `fresh_server_replay.json` manifests).**
+- Fresh per case (valid, unaffected): all cactus, cactus_force_commit, r_fuzzy, r_fuzzy_force_commit, spec_casc_opt, and spec_casc_opt_force_commit 8-case screens; the full mentored_dec aime24 pair (baseline 30, force-commit t=30000 30, plus the t=22000 screen). Manifest batches that predate the warm-mode code are fresh by construction.
+- Warm: the aime24 spec_casc_tok baseline (valid as a warm baseline, subject to the history caveat); the gsm8k spec_casc_tok and mentored_dec baselines (valid as warm baselines); and all warm force-commit arms (invalid, now rerun).
+
+**Campaign.** Warm loop restarted in the original order. Invalid warm force-commit arms are regenerated under the fixed patch. Baselines are not regenerated, since they were not affected by the bug.

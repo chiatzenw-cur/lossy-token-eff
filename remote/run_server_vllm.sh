@@ -572,12 +572,11 @@ PY
       spec_casc_tok_force_commit)
         printf '%s\n' "$SPEC_CASC_TOK_FORCE_COMMIT_ALPHA" > "$spec_casc_tok_force_commit_file"
         printf '%s\n' "$SPEC_CASC_TOK_FORCE_COMMIT_THRESHOLD" > "$spec_casc_tok_force_commit_threshold_file"
-        # _FORCE_COMMIT_STATE, not _SPEC_CASC_TOK_ALPHA: the latter is
-        # defined by every spec-casc-tok-family patch, so it wouldn't
-        # disambiguate this variant from plain spec-casc-tok, antiloop, or
-        # any guard; the persistent force-commit state dict is genuinely
-        # unique to this patch.
-        probe_patched "_FORCE_COMMIT_STATE" || {
+        # _FORCE_COMMIT_STATES (per-request-id dict), not _SPEC_CASC_TOK_ALPHA:
+        # the latter is defined by every spec-casc-tok-family patch, so it
+        # wouldn't disambiguate this variant from plain spec-casc-tok, antiloop,
+        # or any guard; the per-request force-state dict is unique to this patch.
+        probe_patched "_FORCE_COMMIT_STATES" || {
           echo "LOSSY_RULE=spec_casc_tok_force_commit needs the patch: bash patches/apply.sh spec-casc-tok-force-commit" >&2
           exit 5
         }

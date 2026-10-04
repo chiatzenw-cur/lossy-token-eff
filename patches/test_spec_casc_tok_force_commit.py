@@ -122,12 +122,12 @@ def _load_patched_module():
 
 
 def _snapshot_state(m):
-    return {k: (list(v) if isinstance(v, list) else v) for k, v in m._FORCE_COMMIT_STATE.items()}
+    return {k: (list(v) if isinstance(v, list) else v) for k, v in m._force_commit_state().items()}
 
 
 def _restore_state(m, snapshot) -> None:
-    m._FORCE_COMMIT_STATE.clear()
-    m._FORCE_COMMIT_STATE.update(snapshot)
+    m._force_commit_state().clear()
+    m._force_commit_state().update(snapshot)
 
 
 def test_pattern_progress() -> None:
@@ -165,9 +165,9 @@ def test_apply_forces_onehot_and_respects_threshold() -> None:
         # Below threshold: no-op, and returns the caller's SAME tensor (no
         # clone) -- the common-case fast path for the vast majority of
         # tokens in the vast majority of sequences.
-        m._FORCE_COMMIT_STATE["token_count"] = 100
-        m._FORCE_COMMIT_STATE["final_opened"] = False
-        m._FORCE_COMMIT_STATE["tail"] = []
+        m._force_commit_state()["token_count"] = 100
+        m._force_commit_state()["final_opened"] = False
+        m._force_commit_state()["tail"] = []
         out, mask = m._force_commit_apply(target_probs, num_draft_tokens, cu_num_draft_tokens)
         assert not mask.any(), "must not force below threshold"
         assert out is target_probs, "must return the SAME tensor object when not forcing"
@@ -182,7 +182,7 @@ def test_apply_forces_onehot_and_respects_threshold() -> None:
         # mid-force -- observed live as a real degenerate cycle (the
         # pattern's own opening repeating over and over, restarting each
         # time it diverged).
-        m._FORCE_COMMIT_STATE["token_count"] = m._FORCE_COMMIT_THRESHOLD
+        m._force_commit_state()["token_count"] = m._FORCE_COMMIT_THRESHOLD
         out, mask = m._force_commit_apply(target_probs, num_draft_tokens, cu_num_draft_tokens)
         assert mask.tolist() == [True, True], f"must force BOTH available positions, got {mask.tolist()}"
         assert out[0, 7].item() == 1.0
@@ -192,7 +192,7 @@ def test_apply_forces_onehot_and_respects_threshold() -> None:
 
         # Partial progress (tail already ends in pattern[:1]=[7]): forces
         # pattern[1] onward next, not pattern[0] again.
-        m._FORCE_COMMIT_STATE["tail"] = [7]
+        m._force_commit_state()["tail"] = [7]
         out, mask = m._force_commit_apply(target_probs, num_draft_tokens, cu_num_draft_tokens)
         assert out[0, 8].item() == 1.0, "should now force pattern[1], not restart from pattern[0]"
         assert out[1, 9].item() == 1.0, "and pattern[2] at the second position"
@@ -201,14 +201,14 @@ def test_apply_forces_onehot_and_respects_threshold() -> None:
         # Boundary: only 1 pattern token remains (progress=2 of 3) but the
         # round offers 2 positions -- must force exactly 1, never overshoot
         # past the pattern's own end.
-        m._FORCE_COMMIT_STATE["tail"] = [7, 8]
+        m._force_commit_state()["tail"] = [7, 8]
         out, mask = m._force_commit_apply(target_probs, num_draft_tokens, cu_num_draft_tokens)
         assert mask.tolist() == [True, False], f"only 1 pattern token remains, must force exactly 1: {mask.tolist()}"
         assert out[0, 9].item() == 1.0
         print("  ok  forces only as many positions as pattern tokens remain, never overshoots")
 
         # Sticky final_opened: no-op regardless of token_count or tail.
-        m._FORCE_COMMIT_STATE["final_opened"] = True
+        m._force_commit_state()["final_opened"] = True
         out, mask = m._force_commit_apply(target_probs, num_draft_tokens, cu_num_draft_tokens)
         assert not mask.any(), "must never force once final_opened is sticky-True"
         assert out is target_probs
@@ -226,47 +226,47 @@ def test_update_accumulates_and_detects_completion() -> None:
     saved_pattern = list(m._FINAL_OPEN_PATTERN)
     try:
         m._FINAL_OPEN_PATTERN = [7, 8, 9]
-        m._FORCE_COMMIT_STATE["token_count"] = 0
-        m._FORCE_COMMIT_STATE["final_opened"] = False
-        m._FORCE_COMMIT_STATE["tail"] = []
+        m._force_commit_state()["token_count"] = 0
+        m._force_commit_state()["final_opened"] = False
+        m._force_commit_state()["tail"] = []
         PLACEHOLDER = m.PLACEHOLDER_TOKEN_ID
 
         round1 = torch.tensor([[7, PLACEHOLDER]], dtype=torch.int32)
         m._force_commit_update(round1, [1], batch_size=1)
-        assert m._FORCE_COMMIT_STATE["token_count"] == 1
-        assert m._FORCE_COMMIT_STATE["tail"] == [7]
-        assert m._FORCE_COMMIT_STATE["final_opened"] is False
+        assert m._force_commit_state()["token_count"] == 1
+        assert m._force_commit_state()["tail"] == [7]
+        assert m._force_commit_state()["final_opened"] is False
         print("  ok  update accumulates real tokens, ignores PLACEHOLDER padding, not yet complete")
 
         round2 = torch.tensor([[8, PLACEHOLDER]], dtype=torch.int32)
         m._force_commit_update(round2, [1], batch_size=1)
         round3 = torch.tensor([[9, PLACEHOLDER]], dtype=torch.int32)
         m._force_commit_update(round3, [1], batch_size=1)
-        assert m._FORCE_COMMIT_STATE["token_count"] == 3
-        assert m._FORCE_COMMIT_STATE["final_opened"] is True
+        assert m._force_commit_state()["token_count"] == 3
+        assert m._force_commit_state()["final_opened"] is True
         print("  ok  full pattern completing across rounds sets the sticky final_opened flag")
 
         round4 = torch.tensor([[1, 2, 3]], dtype=torch.int32)
         m._force_commit_update(round4, [3], batch_size=1)
-        assert m._FORCE_COMMIT_STATE["final_opened"] is True
-        assert m._FORCE_COMMIT_STATE["token_count"] == 6
+        assert m._force_commit_state()["final_opened"] is True
+        assert m._force_commit_state()["token_count"] == 6
         print("  ok  final_opened stays sticky after further generation (still counts tokens)")
 
         assert m._FORCE_COMMIT_WARMUP_BATCH_THRESHOLD < 50
         n = m._FORCE_COMMIT_WARMUP_BATCH_THRESHOLD + 10
         warmup_round = torch.full((n, 2), 1, dtype=torch.int32)
         m._force_commit_update(warmup_round, [2] * n, batch_size=n)
-        assert m._FORCE_COMMIT_STATE["token_count"] == 0
-        assert m._FORCE_COMMIT_STATE["final_opened"] is False
-        assert m._FORCE_COMMIT_STATE["tail"] == []
+        assert m._force_commit_state()["token_count"] == 0
+        assert m._force_commit_state()["final_opened"] is False
+        assert m._force_commit_state()["tail"] == []
         print("  ok  warmup-shaped batch resets all state instead of extending it")
 
         m._FINAL_OPEN_PATTERN = [999999]  # won't spuriously match the content below
         maxlen = m._FORCE_COMMIT_HISTORY_MAXLEN
         big_round = torch.tensor([list(range(1, maxlen + 11))], dtype=torch.int32)
         m._force_commit_update(big_round, [maxlen + 10], batch_size=1)
-        assert len(m._FORCE_COMMIT_STATE["tail"]) == maxlen, len(m._FORCE_COMMIT_STATE["tail"])
-        assert m._FORCE_COMMIT_STATE["tail"][-1] == maxlen + 10
+        assert len(m._force_commit_state()["tail"]) == maxlen, len(m._force_commit_state()["tail"])
+        assert m._force_commit_state()["tail"][-1] == maxlen + 10
         print(f"  ok  tail trims to the trailing {maxlen} tokens (_FORCE_COMMIT_HISTORY_MAXLEN)")
     finally:
         _restore_state(m, saved_state)
@@ -297,9 +297,9 @@ def test_end_to_end_real_kernel_forces_full_pattern() -> None:
         natural_favorite = 5  # what the model "really wants" every round, never in the pattern
         assert natural_favorite not in pattern
 
-        m._FORCE_COMMIT_STATE["token_count"] = m._FORCE_COMMIT_THRESHOLD
-        m._FORCE_COMMIT_STATE["final_opened"] = False
-        m._FORCE_COMMIT_STATE["tail"] = []
+        m._force_commit_state()["token_count"] = m._FORCE_COMMIT_THRESHOLD
+        m._force_commit_state()["final_opened"] = False
+        m._force_commit_state()["tail"] = []
 
         emitted_sequence: list[int] = []
         for _ in range(len(pattern) + 3):  # a few spare rounds past completion
@@ -332,18 +332,36 @@ def test_end_to_end_real_kernel_forces_full_pattern() -> None:
                 sampling_metadata,
             )
             emitted_sequence.append(int(out[0, 0].item()))
-            if m._FORCE_COMMIT_STATE["final_opened"]:
+            if m._force_commit_state()["final_opened"]:
                 break
 
         assert emitted_sequence[: len(pattern)] == pattern, (
             f"forced sequence did not match the real final-channel-open pattern: "
             f"{emitted_sequence} vs {pattern}"
         )
-        assert m._FORCE_COMMIT_STATE["final_opened"] is True
+        assert m._force_commit_state()["final_opened"] is True
         print(f"  ok  real end-to-end rounds forced the exact {len(pattern)}-token final-channel-open "
               f"pattern over a strongly-preferred competing natural token ({natural_favorite}), then stopped")
     finally:
         _restore_state(m, saved_state)
+
+
+def test_state_resets_per_request_id() -> None:
+    m = _load_patched_module()
+    saved_ids = m._FORCE_COMMIT_REQ_IDS
+    try:
+        m._FORCE_COMMIT_STATES.clear()
+        m._FORCE_COMMIT_REQ_IDS = ["req_a"]
+        m._force_commit_state()["token_count"] = m._FORCE_COMMIT_THRESHOLD + 5
+        m._force_commit_state()["final_opened"] = True
+        m._FORCE_COMMIT_REQ_IDS = ["req_b"]
+        fresh = m._force_commit_state()
+        assert fresh["token_count"] == 0 and fresh["final_opened"] is False and fresh["tail"] == [], fresh
+        m._FORCE_COMMIT_REQ_IDS = ["req_a"]
+        assert m._force_commit_state()["final_opened"] is True, "req_a state must persist for req_a"
+    finally:
+        m._FORCE_COMMIT_REQ_IDS = saved_ids
+        m._FORCE_COMMIT_STATES.clear()
 
 
 def main() -> int:
@@ -354,6 +372,7 @@ def main() -> int:
         test_apply_forces_onehot_and_respects_threshold,
         test_update_accumulates_and_detects_completion,
         test_end_to_end_real_kernel_forces_full_pattern,
+        test_state_resets_per_request_id,
     ):
         print(f"{test.__name__}:")
         try:

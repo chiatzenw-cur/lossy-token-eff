@@ -136,6 +136,7 @@ case "$METHOD" in
   spec-casc-tok-rv) gmr_label_for_method="rv-model-runner" ;;
   spec-casc-tok-judge-nudge) gmr_label_for_method="jn-model-runner" ;;
   spec-casc-tok-hsr-guard) gmr_label_for_method="hsr-guard-model-runner" ;;
+  spec-casc-tok-force-commit) gmr_label_for_method="force-commit-model-runner" ;;
 esac
 if [[ -n "$gmr_label_for_method" ]]; then
   gmr_patch_file="$here/vllm-0.26.0-$gmr_label_for_method.patch"

@@ -18,7 +18,14 @@ LEDGER_DIR = REPO / "autoresearch" / "cross_method_metrics"
 METHODS = ("spec_casc_tok", "spec_casc_tok_force_commit", "mentored_dec", "mentored_dec_force_commit")
 RAW_FILES = ("output.txt", "proposals.jsonl", "response.json")
 FIELDS = ["dataset", "method", "params", "case", "server_mode", "output_tokens", "finish_reason",
-          "hit_cap", "reached_final_channel", "l_bar", "verdict", "correct"]
+          "hit_cap", "reached_final_channel", "l_bar", "verdict", "correct", "record_valid"]
+
+
+def record_valid(method, mode):
+    # Warm force-commit arms before the per-request state fix ran on a
+    # process-global force state that persisted across requests, so forcing was
+    # disabled after the first final channel. Those rows are invalid.
+    return not (mode == "warm" and "force_commit" in method)
 
 
 def ledger_path(dataset):
@@ -69,6 +76,7 @@ def process(dataset, method, params, case_dir):
         "hit_cap": finish == "length", "reached_final_channel": data.get("reached_final_channel"),
         "l_bar": data.get("l_bar"), "verdict": verdict or "", "correct": "" if correct is None else correct,
     }
+    row["record_valid"] = record_valid(method, row["server_mode"])
     return row
 
 
