@@ -597,7 +597,7 @@ PY
       mentored_dec_force_commit)
         printf '%s\n' "$MENTORED_DEC_FORCE_COMMIT_ALPHA" > "$mentored_dec_force_commit_file"
         printf '%s\n' "$MENTORED_DEC_FORCE_COMMIT_THRESHOLD" > "$mentored_dec_force_commit_threshold_file"
-        probe_patched "_MENTORED_DEC_FORCE_COMMIT_STATE" || {
+        probe_patched "_MENTORED_DEC_FORCE_COMMIT_STATES" || {
           echo "LOSSY_RULE=mentored_dec_force_commit needs the patch: bash patches/apply.sh mentored-dec-force-commit" >&2
           exit 5
         }

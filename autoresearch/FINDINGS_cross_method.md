@@ -193,3 +193,19 @@ The four capped spec_casc_tok runs (cases 063, 120, 140, 148) never open the fin
 - Warm: the aime24 spec_casc_tok baseline (valid as a warm baseline, subject to the history caveat); the gsm8k spec_casc_tok and mentored_dec baselines (valid as warm baselines); and all warm force-commit arms (invalid, now rerun).
 
 **Campaign.** Warm loop restarted in the original order. Invalid warm force-commit arms are regenerated under the fixed patch. Baselines are not regenerated, since they were not affected by the bug.
+
+## Keyed-state fix results (warm, fixed patches), 2026-10-04
+
+**mentored_dec force-commit** had the same process-global state. It is now keyed by request id (`vllm-0.26.0-mentored-dec-force-commit.patch`, installed hash `ab5116f4…`). Plumbing test passes. 3-case check at threshold 2000 (mechanism, not a result): cases 002, 003, 004 each carry the forced boundary near 2,000 tokens.
+
+**spec_casc_tok aime24, warm, fixed patch (30 cases, threshold 30000, alpha 0.8).** Baseline is the warm baseline. Record validity is checked against the installed hash in `config.json`.
+
+| metric | baseline (warm) | force-commit t=30000 (warm, fixed) |
+|---|---:|---:|
+| mean completion tokens | 12,514.5 | 12,591.7 (+0.6%) |
+| cap hits (32,768) | 5 | 0 |
+| correct | 24 | 23 |
+
+- All 8 force-commit runs past 30,000 tokens contain the final channel, so forcing fired on each. Baseline cap hits 5 -> 0.
+- Flips, reported as warm-server descriptive only: case_006 correct -> not-correct (7,475 -> 30,136, a healthy baseline run that diverged on the warm sequence), case_030 correct -> not-correct (5,682 -> 30,097), case_026 not-correct -> correct (cap -> 31,516).
+- **Caveat.** The warm baseline and force-commit arms still diverge sequence-wide (history dependence, per the earlier diagnostic), so per-case flips are not claimed as force-commit effects. The mean (+0.6%) and cap-hit change (5 -> 0) are the reportable deltas. Correct count moved -1 with flips in both directions, which noise can produce.

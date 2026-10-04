@@ -21,11 +21,21 @@ FIELDS = ["dataset", "method", "params", "case", "server_mode", "output_tokens",
           "hit_cap", "reached_final_channel", "l_bar", "verdict", "correct", "record_valid"]
 
 
-def record_valid(method, mode):
-    # Warm force-commit arms before the per-request state fix ran on a
-    # process-global force state that persisted across requests, so forcing was
-    # disabled after the first final channel. Those rows are invalid.
-    return not (mode == "warm" and "force_commit" in method)
+FIXED_RS_SHA256 = {
+    "spec_casc_tok_force_commit": "3b422e8ed28a63829828322295e632ace68f401c86b5b7a8acb215c8549f2444",
+    "mentored_dec_force_commit": "ab5116f4f69338c70b5a58c2d315fbe46abf03fb7b693e38d43a9329ee53d220",
+}
+
+
+def record_valid(method, mode, run_dir):
+    """Force-commit runs on warm servers are valid only if they ran under the
+    per-request-keyed patch: the installed rejection_sampler.py hash, recorded in
+    config.json as vllm.v1_sha256, must match the fixed hash. Fresh-per-case runs and
+    non-force methods are valid."""
+    if mode != "warm" or method not in FIXED_RS_SHA256:
+        return True
+    config = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+    return config.get("vllm", {}).get("v1_sha256") == FIXED_RS_SHA256[method]
 
 
 def ledger_path(dataset):
@@ -76,7 +86,7 @@ def process(dataset, method, params, case_dir):
         "hit_cap": finish == "length", "reached_final_channel": data.get("reached_final_channel"),
         "l_bar": data.get("l_bar"), "verdict": verdict or "", "correct": "" if correct is None else correct,
     }
-    row["record_valid"] = record_valid(method, row["server_mode"])
+    row["record_valid"] = record_valid(method, row["server_mode"], seed_dir)
     return row
 
 

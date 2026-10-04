@@ -1,6 +1,6 @@
 --- a/vllm/v1/sample/rejection_sampler.py
 +++ b/vllm/v1/sample/rejection_sampler.py
-@@ -7,9 +7,171 @@
+@@ -7,9 +7,169 @@
  from dataclasses import replace
  from typing import TYPE_CHECKING
  
@@ -100,15 +100,11 @@
 +_MENTORED_DEC_FORCE_COMMIT_WARMUP_BATCH_THRESHOLD = 8
 +_MENTORED_DEC_FORCE_COMMIT_HISTORY_MAXLEN = 64
 +
-+_FORCE_COMMIT_REQ_IDS: list[str] | None = None  # set per sampling step by the model runner
-+_MENTORED_DEC_FORCE_COMMIT_STATES: dict[str, dict[str, object]] = {}
-+
-+
-+def _mentored_force_commit_state() -> dict[str, object]:
-+    key = _FORCE_COMMIT_REQ_IDS[0] if _FORCE_COMMIT_REQ_IDS else ""
-+    if key not in _MENTORED_DEC_FORCE_COMMIT_STATES:
-+        _MENTORED_DEC_FORCE_COMMIT_STATES[key] = {"token_count": 0, "final_opened": False, "tail": []}
-+    return _MENTORED_DEC_FORCE_COMMIT_STATES[key]
++_MENTORED_DEC_FORCE_COMMIT_STATE: dict[str, object] = {
++    "token_count": 0,
++    "final_opened": False,
++    "tail": [],
++}
 +
 +
 +def _mentored_dec_force_commit_pattern_progress(tail: list[int]) -> int:
@@ -124,7 +120,7 @@
 +    to spec-casc-tok-force-commit's own _force_commit_apply -- see that
 +    patch's docstring for the start0-only-forcing bug this already avoids
 +    by forcing every still-unforced pattern position available each round."""
-+    state = _mentored_force_commit_state()
++    state = _MENTORED_DEC_FORCE_COMMIT_STATE
 +    num_tokens = target_probs.shape[0]
 +    force_mask = torch.zeros(num_tokens, dtype=torch.bool, device=target_probs.device)
 +    if state["final_opened"] or state["token_count"] < _MENTORED_DEC_FORCE_COMMIT_THRESHOLD:
@@ -150,10 +146,12 @@
 +
 +
 +def _mentored_dec_force_commit_update(output_token_ids, num_draft_tokens, batch_size) -> None:
++    state = _MENTORED_DEC_FORCE_COMMIT_STATE
 +    if batch_size > _MENTORED_DEC_FORCE_COMMIT_WARMUP_BATCH_THRESHOLD:
-+        _MENTORED_DEC_FORCE_COMMIT_STATES.clear()
++        state["token_count"] = 0
++        state["final_opened"] = False
++        state["tail"] = []
 +        return
-+    state = _mentored_force_commit_state()
 +    row = output_token_ids[0].tolist()
 +    emitted = [t for t in row if t != PLACEHOLDER_TOKEN_ID]
 +    if not emitted:
@@ -172,7 +170,7 @@
  from vllm.logger import init_logger
  from vllm.triton_utils import tl, triton
  from vllm.v1.outputs import LogprobsLists, LogprobsTensors, SamplerOutput
-@@ -474,6 +636,15 @@
+@@ -474,6 +634,15 @@
      target_probs = target_logits.softmax(dim=-1, dtype=torch.float32)
      assert target_probs.is_contiguous()
  
@@ -188,7 +186,7 @@
      # Sample recovered tokens for each position.
      # [num_tokens]
      recovered_token_ids = sample_recovered_tokens(
-@@ -503,9 +674,29 @@
+@@ -503,9 +672,29 @@
          max_spec_len,
          vocab_size,
          synthetic_conditional_rates,
@@ -218,7 +216,7 @@
      return output_token_ids
  
  
-@@ -786,6 +977,7 @@
+@@ -786,6 +975,7 @@
      max_spec_len,
      vocab_size,
      synthetic_conditional_rates_ptr,  # [num_speculative_tokens] or None
@@ -226,7 +224,7 @@
      NO_DRAFT_PROBS: tl.constexpr,
      SYNTHETIC_MODE: tl.constexpr,
  ):
-@@ -828,7 +1020,15 @@
+@@ -828,7 +1018,15 @@
                  )
                  # NOTE(woosuk): While the draft probability should never be 0,
                  # we check it to avoid NaNs. If it happens to be 0, we reject.
