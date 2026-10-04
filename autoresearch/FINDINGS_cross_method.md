@@ -148,8 +148,27 @@ Byte-identical (tokens and verdict) in only 4 of 30 cases; 26 differ in token co
 - case_019: not-correct -> correct (32,768 cap -> 23,295)
 - case_023: correct -> not-correct (3,273 -> 18,110)
 
-**Read-out.** The mean (+1.2%), the cap count (5 -> 5), and the net correct count (-2) are all within what the warm-server divergence could produce. On this setup the force-commit arm does not show a measurable effect on spec_casc_tok. The per-case flips are consistent with run-to-run noise and are not claimed as effects. A valid paired comparison needs fresh servers per case, which is not what this section measures.
+**Read-out: INVALID as a force-commit test.** The force-commit arm ran on one warm server, and its force state is module-level and cumulative per process. The patch resets that state only on warmup batches (batch size > 8), which a serial warm server never produces. So once case_001 opened the final channel, `final_opened` stayed True for every later request and forcing was disabled for the rest of the server's life. Evidence: five force-commit runs in the ledger passed 30,000 tokens with no final channel and none were forced. The +1.2% mean, 5 -> 5 cap hits, and 24 -> 22 correct are therefore not effects of force-commit, and the per-case flips are not claimed. The baseline arm is a valid warm baseline, subject to the history caveat above.
 
 ## mentored_dec (alpha=0.75), 30-case AIME24, threshold 30000 -- FRESH (unchanged)
 
 See the earlier section above: each case ran on its own fresh server, so this pair is per-case reproducible and not affected by the warm-server caveat.
+
+## gsm8k (alpha=0.8 / 0.75), 150 cases, threshold 1843 -- WARM-SERVER, force arms INVALID
+
+Metrics ledger: `autoresearch/cross_method_metrics/gsm8k.csv` (per-case output_tokens, finish reason, cap hit, final-channel flag, l_bar, verdict). Raw per-case outputs were deleted after grading; run.json is kept.
+
+| arm | mean tokens | cap hits (2048) | correct /150 |
+|---|---:|---:|---:|
+| spec_casc_tok (baseline, warm) | 333.6 | 4 | 143 |
+| spec_casc_tok_force_commit (t=1843, warm) | 333.6 | 4 | 143 -- INVALID, see below |
+| mentored_dec (baseline, warm) | 395.6 | 4 | 141 |
+| mentored_dec_force_commit (t=1843, warm) | 396.4 | 4 | 141 -- INVALID, see below |
+
+The four capped spec_casc_tok runs (cases 063, 120, 140, 148) never open the final channel, and the force arm reproduces them at the same 2,048 tokens. That is what disabled forcing predicts: `final_opened` was already set by an earlier request. The `same_token_count` column in the report counts equal token counts, not identical text, so "identical" here does not mean the text matches.
+
+**Force arms: not a measurement.** As for aime24, the warm force-commit arms cannot test the mechanism. The baseline rows are valid as warm baselines.
+
+## Status
+- Warm-server baselines (spec_casc_tok, mentored_dec) are usable as baselines with the history caveat.
+- All warm-server force-commit results are invalid. The fix is per-request state reset, or fresh-per-case servers for the force arms. The mentored_dec aime24 pair stays fresh and valid.
