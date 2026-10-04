@@ -76,3 +76,22 @@ in-session before any claim.
 - The 8-case screen (`cross_method_force_commit_screen.md`, t=30000 row) is
   in-session on both arms and is valid: -4.2% mean, cap hits 3 -> 0, accuracy 5/8 -> 6/8.
 - Other methods' 30-case promotions wait until this one has a same-build baseline.
+
+## mentored_dec, alpha 0.75, threshold 30000 -- full 30-case AIME24, same build
+
+Paired comparison, both arms on build b945333, same 30 cases, one seed.
+Baseline is the in-session no-force-commit run; force-commit arm is
+`runs/aime24/mentored_dec_force_commit/alpha0.75_t30000`.
+
+| | baseline | force_commit (t=30000) |
+|---|---:|---:|
+| mean output tokens | 15,526 | 15,043 (**-3.1%**) |
+| cap hits (32,768) | 7/30 | **0/30** |
+| accuracy (grade_aime.py) | 16/30 | **19/30** |
+
+Flips (baseline -> force_commit):
+- wrong -> correct: case_002, case_017, case_026 (all three were capped at baseline)
+- correct -> wrong/no_answer: none
+- The other 27 cases are not forced to a different answer. Length changed only on the 7 capped cases (each now stops at 30-31k tokens) plus any case that hit the threshold.
+
+Read: no accuracy regression on 30 cases, and the accuracy change is positive on the cases the threshold actually touched. Single seed, so the +3 is only as strong as one seed allows. The -3.1% mean is smaller than the -15.3% 8-case screen at t=22000, because t=30000 forces fewer runs.
