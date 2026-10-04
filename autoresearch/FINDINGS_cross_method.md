@@ -6,7 +6,7 @@ promotions.
 
 ## mentored_dec (alpha=0.75), 30-case AIME24, threshold 30000
 
-**Status: force-commit arm complete (30/30 ok). The delta is NOT yet valid: the baseline needs a same-build rerun.**
+**Status: valid paired delta below (same session, same build b945333). The campaign-baseline comparison further down is superseded.**
 
 ### Force-commit arm, 30 cases
 
@@ -95,3 +95,39 @@ Flips (baseline -> force_commit):
 - The other 27 cases are not forced to a different answer. Length changed only on the 7 capped cases (each now stops at 30-31k tokens) plus any case that hit the threshold.
 
 Read: no accuracy regression on 30 cases, and the accuracy change is positive on the cases the threshold actually touched. Single seed, so the +3 is only as strong as one seed allows. The -3.1% mean is smaller than the -15.3% 8-case screen at t=22000, because t=30000 forces fewer runs.
+
+### Paired delta, same session and build (valid)
+
+Baseline arm: `cross_method_runs/aime24/mentored_dec/alpha0.75` (30/30 ok, this session, build b945333).
+Force-commit arm: `cross_method_runs/aime24/mentored_dec_force_commit/alpha0.75_t30000` (30/30 ok, same session).
+
+| metric | baseline | force-commit t=30000 | paired change |
+|---|---:|---:|---:|
+| mean completion tokens | 15,525.8 | 15,042.5 | **-3.1% (-483 tok)** |
+| cap hits (32,768) | 7 | 0 | -7 |
+| correct | 16 | 19 | +3 |
+| wrong | 14 | 8 | -6 |
+| no_answer | 0 | 3 | +3 |
+
+Flips (7 of 30 cases; 23 byte-identical in tokens and verdict):
+
+| case | baseline | force-commit t=30000 | verdict change |
+|---|---|---|---|
+| case_002 | wrong, 32,768 (cap) | correct, 31,024 | wrong -> correct |
+| case_017 | wrong, 32,768 (cap) | correct, 31,123 | wrong -> correct |
+| case_026 | wrong, 32,768 (cap) | correct, 32,233 | wrong -> correct |
+| case_003 | wrong, 32,768 (cap) | no_answer, 30,138 | both incorrect |
+| case_004 | wrong, 32,768 (cap) | wrong, 30,129 | both incorrect |
+| case_019 | wrong, 32,768 (cap) | no_answer, 30,061 | both incorrect |
+| case_029 | wrong, 32,768 (cap) | no_answer, 30,169 | both incorrect |
+
+Every flip is a capped baseline run. No healthy run changes, and no correct
+answer is lost. The two healthy-case flips in the campaign comparison
+(case_009, case_012) do not occur on the same build, which confirms they came
+from the build mismatch.
+
+Read-out: at this threshold the mechanism's effect on mentored_dec is a 7 -> 0
+cap-hit reduction with three recovered correct answers and no lost ones. The
+length saving is small (-3.1%) because the forced runs finish at 30k-32k, close
+to the cap, so the saving per case is limited to the difference between the cap and
+the threshold.
