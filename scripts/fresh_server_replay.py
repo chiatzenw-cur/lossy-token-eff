@@ -238,6 +238,13 @@ def parse_args() -> argparse.Namespace:
         help="Start one server per (arm, alpha, threshold) group and reuse it across cases. "
         "Per-case proposals.jsonl tracing is off in this mode.",
     )
+    parser.add_argument(
+        "--qwen3-force-commit-threshold",
+        type=int,
+        default=0,
+        help="Qwen3 V2 force-commit threshold in generated tokens (0 = off). Applies to spec_casc_tok and mentored_dec arms; "
+        "runs land under <arm>_qwen3_force_commit/alpha<a>_t<thr>.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -260,7 +267,23 @@ def tag_for(args: argparse.Namespace, arm: str) -> str:
     return f"{camel}{compact}" + args.tag_suffix
 
 
+def qwen3_close_id(model_path: str) -> int:
+    from transformers import AutoTokenizer
+
+    ids = AutoTokenizer.from_pretrained(model_path).encode("</think>", add_special_tokens=False)
+    if len(ids) != 1:
+        raise RuntimeError(f"'</think>' is not one token for {model_path}: {ids}")
+    return ids[0]
+
+
 def method_and_params_for(args: argparse.Namespace, arm: str) -> tuple[str, str]:
+    if args.qwen3_force_commit_threshold > 0 and arm in ("spec_casc_tok", "mentored_dec"):
+        method, params = method_and_params_for_base(args, arm)
+        return f"{method}_qwen3_force_commit", f"{params}_t{args.qwen3_force_commit_threshold}"
+    return method_and_params_for_base(args, arm)
+
+
+def method_and_params_for_base(args: argparse.Namespace, arm: str) -> tuple[str, str]:
     """(method, params) for the run directory: runs-root/<bench>/<method>/
     <params>/<case>/seed_N/. params always starts with alpha<value> for
     every relaxed method (the one knob every MethodSpec has), with any
@@ -469,6 +492,12 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
     env["MODEL_PATH"] = args.model_path
     env["DRAFT_MODEL_PATH"] = args.draft_model_path
     env["SERVED_MODEL_NAME"] = args.served_model_name
+    if args.qwen3_force_commit_threshold > 0:
+        if arm not in ("spec_casc_tok", "mentored_dec"):
+            raise RuntimeError("--qwen3-force-commit-threshold applies only to spec_casc_tok and mentored_dec")
+        subprocess.run(["bash", str(REPO_ROOT / "patches" / "apply.sh"), "qwen3-force-commit-v2"], cwd=REPO_ROOT, check=True, capture_output=True, text=True)
+        env["QWEN3_FORCE_COMMIT_THRESHOLD"] = str(args.qwen3_force_commit_threshold)
+        env["QWEN3_FORCE_COMMIT_CLOSE_ID"] = str(qwen3_close_id(args.model_path))
     env["ROPE_SCALING_JSON"] = args.rope_scaling_json
     mode = "baseline" if arm == "baseline" else ("strict" if arm == "strict" else "lossy")
     if arm not in ("baseline", "strict"):

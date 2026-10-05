@@ -244,3 +244,15 @@ All arms warm, one server per arm, seed 0. Paired deltas are descriptive: token 
 | longbench_v2 (7372) | mentored_dec | 2,089 → 2,395 | +14.6% | 3 → 1 | 83 → 79 | 30 |
 
 **Read-out.** Cap hits fall or hold on every dataset where forcing applies, and every run past its threshold reaches the final channel. The mean-token deltas go both ways (−8.4% to +14.6%) and the accuracy changes are small in both directions. The mentored longbench_v2 +14.6% with 30 flips is the largest deviation and is not explained by the cap change, so it should be treated as warm-history noise until a fresh-per-case rerun says otherwise. Nothing here is a per-case effect claim.
+
+## Qwen3 force-commit, V2 hook: 3-case GPU check (2026-10-05)
+
+**Base record.** The V2 state the Qwen3 port applies to is recorded in `patches/v2_base/` (three verbatim files, hashes in `HASHES.txt`, origin note in `patches/v2_base/README.md`). Origin is partly undocumented: the consolidated V2 kernel and the sampler/model-runner edits came from earlier ports applied directly to the venv.
+
+**Hook.** `patches/vllm-0.26.0-qwen3-force-commit-v2.patch` touches one file, the V2 sampler `gpu/spec_decode/rejection_sampler.py` (hash `e3318e0e…`). It forces the closing token `</think>` (id from the tokenizer, 151668 for Qwen3-8B) at the first drafted row of a request once its generated count reaches the threshold and `</think>` is not in its own token buffer. The decision reads only that request's buffer, so no state persists between requests. Inert when the threshold knob is 0. No model-runner change: the sampler already holds `req_states`.
+
+**Plumbing.** `patches/test_qwen3_force_commit_v2.py` (7 checks: disabled identity, forced first row, below threshold, prompt-length offset, closing-token history, independence within a batch, statelessness across calls). All pass via `bash patches/apply.sh qwen3-force-commit-v2`.
+
+**GPU check.** Qwen3-8B, warm server, spec_casc_tok α0.8, threshold 2000 (mechanism check, not a result, not pre-registered), aime24_qwen3 cases 002, 003, 004 on one server:
+- The EngineCore printed `[QWEN3-FORCE-COMMIT V2 PATCH] threshold=2000 close_id=151668`, confirming the V2 sampler path.
+- `</think>` appears after exactly 2003, 2004 and 2002 generated tokens (counted with the Qwen3 tokenizer). All three are at the threshold, so the force fired on each request, including the second and third on the same server. The check passes.

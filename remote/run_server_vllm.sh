@@ -391,6 +391,13 @@ PY
   [[ "$result" == "yes" ]]
 }
 
+# Qwen3 force-commit (V2 sampler hook, patches/vllm-0.26.0-qwen3-force-commit-v2.patch):
+# written every mode so a stale threshold from an earlier run cannot force a baseline.
+qwen3_fc_threshold_file="/tmp/lossy-token-eff-qwen3-force-commit-threshold-$(id -u)"
+qwen3_fc_close_file="/tmp/lossy-token-eff-qwen3-force-commit-close-id-$(id -u)"
+printf '%s\n' "${QWEN3_FORCE_COMMIT_THRESHOLD:-0}" > "$qwen3_fc_threshold_file"
+printf '%s\n' "${QWEN3_FORCE_COMMIT_CLOSE_ID:--1}" > "$qwen3_fc_close_file"
+
 case "$MODE" in
   baseline)
     neutralise_all_knobs

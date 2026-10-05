@@ -24,7 +24,7 @@ HASHES="$here/HASHES.txt"
 
 METHOD="${1:-}"
 case "$METHOD" in
-  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard|spec-casc-tok-autoguard|cactus-force-commit|mentored-dec-force-commit|r-fuzzy-force-commit|spec-casc-opt-force-commit) ;;
+  qwen3-force-commit-v2|cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard|spec-casc-tok-autoguard|cactus-force-commit|mentored-dec-force-commit|r-fuzzy-force-commit|spec-casc-opt-force-commit) ;;
   *)
     echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard|spec-casc-tok-autoguard|cactus-force-commit|mentored-dec-force-commit|r-fuzzy-force-commit|spec-casc-opt-force-commit>" >&2
     exit 2
@@ -45,6 +45,28 @@ hash_of() { sha256sum "$1" | cut -d' ' -f1; }
 label_for_hash() {  # $1: file basename key in HASHES.txt ("rejection_sampler.py" or "utils"), $2: hash
   awk -v h="$2" '$1==h {print $2; found=1} END{if(!found) print ""}' "$HASHES"
 }
+
+if [[ "$METHOD" == "qwen3-force-commit-v2" ]]; then
+  # V2 sampler only: no other arm patches this file (V1 methods never reach it).
+  v2s="$pkg/v1/worker/gpu/spec_decode/rejection_sampler.py"
+  v2_hash="$(hash_of "$v2s")"
+  v2_label="$(label_for_hash x "$v2_hash")"
+  if [[ "$v2_label" == "qwen3-force-commit-v2" ]]; then
+    echo "qwen3-force-commit-v2 already applied to $v2s (sha256 matches)"
+  elif [[ "$v2_label" == "v2-base-spec-decode-rejection-sampler" ]]; then
+    patch -p1 -d "$sp" < "$here/vllm-0.26.0-qwen3-force-commit-v2.patch"
+    new_hash="$(hash_of "$v2s")"
+    if [[ "$(label_for_hash x "$new_hash")" != "qwen3-force-commit-v2" ]]; then
+      echo "patched V2 sampler does not match HASHES.txt's recorded qwen3-force-commit-v2 hash (got $new_hash)" >&2
+      exit 1
+    fi
+    echo "installed qwen3-force-commit-v2"
+  else
+    echo "$v2s matches no known V2 state (hash $v2_hash); refusing. Expected v2-base-spec-decode-rejection-sampler (see patches/v2_base/README.md)." >&2
+    exit 1
+  fi
+  exec "$PYTHON" "$here/test_qwen3_force_commit_v2.py"
+fi
 
 V1_REL="v1/sample/rejection_sampler.py"
 V2_REL="v1/worker/gpu/spec_decode/rejection_sampler_utils.py"
