@@ -227,3 +227,20 @@ Ledger: `autoresearch/cross_method_metrics/gsm8k.csv` (all four arms, record_val
 - mentored_dec flips: case_064 not-correct -> correct; case_148 not-correct -> correct; case_140 correct -> not-correct. Net +1.
 - Two capped force runs (spec case_063 no_answer, mentored case_120 no_answer, and spec case_086 / mentored case_140 for their own arms) reached the final channel and ran out of budget during the answer.
 - mtbench is token-only (no grader). Not run in this pass yet.
+
+## GPT-OSS remaining datasets (warm, fixed force patches), 2026-10-04/05
+
+All arms warm, one server per arm, seed 0. Paired deltas are descriptive: token counts match between arms in only a minority of cases (see the same_token column in the report), so per-case flips are not claimed as force-commit effects. mtbench has no grader and is token-only.
+
+| dataset (threshold) | method | mean base → FC | Δ | cap hits | correct base → FC | flips |
+|---|---|---|---:|---|---|---:|
+| humaneval (8100) | spec_casc_tok | 1,142 → 1,139 | −0.3% | 1 → 0 | 145 → 145 | 0 |
+| humaneval (8100) | mentored_dec | 1,170 → 1,189 | +1.7% | 1 → 0 | 143 → 144 | 1 |
+| mtbench (3686) | spec_casc_tok | 1,321 → 1,256 | −5.0% | 2 → 0 | token-only | — |
+| mtbench (3686) | mentored_dec | 1,241 → 1,336 | +7.7% | 3 → 4 | token-only | — |
+| livecodebench (10800) | spec_casc_tok | 3,838 → 3,819 | −0.5% | 6 → 4 | 80 → 80 | 8 |
+| livecodebench (10800) | mentored_dec | 4,571 → 4,186 | −8.4% | 9 → 4 | 70 → 69 | 23 |
+| longbench_v2 (7372) | spec_casc_tok | 1,682 → 1,754 | +4.3% | 2 → 0 | 72 → 74 | 16 |
+| longbench_v2 (7372) | mentored_dec | 2,089 → 2,395 | +14.6% | 3 → 1 | 83 → 79 | 30 |
+
+**Read-out.** Cap hits fall or hold on every dataset where forcing applies, and every run past its threshold reaches the final channel. The mean-token deltas go both ways (−8.4% to +14.6%) and the accuracy changes are small in both directions. The mentored longbench_v2 +14.6% with 30 flips is the largest deviation and is not explained by the cap change, so it should be treated as warm-history noise until a fresh-per-case rerun says otherwise. Nothing here is a per-case effect claim.
