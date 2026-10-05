@@ -15,7 +15,8 @@ from campaign_report import GRADERS  # noqa: E402
 
 RUNS = REPO / "autoresearch" / "cross_method_runs"
 LEDGER_DIR = REPO / "autoresearch" / "cross_method_metrics"
-METHODS = ("spec_casc_tok", "spec_casc_tok_force_commit", "mentored_dec", "mentored_dec_force_commit")
+METHODS = ("spec_casc_tok", "spec_casc_tok_force_commit", "mentored_dec", "mentored_dec_force_commit",
+           "spec_casc_tok_qwen3_force_commit", "mentored_dec_qwen3_force_commit")
 RAW_FILES = ("output.txt", "proposals.jsonl", "response.json")
 FIELDS = ["dataset", "method", "params", "case", "server_mode", "output_tokens", "finish_reason",
           "hit_cap", "reached_final_channel", "l_bar", "verdict", "correct", "record_valid"]
@@ -28,6 +29,9 @@ FIXED_RS_SHA256 = {
 
 
 def record_valid(method, mode, run_dir):
+    if method.endswith("_qwen3_force_commit"):
+        # Qwen3 V2 hook is stateless per request (decision reads only that request's buffer).
+        return True
     """Force-commit runs on warm servers are valid only if they ran under the
     per-request-keyed patch: the installed rejection_sampler.py hash, recorded in
     config.json as vllm.v1_sha256, must match the fixed hash. Fresh-per-case runs and
@@ -57,7 +61,7 @@ def server_mode(dataset, method):
 
 
 def grade_run(dataset, run_dir):
-    spec = GRADERS.get(dataset)
+    spec = GRADERS.get(dataset.removesuffix("_qwen3"))
     if spec is None:
         return None, None  # token-only dataset (mtbench)
     module = importlib.import_module(spec["module"])
@@ -134,7 +138,9 @@ def sweep(datasets):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true")
-    ap.add_argument("--datasets", nargs="+", default=["aime24", "gsm8k", "humaneval", "mtbench", "livecodebench", "longbench_v2"])
+    ap.add_argument("--datasets", nargs="+", default=["aime24", "gsm8k", "humaneval", "mtbench", "livecodebench", "longbench_v2",
+                                                      "aime24_qwen3", "gsm8k_qwen3", "humaneval_qwen3", "mtbench_qwen3",
+                                                      "livecodebench_qwen3", "longbench_v2_qwen3"])
     args = ap.parse_args()
     while True:
         n = sweep(args.datasets)

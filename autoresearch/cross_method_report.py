@@ -8,9 +8,10 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 ds, thr = sys.argv[1], int(sys.argv[2])
 rows = list(csv.DictReader((REPO / "autoresearch/cross_method_metrics" / f"{ds}.csv").open(encoding="utf-8")))
 
+_fc = "_qwen3_force_commit" if ds.endswith("_qwen3") else "_force_commit"
 PAIRS = [
-    ("spec_casc_tok", "alpha0.8", "spec_casc_tok_force_commit", f"alpha0.8_t{thr}"),
-    ("mentored_dec", "alpha0.75", "mentored_dec_force_commit", f"alpha0.75_t{thr}"),
+    ("spec_casc_tok", "alpha0.8", f"spec_casc_tok{_fc}", f"alpha0.8_t{thr}"),
+    ("mentored_dec", "alpha0.75", f"mentored_dec{_fc}", f"alpha0.75_t{thr}"),
 ]
 
 
