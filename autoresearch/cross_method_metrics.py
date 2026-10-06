@@ -19,7 +19,8 @@ METHODS = ("spec_casc_tok", "spec_casc_tok_force_commit", "mentored_dec", "mento
            "spec_casc_tok_qwen3_force_commit", "mentored_dec_qwen3_force_commit")
 RAW_FILES = ("output.txt", "proposals.jsonl", "response.json")
 FIELDS = ["dataset", "method", "params", "case", "server_mode", "output_tokens", "finish_reason",
-          "hit_cap", "reached_final_channel", "l_bar", "verdict", "correct", "record_valid"]
+          "hit_cap", "reached_final_channel", "l_bar", "verdict", "correct", "record_valid",
+          "think_close_seen", "think_close_char"]
 
 
 FIXED_RS_SHA256 = {
@@ -82,6 +83,11 @@ def process(dataset, method, params, case_dir):
         return None
     seed_dir = case_dir / "seed_0"
     verdict, correct = grade_run(dataset, seed_dir)
+    think_seen, think_char = "", ""
+    if dataset.endswith("_qwen3") and (seed_dir / "output.txt").is_file():
+        text = (seed_dir / "output.txt").read_text(encoding="utf-8")
+        at = text.find("</think>")
+        think_seen, think_char = str(at >= 0), str(at)
     finish = data.get("finish_reason")
     row = {
         "dataset": dataset, "method": method, "params": params, "case": case_dir.name,
@@ -91,6 +97,7 @@ def process(dataset, method, params, case_dir):
         "l_bar": data.get("l_bar"), "verdict": verdict or "", "correct": "" if correct is None else correct,
     }
     row["record_valid"] = record_valid(method, row["server_mode"], seed_dir)
+    row["think_close_seen"], row["think_close_char"] = think_seen, think_char
     return row
 
 

@@ -40,7 +40,8 @@ for bm, bp, fm, fp in PAIRS:
         "fc_cap_hits": sum(f[c]["hit_cap"] == "True" for c in common),
         "same_token_count_cases": sum(tok(b[c]) == tok(f[c]) for c in common),
     }
-    res["NOTE"] = "warm FC arms: force state persists across requests (see FINDINGS); FC-vs-base differences are not force-commit effects" if res["server_mode"] == ["warm"] and "force_commit" in fm else ""
+    if res["server_mode"] == ["warm"] and fm.endswith("_force_commit") and "_qwen3" not in fm:
+        res["NOTE"] = "GPT-OSS warm FC arms: pre-fix state bug; invalid rows archived (see FINDINGS)"
     res["delta_pct"] = round((res["fc_mean_tokens"] - res["base_mean_tokens"]) / res["base_mean_tokens"] * 100, 2)
     if graded:
         res["base_correct"] = sum(b[c]["correct"] == "True" for c in common)

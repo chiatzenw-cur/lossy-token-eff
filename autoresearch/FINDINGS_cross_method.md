@@ -256,3 +256,20 @@ All arms warm, one server per arm, seed 0. Paired deltas are descriptive: token 
 **GPU check.** Qwen3-8B, warm server, spec_casc_tok α0.8, threshold 2000 (mechanism check, not a result, not pre-registered), aime24_qwen3 cases 002, 003, 004 on one server:
 - The EngineCore printed `[QWEN3-FORCE-COMMIT V2 PATCH] threshold=2000 close_id=151668`, confirming the V2 sampler path.
 - `</think>` appears after exactly 2003, 2004 and 2002 generated tokens (counted with the Qwen3 tokenizer). All three are at the threshold, so the force fired on each request, including the second and third on the same server. The check passes.
+
+## Qwen3-8B, aime24_qwen3, spec_casc_tok α0.8, threshold 29491 (pre-registered 0.9 × 32768)
+
+Ledger: `autoresearch/cross_method_metrics/aime24_qwen3.csv`.
+
+| metric | baseline | force-commit t=29491 |
+|---|---:|---:|
+| mean completion tokens | 18,289.9 | 18,051.8 (−1.3%) |
+| cap hits (32,768) | 5 | 1 |
+| correct /30 | 20 | 20 |
+| accuracy flips | — | none |
+
+Caveats, stated before any reading of these numbers:
+- **Different server configs.** The baseline ran on one server at `gpu-memory-utilization` 0.85 (KV 345,920 tokens). The force arm ran at 0.42 (KV 104,672, 1.60× at 65,536 tokens; verified in the smoke check). Both have the 32k-token headroom the arms need, but this pair is not a same-config comparison.
+- **Warm-server history.** Token counts match between arms in 26 of 30 cases, so per-case flips are not claimed as force effects.
+- **Forced boundary not verified for these runs.** The raw outputs were deleted after grading, and the `reached_final_channel` flag in `run.json` is a GPT-OSS marker. The metrics tool now records `</think>` presence and character offset before deleting outputs (`think_close_seen`, `think_close_char`). Those columns are blank for the aime24_qwen3 rows. Seven force-arm runs reached the threshold and finished; whether the force fired on them is unverified. The mechanism was verified separately at threshold 2000 (see the Qwen3 3-case check above).
+- **mentored_dec aime24_qwen3 baseline did not run.** Its paired run failed at engine startup because the 0.42 baseline server found too little free GPU memory while the force server was up (32.6 GiB free, 33.3 GiB needed). The force arm (30 cases) is in the ledger; the baseline needs a sequential rerun.
