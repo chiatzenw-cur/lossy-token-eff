@@ -273,3 +273,32 @@ Caveats, stated before any reading of these numbers:
 - **Warm-server history.** Token counts match between arms in 26 of 30 cases, so per-case flips are not claimed as force effects.
 - **Forced boundary not verified for these runs.** The raw outputs were deleted after grading, and the `reached_final_channel` flag in `run.json` is a GPT-OSS marker. The metrics tool now records `</think>` presence and character offset before deleting outputs (`think_close_seen`, `think_close_char`). Those columns are blank for the aime24_qwen3 rows. Seven force-arm runs reached the threshold and finished; whether the force fired on them is unverified. The mechanism was verified separately at threshold 2000 (see the Qwen3 3-case check above).
 - **mentored_dec aime24_qwen3 baseline did not run.** Its paired run failed at engine startup because the 0.42 baseline server found too little free GPU memory while the force server was up (32.6 GiB free, 33.3 GiB needed). The force arm (30 cases) is in the ledger; the baseline needs a sequential rerun.
+
+## Qwen3-8B reconciled results (warm, one server per arm, arms run sequentially at gpu-memory-utilization 0.42)
+
+This section supersedes the earlier aime24_qwen3 concurrent-pair section. All arms below ran alone on the GPU; the concurrent runs are archived as invalid (`invalid_concurrent_qwen3.csv`, `invalid_util085_qwen3_baseline.csv`).
+
+The aime24 spec baseline rerun at 0.42 is token-identical to the archived 0.85 baseline on all 30 cases, so the utilization change did not alter outputs.
+
+Paired numbers (threshold = pre-registered 0.9 × budget; mean tokens; flips are descriptive, not per-case effects, since each arm runs on its own warm server):
+
+| dataset (threshold) | method | base → force mean | cap hits | correct base → force | flips |
+|---|---|---|---|---|---|
+| aime24 (29491) | spec α0.8 | 18,290 → 18,052 (−1.3%) | 5 → 1 | 20 → 20 | 0 |
+| aime24 (29491) | mentored α0.75 | 19,339 → 19,086 (−1.3%) | 6 → 2 | 22 → 23 | 1 |
+| gsm8k (1843) | spec α0.8 | 1,270 → 1,264 (−0.5%) | 35 → 21 | 118 → 130 | 12 |
+| gsm8k (1843) | mentored α0.75 | 1,313 → 1,303 (−0.8%) | 38 → 16 | 116 → 135 | 21 |
+| humaneval (8100) | spec α0.8 | 3,937 → 3,912 (−0.6%) | 16 → 4 | 129 → 136 | 7 |
+| humaneval (8100) | mentored α0.75 | 4,031 → 3,997 (−0.8%) | 19 → 4 | 128 → 135 | 7 |
+| mtbench (3686) | spec α0.8 | 2,155 → 2,148 (−0.3%) | 10 → 8 | token-only | — |
+| mtbench (3686) | mentored α0.75 | 2,152 → 2,142 (−0.5%) | 15 → 12 | token-only | — |
+| livecodebench (10800) | spec α0.8 | 8,009 → 7,888 (−1.5%) | 27 → 4 | 64 → 85 | 21 |
+| livecodebench (10800) | mentored α0.75 | 8,422 → 8,281 (−1.7%) | 31 → 4 | 57 → 84 | 27 |
+
+**Flagged arms (not fully same-session; the rest of their pairs are sound):**
+- **gsm8k_qwen3 spec_casc_tok baseline (150 rows)** was produced during the concurrent window. Its config matches (0.42, α0.8, threshold 0 confirmed in its server log), but it has no sequential rerun yet. Its pair with the force arm (sequential rerun) is flagged as provisional until that rerun is done.
+- **aime24_qwen3 mentored_dec force arm (30 rows)** overlapped a failed baseline startup. Its server loaded the correct threshold (29491) and ran all 30 cases cleanly, but it is flagged. The mentored baseline was rerun sequentially afterwards.
+
+**Think-close check** (forced runs past threshold containing `</think>`): gsm8k spec 39/39, mentored 47/47; humaneval spec 19/19, mentored 24/24; mtbench spec 16/16, mentored 17/17; livecodebench spec 31/31, mentored 35/35. aime24 force arms predate the recording and are unverified.
+
+**Pending:** longbench_v2_qwen3 (spec baseline, spec force, mentored baseline, mentored force), running sequentially. Its results are committed when done.
