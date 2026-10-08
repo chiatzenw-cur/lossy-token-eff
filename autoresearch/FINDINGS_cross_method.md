@@ -302,3 +302,81 @@ Paired numbers (threshold = pre-registered 0.9 × budget; mean tokens; flips are
 **Think-close check** (forced runs past threshold containing `</think>`): gsm8k spec 39/39, mentored 47/47; humaneval spec 19/19, mentored 24/24; mtbench spec 16/16, mentored 17/17; livecodebench spec 31/31, mentored 35/35. aime24 force arms predate the recording and are unverified.
 
 **Pending:** longbench_v2_qwen3 (spec baseline, spec force, mentored baseline, mentored force), running sequentially. Its results are committed when done.
+
+longbench_v2_qwen3 finished (committed `918d4d790`): spec 2,874.6 → 2,874.2 tokens (−0.01%), cap hits 6 → 5, correct 74 → 76. mentored 3,065.6 → 3,057.7 (−0.26%), cap hits 7 → 5, correct 77 → 73 (a real regression: 4 capped-but-correct baseline cases lost their answer when forced, 0 gained — see the grader-bug note below).
+
+## A grader bug found while checking this, and a corrected rule
+
+`scripts/answer_extraction.py::final_segment` falls back to grading the *whole* output when a Qwen3 run has no `</think>` (the `qwen3_no_think` branch, meant for non-thinking responses). A run that hits the token cap mid-reasoning also has no `</think>`, so it gets graded on the last integer anywhere in its unfinished reasoning — which can spuriously read as "correct." Across the Qwen3 ledgers, ~22 capped baseline runs were marked correct this way (e.g. 5 of 7 capped mentored longbench runs).
+
+Applied rule used everywhere below: **a capped run with no `</think>` is `no_answer`, regardless of what `extract_answer` found.** This is a ledger-level correction (the columns `hit_cap` and `think_close_seen` are already recorded); it does not touch `scripts/answer_extraction.py` itself, since the cross-method run dirs no longer keep `output.txt` to re-grade from. Fixing the longbench mentored pair under this rule: baseline capped-correct drops from 5 to 2, so the "real" accuracy loss is 2, not 4 (see the percentile run below, which supersedes this pair with the full fix applied).
+
+## Cap-hit percentile collection: cap − p95(answer length), all 5 methods, both models, 5 deterministic datasets
+
+Motivated by: (a) the 0.9×cap threshold forces `</think>`/the harmony boundary too close to the cap, leaving too little room for the answer itself on code/math tasks — confirmed by checking `think_close_char` on still-capped force rows, which sit right at the old threshold; (b) mtbench has no deterministic grading, so dropped; (c) the Qwen3 force hook only supports `spec_casc_tok`/`mentored_dec` (`fresh_server_replay.py` raises on the other three) — cactus/r_fuzzy/spec_casc_opt are GPT-OSS only here.
+
+**Threshold = cap − p95(post-boundary answer length)**, measured from each model's strict runs (chars → tokens at 3.25 chars/token, so treat as approximate):
+
+| dataset | cap | Qwen3 threshold | GPT-OSS threshold |
+|---|--:|--:|--:|
+| aime24 | 32,768 | 31,260 | 31,605 |
+| gsm8k | 2,048 | 1,684 | 2,002 |
+| humaneval | 9,000 | 8,150 | 8,497 |
+| livecodebench | 12,000 | 11,004 | 9,294 |
+| longbench_v2 | 8,192 | 6,894 | 8,133 |
+
+This is **post-hoc**, chosen after seeing the 0.9×cap failure mode above, not pre-registered. Treat it as such in the paper.
+
+**Selection:** every baseline case that is capped, or past the new threshold without the close marker (so the force arm can fire on it). Below the threshold the force arm is byte-identical by construction (verified separately on the longbench spec pair, 123/123). Qwen3 baselines: the in-session cross-method ledger (`spec_casc_tok`/`mentored_dec` only, the methods the hook supports). GPT-OSS baselines: the ledger for `spec_casc_tok`/`mentored_dec`, the original campaign run (`runs/`, fresh-per-case, unaffected by the warm-state bug) for `cactus`/`r_fuzzy`/`spec_casc_opt`, which never had an in-session rerun. Correctness uses the grader-bug rule above throughout, on both the baseline and the force side.
+
+**Result, summed over all 396 selected arm-cases (10 Qwen3 arms + 25 GPT-OSS arms, 5 datasets):**
+
+| | selected | capped at baseline | correct: base → force | rescued | lost | still capped |
+|---|--:|--:|--:|--:|--:|--:|
+| **total** | 396 | 336 | 50 → 189 | 156 | 17 | 121 |
+
+Rescued ≫ lost (156 vs 17, ~9:1) and correctness nearly quadruples on this selected (adversarial-by-construction) slice. But a quarter to a third of forced runs are still capped — recovering room doesn't always recover a finished answer, especially on livecodebench/humaneval where the model restarts its solution after the forced close. Per-arm breakdown (`model dataset method`, `T`, `n`, `capped_base`, `base_correct→force_correct`, `rescued/lost`, `still_cap`):
+
+- qwen3 aime24 spec: T=31260 n=5 cap=5 0→1 (1/0) stillcap=2
+- qwen3 aime24 mentored: T=31260 n=6 cap=6 0→1 (1/0) stillcap=3
+- qwen3 gsm8k spec: T=1684 n=43 cap=35 8→35 (27/0) stillcap=6
+- qwen3 gsm8k mentored: T=1684 n=44 cap=38 6→38 (32/0) stillcap=4
+- qwen3 humaneval spec: T=8150 n=19 cap=16 2→9 (7/0) stillcap=8
+- qwen3 humaneval mentored: T=8150 n=22 cap=19 2→12 (10/0) stillcap=5
+- qwen3 livecodebench spec: T=11004 n=29 cap=27 3→24 (21/0) stillcap=5
+- qwen3 livecodebench mentored: T=11004 n=33 cap=31 2→25 (23/0) stillcap=10
+- qwen3 longbench spec: T=6894 n=8 cap=6 1→2 (1/0) stillcap=3
+- qwen3 longbench mentored: T=6894 n=10 cap=7 2→0 (0/2) stillcap=2 — the only Qwen3 arm with a net loss; both losses are capped-baseline cases, not a healthy run broken by forcing.
+- gptoss aime24 spec: T=31605 n=6 cap=4 2→2 (2/2) stillcap=3
+- gptoss aime24 mentored: T=31605 n=6 cap=6 0→0 (0/0) stillcap=3
+- gptoss aime24 cactus: T=31605 n=2 cap=2 0→0 (0/0) stillcap=0
+- gptoss aime24 r_fuzzy: T=31605 n=9 cap=9 1→1 (1/1) stillcap=5
+- gptoss aime24 spec_casc_opt: T=31605 n=13 cap=13 0→4 (4/0) stillcap=9
+- gptoss gsm8k spec: T=2002 n=2 cap=2 0→1 (1/0) stillcap=1
+- gptoss gsm8k mentored: T=2002 n=6 cap=4 2→2 (0/0) stillcap=3
+- gptoss gsm8k cactus: T=2002 n=9 cap=8 1→2 (1/0) stillcap=6
+- gptoss gsm8k r_fuzzy: T=2002 n=8 cap=8 0→3 (3/0) stillcap=3
+- gptoss gsm8k spec_casc_opt: T=2002 n=7 cap=7 1→2 (1/0) stillcap=4
+- gptoss humaneval mentored: T=8497 n=1 cap=1 0→0 (0/0) stillcap=0
+- gptoss humaneval cactus: T=8497 n=3 cap=2 0→0 (0/0) stillcap=2
+- gptoss humaneval r_fuzzy: T=8497 n=1 cap=1 1→0 (0/1) stillcap=0
+- gptoss humaneval spec_casc_opt: T=8497 n=4 cap=3 1→0 (0/1) stillcap=0
+- gptoss livecodebench spec: T=9294 n=10 cap=5 5→3 (1/3) stillcap=1 — worst arm: forcing broke 3 healthy-ish cases net.
+- gptoss livecodebench mentored: T=9294 n=10 cap=6 1→3 (2/1) stillcap=2
+- gptoss livecodebench cactus: T=9294 n=1 cap=0 0→0 (0/0) stillcap=0
+- gptoss livecodebench r_fuzzy: T=9294 n=20 cap=14 0→4 (4/0) stillcap=10
+- gptoss livecodebench spec_casc_opt: T=9294 n=21 cap=17 1→6 (5/0) stillcap=10
+- gptoss longbench spec: T=8133 n=1 cap=1 0→1 (1/0) stillcap=0
+- gptoss longbench mentored: T=8133 n=4 cap=1 3→1 (0/2) stillcap=1
+- gptoss longbench cactus: T=8133 n=3 cap=3 0→0 (0/0) stillcap=0
+- gptoss longbench r_fuzzy: T=8133 n=8 cap=8 0→3 (3/0) stillcap=3
+- gptoss longbench spec_casc_opt: T=8133 n=22 cap=21 5→4 (3/4) stillcap=7
+
+**Reading.** On gsm8k, the rescue rate is close to total (both models, both methods: ~75-95% of capped runs recover a correct answer once forced — short numeric answers almost always fit in the remaining budget). On the long-generation code/reasoning datasets (livecodebench, humaneval, aime24) and on GPT-OSS generally, the rescue rate is lower and the "still capped" rate is high (up to half), because the model re-derives or re-writes its solution after the forced boundary rather than emitting a short result. GPT-OSS livecodebench spec_casc_tok is the one arm where forcing is net harmful on this selected slice (1 rescued, 3 lost) — small n (10), not load-bearing, but a real counter-example to "forcing is safe."
+
+**Caveats:**
+- n per arm is small (1-44), by construction — this is every available cap-adjacent case, not a sample. Per-arm percentages are not meaningful; only the pooled total (156 vs 17) is.
+- The threshold is post-hoc, derived from the same strict runs used throughout this file. A held-out percentile estimate was not computed.
+- GPT-OSS cactus/r_fuzzy/spec_casc_opt baselines are the original campaign (fresh-per-case); spec_casc_tok/mentored_dec baselines (both models) are the in-session warm rerun already used elsewhere in this file. Different provenance, same validity standard (unaffected by the warm-state bug either way).
+- Cases below each threshold were not rerun; their identity to baseline rests on the mechanism (the hook is a no-op below threshold) plus the one empirical 123/123 check on longbench, not a per-arm re-verification.
+- `cross_method_metrics.py`'s `METHODS`/`FIXED_RS_SHA256` now also cover `cactus_force_commit`, `r_fuzzy_force_commit`, `spec_casc_opt_force_commit` (added for this run; previously only the two force arms + both Qwen3 force arms were recognized, so these three were silently never ingested before). All three validated against the per-request-fix hash in `patches/HASHES.txt` (`record_valid: True` on every row).

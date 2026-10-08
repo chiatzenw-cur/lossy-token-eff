@@ -16,7 +16,8 @@ from campaign_report import GRADERS  # noqa: E402
 RUNS = REPO / "autoresearch" / "cross_method_runs"
 LEDGER_DIR = REPO / "autoresearch" / "cross_method_metrics"
 METHODS = ("spec_casc_tok", "spec_casc_tok_force_commit", "mentored_dec", "mentored_dec_force_commit",
-           "spec_casc_tok_qwen3_force_commit", "mentored_dec_qwen3_force_commit")
+           "spec_casc_tok_qwen3_force_commit", "mentored_dec_qwen3_force_commit",
+           "cactus_force_commit", "r_fuzzy_force_commit", "spec_casc_opt_force_commit")
 RAW_FILES = ("output.txt", "proposals.jsonl", "response.json")
 FIELDS = ["dataset", "method", "params", "case", "server_mode", "output_tokens", "finish_reason",
           "hit_cap", "reached_final_channel", "l_bar", "verdict", "correct", "record_valid",
@@ -26,6 +27,9 @@ FIELDS = ["dataset", "method", "params", "case", "server_mode", "output_tokens",
 FIXED_RS_SHA256 = {
     "spec_casc_tok_force_commit": "3b422e8ed28a63829828322295e632ace68f401c86b5b7a8acb215c8549f2444",
     "mentored_dec_force_commit": "ab5116f4f69338c70b5a58c2d315fbe46abf03fb7b693e38d43a9329ee53d220",
+    "cactus_force_commit": "57cb258370388df8efcc5d11aceac0481551952942cd74e0def1c72a39bb19dd",
+    "r_fuzzy_force_commit": "8fe4dac3cd5e2442169c5aa8aa85f0b42d53fed5df1d5b89d8cb2d4c523d9651",
+    "spec_casc_opt_force_commit": "6be37559762d97b4896517f48a1117c5440261db772d94733c7e3646035d13fb",
 }
 
 
