@@ -242,8 +242,8 @@ def parse_args() -> argparse.Namespace:
         "--qwen3-force-commit-threshold",
         type=int,
         default=0,
-        help="Qwen3 V2 force-commit threshold in generated tokens (0 = off). Applies to spec_casc_tok and mentored_dec arms; "
-        "runs land under <arm>_qwen3_force_commit/alpha<a>_t<thr>.",
+        help="Qwen3 V2 force-commit threshold in generated tokens (0 = off). Applies to spec_casc_tok, "
+        "mentored_dec, cactus, r_fuzzy and spec_casc_opt arms; runs land under <arm>_qwen3_force_commit/alpha<a>_t<thr>.",
     )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -277,7 +277,9 @@ def qwen3_close_id(model_path: str) -> int:
 
 
 def method_and_params_for(args: argparse.Namespace, arm: str) -> tuple[str, str]:
-    if args.qwen3_force_commit_threshold > 0 and arm in ("spec_casc_tok", "mentored_dec"):
+    if args.qwen3_force_commit_threshold > 0 and arm in (
+        "spec_casc_tok", "mentored_dec", "cactus", "r_fuzzy", "spec_casc_opt",
+    ):
         method, params = method_and_params_for_base(args, arm)
         return f"{method}_qwen3_force_commit", f"{params}_t{args.qwen3_force_commit_threshold}"
     return method_and_params_for_base(args, arm)
@@ -493,8 +495,11 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
     env["DRAFT_MODEL_PATH"] = args.draft_model_path
     env["SERVED_MODEL_NAME"] = args.served_model_name
     if args.qwen3_force_commit_threshold > 0:
-        if arm not in ("spec_casc_tok", "mentored_dec"):
-            raise RuntimeError("--qwen3-force-commit-threshold applies only to spec_casc_tok and mentored_dec")
+        if arm not in ("spec_casc_tok", "mentored_dec", "cactus", "r_fuzzy", "spec_casc_opt"):
+            raise RuntimeError(
+                "--qwen3-force-commit-threshold applies only to spec_casc_tok, mentored_dec, "
+                "cactus, r_fuzzy and spec_casc_opt"
+            )
         subprocess.run(["bash", str(REPO_ROOT / "patches" / "apply.sh"), "qwen3-force-commit-v2"], cwd=REPO_ROOT, check=True, capture_output=True, text=True)
         env["QWEN3_FORCE_COMMIT_THRESHOLD"] = str(args.qwen3_force_commit_threshold)
         env["QWEN3_FORCE_COMMIT_CLOSE_ID"] = str(qwen3_close_id(args.model_path))
