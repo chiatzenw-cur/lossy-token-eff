@@ -41,7 +41,7 @@ SLIM_DROP = ("analysis/semantic_guard/results/recurrence_vs_unproductive.jsonl",
 # Raw tokens checked after replacement, independent of terms.tsv's patterns.
 # Person names are only checked outside run data / prompts, which hold unrelated dataset text.
 LEAK_CHECK = ["chiatzen", "billxby", "hongyanz", "6101837", "6071935", "sharcnet", "nibi",
-              "killarney", "lossy-token-eff", "xubill", "billxu"]
+              "killarney", "lossy-token-eff", "xubill", "billxu", "decode-repetition"]
 LEAK_CHECK_DOCS = ["bill xu", "haochen"]
 
 MAX_FOLDER = 1000          # anonymous.4open.science lists at most this many entries per folder
