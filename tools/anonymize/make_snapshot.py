@@ -36,8 +36,10 @@ DOC_EXCLUDE = DATA_DIRS + ("prompts/",)  # "docs"-scoped terms are not applied h
 DROP = ("tools/anonymize/", "cascade/results/final_results.pdf")
 
 # Raw tokens checked after replacement, independent of terms.tsv's patterns.
-LEAK_CHECK = ["chiatzen", "billxby", "hongyanz", "bill xu", "haochen", "6101837", "6071935",
-              "sharcnet", "nibi", "killarney", "lossy-token-eff", "xubill", "billxu"]
+# Person names are only checked outside run data / prompts, which hold unrelated dataset text.
+LEAK_CHECK = ["chiatzen", "billxby", "hongyanz", "6101837", "6071935", "sharcnet", "nibi",
+              "killarney", "lossy-token-eff", "xubill", "billxu"]
+LEAK_CHECK_DOCS = ["bill xu", "haochen"]
 
 MAX_FOLDER = 1000          # anonymous.4open.science lists at most this many entries per folder
 FULL_MODE_LIMIT = 60_000   # KB; above this it proxies files from GitHub on the fly instead
@@ -127,7 +129,7 @@ def main():
             rel = os.path.relpath(p, out)
             total += os.path.getsize(p)
             low = (rel + "\n").lower() + open(p, "rb").read().decode("utf-8", "replace").lower()
-            for tok in LEAK_CHECK:
+            for tok in LEAK_CHECK + ([] if rel.startswith(DOC_EXCLUDE) else LEAK_CHECK_DOCS):
                 if tok in low:
                     leaks[tok] += 1
                     examples.setdefault(tok, rel)
