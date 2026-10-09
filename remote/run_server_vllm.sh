@@ -101,6 +101,16 @@ SPEC_CASC_TOK_FUTURE_GUARD_AND_ALPHA="${SPEC_CASC_TOK_FUTURE_GUARD_AND_ALPHA:-0.
 SPEC_CASC_TOK_FUTURE_GUARD_AND_K="${SPEC_CASC_TOK_FUTURE_GUARD_AND_K:-8}"            # AND-combined window length after an accepted marker
 SPEC_CASC_TOK_FORCE_COMMIT_ALPHA="${SPEC_CASC_TOK_FORCE_COMMIT_ALPHA:-0.3}"  # spec-casc-tok's own alpha; force-commit is always on
 SPEC_CASC_TOK_FORCE_COMMIT_THRESHOLD="${SPEC_CASC_TOK_FORCE_COMMIT_THRESHOLD:-28000}"  # tokens before forcing final-channel-open
+# force-commit mechanically ported onto the other 4 methods' own bases (see
+# patches/HASHES.txt's 2026-10-03 entry) -- cross-method validation.
+CACTUS_FORCE_COMMIT_ALPHA="${CACTUS_FORCE_COMMIT_ALPHA:-0.25}"              # cactus's own alpha; force-commit is always on
+CACTUS_FORCE_COMMIT_THRESHOLD="${CACTUS_FORCE_COMMIT_THRESHOLD:-28000}"
+MENTORED_DEC_FORCE_COMMIT_ALPHA="${MENTORED_DEC_FORCE_COMMIT_ALPHA:-0.37}"  # mentored-dec's own alpha; force-commit is always on
+MENTORED_DEC_FORCE_COMMIT_THRESHOLD="${MENTORED_DEC_FORCE_COMMIT_THRESHOLD:-28000}"
+R_FUZZY_FORCE_COMMIT_ALPHA="${R_FUZZY_FORCE_COMMIT_ALPHA:-0.3}"             # r-fuzzy's own alpha; force-commit is always on
+R_FUZZY_FORCE_COMMIT_THRESHOLD="${R_FUZZY_FORCE_COMMIT_THRESHOLD:-28000}"
+SPEC_CASC_OPT_FORCE_COMMIT_ALPHA="${SPEC_CASC_OPT_FORCE_COMMIT_ALPHA:-0.05}" # spec-casc-opt's own alpha; force-commit is always on
+SPEC_CASC_OPT_FORCE_COMMIT_THRESHOLD="${SPEC_CASC_OPT_FORCE_COMMIT_THRESHOLD:-28000}"
 SPEC_CASC_TOK_SELF_CHECK_ALPHA="${SPEC_CASC_TOK_SELF_CHECK_ALPHA:-0.3}"  # spec-casc-tok's own alpha; periodic self-check always on
 SPEC_CASC_TOK_SELF_CHECK_INTERVAL="${SPEC_CASC_TOK_SELF_CHECK_INTERVAL:-3000}"  # tokens between self-checks
 SPEC_CASC_TOK_SELF_CHECK_FINAL_THRESHOLD="${SPEC_CASC_TOK_SELF_CHECK_FINAL_THRESHOLD:-28000}"  # "yes" past this forces final instead of pivoting
@@ -119,6 +129,7 @@ HSR_GUARD_WINDOW="${HSR_GUARD_WINDOW:-600}"          # committed-token window fo
 HSR_GUARD_BUDGET="${HSR_GUARD_BUDGET:-25}"           # recurrence-crossings required within WINDOW to trip the guard -- not 3, see patches/HASHES.txt's own "fixed" entry
 HSR_GUARD_PERCENTILE="${HSR_GUARD_PERCENTILE:-99.9}" # self-calibrated per-generation, not one fixed global score cutoff -- not 99.0, see patches/HASHES.txt
 HSR_GUARD_ACTUATOR_K="${HSR_GUARD_ACTUATOR_K:-8}"    # strict-verification window length once tripped
+SPEC_CASC_TOK_AUTOGUARD_ALPHA="${SPEC_CASC_TOK_AUTOGUARD_ALPHA:-0.3}"  # spec-casc-tok's own alpha; the guard mask is whatever autoguard.py::decide() returns (autoresearch/), no extra knob
 SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA="${SPEC_CASC_TOK_FREE_JUDGMENT_ALPHA:-0.3}"  # spec-casc-tok's own alpha; free-judgment observation always on
 # Fixed to match vllm-0.26.0-free-judgment-model-runner.patch's own
 # _FREE_JUDGMENT_CRITERION_PATTERN length -- NOT independently configurable
@@ -184,6 +195,14 @@ spec_casc_tok_future_guard_and_file="/tmp/lossy-token-eff-spec-casc-tok-semantic
 spec_casc_tok_future_guard_and_k_file="/tmp/lossy-token-eff-spec-casc-tok-semantic-guard-future-guard-and-k-$(id -u)"
 spec_casc_tok_force_commit_file="/tmp/lossy-token-eff-spec-casc-tok-force-commit-alpha-$(id -u)"
 spec_casc_tok_force_commit_threshold_file="/tmp/lossy-token-eff-spec-casc-tok-force-commit-threshold-$(id -u)"
+cactus_force_commit_file="/tmp/lossy-token-eff-cactus-force-commit-alpha-$(id -u)"
+cactus_force_commit_threshold_file="/tmp/lossy-token-eff-cactus-force-commit-threshold-$(id -u)"
+mentored_dec_force_commit_file="/tmp/lossy-token-eff-mentored-dec-force-commit-alpha-$(id -u)"
+mentored_dec_force_commit_threshold_file="/tmp/lossy-token-eff-mentored-dec-force-commit-threshold-$(id -u)"
+r_fuzzy_force_commit_file="/tmp/lossy-token-eff-r-fuzzy-force-commit-alpha-$(id -u)"
+r_fuzzy_force_commit_threshold_file="/tmp/lossy-token-eff-r-fuzzy-force-commit-threshold-$(id -u)"
+spec_casc_opt_force_commit_file="/tmp/lossy-token-eff-spec-casc-opt-force-commit-alpha-$(id -u)"
+spec_casc_opt_force_commit_threshold_file="/tmp/lossy-token-eff-spec-casc-opt-force-commit-threshold-$(id -u)"
 spec_casc_tok_self_check_file="/tmp/lossy-token-eff-spec-casc-tok-self-check-alpha-$(id -u)"
 spec_casc_tok_self_check_interval_file="/tmp/lossy-token-eff-spec-casc-tok-self-check-interval-$(id -u)"
 spec_casc_tok_self_check_final_threshold_file="/tmp/lossy-token-eff-spec-casc-tok-self-check-final-threshold-$(id -u)"
@@ -220,6 +239,11 @@ hsr_guard_budget_file="/tmp/lossy-token-eff-hsr-guard-budget-$(id -u)"
 hsr_guard_percentile_file="/tmp/lossy-token-eff-hsr-guard-percentile-$(id -u)"
 hsr_guard_actuator_k_file="/tmp/lossy-token-eff-hsr-guard-actuator-k-$(id -u)"
 hsr_guard_remaining_file="/tmp/lossy-token-eff-hsr-guard-remaining-$(id -u)"
+# autoguard has its OWN alpha file (same "own file, never alias plain
+# spec-casc-tok's" convention as every guard variant above). The guard mask
+# itself is code (vllm/v1/sample/autoguard.py::decide()), not a knob, so
+# there is nothing else to write here -- see autoresearch/README.md.
+spec_casc_tok_autoguard_file="/tmp/lossy-token-eff-spec-casc-tok-autoguard-alpha-$(id -u)"
 
 neutralise_all_knobs() {
   # Each method's own "no relaxation" value -- NOT uniformly 0.0. See
@@ -248,6 +272,14 @@ neutralise_all_knobs() {
   printf '%s\n' "0"      > "$spec_casc_tok_future_guard_and_k_file"  # moot once alpha=-inf, written for cleanliness
   printf '%s\n' "-inf"   > "$spec_casc_tok_force_commit_file"
   printf '%s\n' "28000"  > "$spec_casc_tok_force_commit_threshold_file"  # moot once alpha=-inf, written for cleanliness
+  printf '%s\n' "0.0"    > "$cactus_force_commit_file"      # cactus's own strict point, not -inf
+  printf '%s\n' "28000"  > "$cactus_force_commit_threshold_file"
+  printf '%s\n' "0.0"    > "$mentored_dec_force_commit_file"  # mentored-dec's own strict point, not -inf
+  printf '%s\n' "28000"  > "$mentored_dec_force_commit_threshold_file"
+  printf '%s\n' "-inf"   > "$r_fuzzy_force_commit_file"
+  printf '%s\n' "28000"  > "$r_fuzzy_force_commit_threshold_file"
+  printf '%s\n' "-inf"   > "$spec_casc_opt_force_commit_file"
+  printf '%s\n' "28000"  > "$spec_casc_opt_force_commit_threshold_file"
   printf '%s\n' "-inf"   > "$spec_casc_tok_self_check_file"
   printf '%s\n' "3000"   > "$spec_casc_tok_self_check_interval_file"  # moot once alpha=-inf, written for cleanliness
   printf '%s\n' "28000"  > "$spec_casc_tok_self_check_final_threshold_file"  # moot once alpha=-inf, written for cleanliness
@@ -268,6 +300,7 @@ neutralise_all_knobs() {
   printf '%s\n' "99.9"   > "$hsr_guard_percentile_file"
   printf '%s\n' "8"      > "$hsr_guard_actuator_k_file"
   printf '%s\n' "0"      > "$hsr_guard_remaining_file"  # runtime signal, not config -- reset so a stale guard window can't leak into a fresh run
+  printf '%s\n' "-inf"   > "$spec_casc_tok_autoguard_file"  # strict point; autoguard.py::decide() is inert next to it but the arm still recovers strict
 }
 
 common_args=(
@@ -389,6 +422,13 @@ PY
 )"
   [[ "$result" == "yes" ]]
 }
+
+# Qwen3 force-commit (V2 sampler hook, patches/vllm-0.26.0-qwen3-force-commit-v2.patch):
+# written every mode so a stale threshold from an earlier run cannot force a baseline.
+qwen3_fc_threshold_file="/tmp/lossy-token-eff-qwen3-force-commit-threshold-$(id -u)"
+qwen3_fc_close_file="/tmp/lossy-token-eff-qwen3-force-commit-close-id-$(id -u)"
+printf '%s\n' "${QWEN3_FORCE_COMMIT_THRESHOLD:-0}" > "$qwen3_fc_threshold_file"
+printf '%s\n' "${QWEN3_FORCE_COMMIT_CLOSE_ID:--1}" > "$qwen3_fc_close_file"
 
 case "$MODE" in
   baseline)
@@ -612,16 +652,54 @@ PY
       spec_casc_tok_force_commit)
         printf '%s\n' "$SPEC_CASC_TOK_FORCE_COMMIT_ALPHA" > "$spec_casc_tok_force_commit_file"
         printf '%s\n' "$SPEC_CASC_TOK_FORCE_COMMIT_THRESHOLD" > "$spec_casc_tok_force_commit_threshold_file"
-        # _FORCE_COMMIT_STATE, not _SPEC_CASC_TOK_ALPHA: the latter is
-        # defined by every spec-casc-tok-family patch, so it wouldn't
-        # disambiguate this variant from plain spec-casc-tok, antiloop, or
-        # any guard; the persistent force-commit state dict is genuinely
-        # unique to this patch.
-        probe_patched "_FORCE_COMMIT_STATE" || {
+        # _FORCE_COMMIT_STATES (per-request-id dict), not _SPEC_CASC_TOK_ALPHA:
+        # the latter is defined by every spec-casc-tok-family patch, so it
+        # wouldn't disambiguate this variant from plain spec-casc-tok, antiloop,
+        # or any guard; the per-request force-state dict is unique to this patch.
+        probe_patched "_FORCE_COMMIT_STATES" || {
           echo "LOSSY_RULE=spec_casc_tok_force_commit needs the patch: bash patches/apply.sh spec-casc-tok-force-commit" >&2
           exit 5
         }
         echo "mode=lossy rule=spec_casc_tok_force_commit alpha=$SPEC_CASC_TOK_FORCE_COMMIT_ALPHA threshold=$SPEC_CASC_TOK_FORCE_COMMIT_THRESHOLD (via $spec_casc_tok_force_commit_file, $spec_casc_tok_force_commit_threshold_file, reactive budget-exhaustion breaker always on) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      cactus_force_commit)
+        printf '%s\n' "$CACTUS_FORCE_COMMIT_ALPHA" > "$cactus_force_commit_file"
+        printf '%s\n' "$CACTUS_FORCE_COMMIT_THRESHOLD" > "$cactus_force_commit_threshold_file"
+        # _CACTUS_FORCE_COMMIT_STATE, not _CACTUS_ALPHA: the latter is
+        # defined by plain cactus too, so it wouldn't disambiguate this
+        # variant -- the persistent force-commit state dict is unique.
+        probe_patched "_CACTUS_FORCE_COMMIT_STATE" || {
+          echo "LOSSY_RULE=cactus_force_commit needs the patch: bash patches/apply.sh cactus-force-commit" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=cactus_force_commit alpha=$CACTUS_FORCE_COMMIT_ALPHA threshold=$CACTUS_FORCE_COMMIT_THRESHOLD (via $cactus_force_commit_file, $cactus_force_commit_threshold_file, reactive budget-exhaustion breaker always on; force-commit mechanically ported onto cactus's own base, see patches/HASHES.txt) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      mentored_dec_force_commit)
+        printf '%s\n' "$MENTORED_DEC_FORCE_COMMIT_ALPHA" > "$mentored_dec_force_commit_file"
+        printf '%s\n' "$MENTORED_DEC_FORCE_COMMIT_THRESHOLD" > "$mentored_dec_force_commit_threshold_file"
+        probe_patched "_MENTORED_DEC_FORCE_COMMIT_STATES" || {
+          echo "LOSSY_RULE=mentored_dec_force_commit needs the patch: bash patches/apply.sh mentored-dec-force-commit" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=mentored_dec_force_commit alpha=$MENTORED_DEC_FORCE_COMMIT_ALPHA threshold=$MENTORED_DEC_FORCE_COMMIT_THRESHOLD (via $mentored_dec_force_commit_file, $mentored_dec_force_commit_threshold_file, reactive budget-exhaustion breaker always on; force-commit mechanically ported onto mentored-dec's own base, see patches/HASHES.txt) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      r_fuzzy_force_commit)
+        printf '%s\n' "$R_FUZZY_FORCE_COMMIT_ALPHA" > "$r_fuzzy_force_commit_file"
+        printf '%s\n' "$R_FUZZY_FORCE_COMMIT_THRESHOLD" > "$r_fuzzy_force_commit_threshold_file"
+        probe_patched "_R_FUZZY_FORCE_COMMIT_STATE" || {
+          echo "LOSSY_RULE=r_fuzzy_force_commit needs the patch: bash patches/apply.sh r-fuzzy-force-commit" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=r_fuzzy_force_commit alpha=$R_FUZZY_FORCE_COMMIT_ALPHA threshold=$R_FUZZY_FORCE_COMMIT_THRESHOLD (via $r_fuzzy_force_commit_file, $r_fuzzy_force_commit_threshold_file, reactive budget-exhaustion breaker always on, force_commit_mask OR'd into r-fuzzy's own defer_mask; force-commit mechanically ported onto r-fuzzy's own base, see patches/HASHES.txt) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
+      spec_casc_opt_force_commit)
+        printf '%s\n' "$SPEC_CASC_OPT_FORCE_COMMIT_ALPHA" > "$spec_casc_opt_force_commit_file"
+        printf '%s\n' "$SPEC_CASC_OPT_FORCE_COMMIT_THRESHOLD" > "$spec_casc_opt_force_commit_threshold_file"
+        probe_patched "_SPEC_CASC_OPT_FORCE_COMMIT_STATE" || {
+          echo "LOSSY_RULE=spec_casc_opt_force_commit needs the patch: bash patches/apply.sh spec-casc-opt-force-commit" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_opt_force_commit alpha=$SPEC_CASC_OPT_FORCE_COMMIT_ALPHA threshold=$SPEC_CASC_OPT_FORCE_COMMIT_THRESHOLD (via $spec_casc_opt_force_commit_file, $spec_casc_opt_force_commit_threshold_file, reactive budget-exhaustion breaker always on, force_commit_mask OR'd into spec-casc-opt's own defer_mask; force-commit mechanically ported onto spec-casc-opt's own base, see patches/HASHES.txt) draft=$DRAFT_MODEL_PATH k=$NUM_SPEC port=$PORT seed=$SEED"
         ;;
       spec_casc_tok_self_check)
         printf '%s\n' "$SPEC_CASC_TOK_SELF_CHECK_ALPHA" > "$spec_casc_tok_self_check_file"
@@ -708,8 +786,19 @@ PY
         # every round for EAGLE3's own drafting.
         echo "mode=lossy rule=spec_casc_tok_hsr_guard alpha=$SPEC_CASC_TOK_HSR_GUARD_ALPHA window=$HSR_GUARD_WINDOW budget=$HSR_GUARD_BUDGET percentile=$HSR_GUARD_PERCENTILE actuator_k=$HSR_GUARD_ACTUATOR_K (via $spec_casc_tok_hsr_guard_file, $hsr_guard_window_file, $hsr_guard_budget_file, $hsr_guard_percentile_file, $hsr_guard_actuator_k_file, $hsr_guard_remaining_file -- live S_32 hidden-state-recurrence trigger forces strict verification for actuator_k committed tokens on a self-calibrated recurrence-crossing budget) draft=$DRAFT_MODEL_PATH k_spec=$NUM_SPEC port=$PORT seed=$SEED"
         ;;
+      spec_casc_tok_autoguard)
+        printf '%s\n' "$SPEC_CASC_TOK_AUTOGUARD_ALPHA" > "$spec_casc_tok_autoguard_file"
+        # _AUTOGUARD_HISTORY: unique to this patch -- plain spec_casc_tok also
+        # defines _SPEC_CASC_TOK_ALPHA, so probing that wouldn't catch plain
+        # spec_casc_tok being installed instead of this variant.
+        probe_patched "_AUTOGUARD_HISTORY" || {
+          echo "LOSSY_RULE=spec_casc_tok_autoguard needs the patch: bash patches/apply.sh spec-casc-tok-autoguard" >&2
+          exit 5
+        }
+        echo "mode=lossy rule=spec_casc_tok_autoguard alpha=$SPEC_CASC_TOK_AUTOGUARD_ALPHA (via $spec_casc_tok_autoguard_file -- guard mask = vllm/v1/sample/autoguard.py::decide(), the one file autoresearch/ edits; see autoresearch/README.md) draft=$DRAFT_MODEL_PATH k_spec=$NUM_SPEC port=$PORT seed=$SEED"
+        ;;
       *)
-        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|spec_casc_tok_antiloop|r_fuzzy_semantic_guard|r_fuzzy_semantic_guard_v2|r_fuzzy_window_entropy_guard|spec_casc_tok_semantic_guard|spec_casc_tok_semantic_guard_v2|spec_casc_tok_semantic_guard_and|spec_casc_tok_semantic_guard_future_guard|spec_casc_tok_semantic_guard_future_guard_and|spec_casc_tok_force_commit|spec_casc_tok_self_check|spec_casc_tok_free_judgment|spec_casc_tok_judge_nudge|spec_casc_tok_hsr_guard|synthetic)" >&2
+        echo "unknown LOSSY_RULE=$LOSSY_RULE (want: mentored_dec|cactus|spec_casc_opt|r_fuzzy|spec_casc_tok|spec_casc_tok_antiloop|r_fuzzy_semantic_guard|r_fuzzy_semantic_guard_v2|r_fuzzy_window_entropy_guard|spec_casc_tok_semantic_guard|spec_casc_tok_semantic_guard_v2|spec_casc_tok_semantic_guard_and|spec_casc_tok_semantic_guard_future_guard|spec_casc_tok_semantic_guard_future_guard_and|spec_casc_tok_force_commit|cactus_force_commit|mentored_dec_force_commit|r_fuzzy_force_commit|spec_casc_opt_force_commit|spec_casc_tok_self_check|spec_casc_tok_free_judgment|spec_casc_tok_judge_nudge|spec_casc_tok_hsr_guard|spec_casc_tok_autoguard|synthetic)" >&2
         exit 2
         ;;
     esac

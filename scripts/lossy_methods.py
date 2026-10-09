@@ -42,10 +42,10 @@ class MethodSpec:
     touches_v2: bool = False  # only mentored-dec patches the V2 runner too
 
     def validate_alpha(self, alpha: float) -> None:
-        if self.name == "mentored_dec" and not (0.0 <= alpha < 1.0):
-            raise ValueError(f"mentored_dec alpha must be in [0, 1); got {alpha}")
-        if self.name == "cactus" and alpha < 0.0:
-            raise ValueError(f"cactus alpha must be >= 0 (it bounds a KL divergence); got {alpha}")
+        if self.name in ("mentored_dec", "mentored_dec_force_commit") and not (0.0 <= alpha < 1.0):
+            raise ValueError(f"{self.name} alpha must be in [0, 1); got {alpha}")
+        if self.name in ("cactus", "cactus_force_commit") and alpha < 0.0:
+            raise ValueError(f"{self.name} alpha must be >= 0 (it bounds a KL divergence); got {alpha}")
         if self.name == "spec_casc_chow" and alpha > 1.0:
             raise ValueError(f"spec_casc_chow alpha must be <= 1 (alpha=1 already never defers); got {alpha}")
         if self.name == "spec_casc_tok_lt" and alpha > 1.0:
@@ -60,7 +60,8 @@ class MethodSpec:
             "spec_casc_tok_semantic_guard", "spec_casc_tok_semantic_guard_v2",
             "spec_casc_tok_semantic_guard_and",
             "spec_casc_tok_semantic_guard_future_guard", "spec_casc_tok_semantic_guard_future_guard_and",
-            "spec_casc_tok_hsr_guard",
+            "spec_casc_tok_hsr_guard", "spec_casc_tok_autoguard",
+            "r_fuzzy_force_commit", "spec_casc_opt_force_commit",
         ) and alpha == 0.0:
             raise ValueError(
                 f"{self.name} alpha=0.0 is NOT the strict point for this method (alpha=-inf is) -- "
@@ -116,6 +117,42 @@ class MethodSpec:
                 "token of the final-channel-open boundary at the first drafted position each round "
                 "(read back from the sequence's own emitted history, not assumed) until that "
                 "6-token boundary completes, then permanently a no-op -- see analysis/semantic_guard/README.md"
+            )
+        if self.name == "cactus_force_commit":
+            return (
+                f"accept iff gamma_x / q(x) >= u, gamma_x = min(p(x) + sqrt(2*{alpha:g}*p(x)*(1-p(x))), 1) -- "
+                "UNLESS this sequence has crossed its token-count budget without a natural "
+                "final-channel-open, in which case p(x) is one-hot forced onto the next token of the "
+                "final-channel-open boundary at the first drafted position each round (force-commit "
+                "mechanically ported from spec_casc_tok_force_commit onto cactus's own base; no switch "
+                "branch to patch around, direct port) -- see patches/HASHES.txt"
+            )
+        if self.name == "mentored_dec_force_commit":
+            return (
+                f"accept iff p(x) / ({1.0 - alpha:g} * q(x)) >= u (lam = 1-alpha = {1.0 - alpha:g}) -- "
+                "UNLESS this sequence has crossed its token-count budget without a natural "
+                "final-channel-open, in which case p(x) is one-hot forced onto the next token of the "
+                "final-channel-open boundary at the first drafted position each round (force-commit "
+                "mechanically ported from spec_casc_tok_force_commit onto mentored-dec's own base; no "
+                "switch branch to patch around, direct port) -- see patches/HASHES.txt"
+            )
+        if self.name == "r_fuzzy_force_commit":
+            return (
+                f"accept iff JSD(p,q) < {alpha:g} (then pi_rej=q, unconditional accept), else strict p/q "
+                "test -- UNLESS this sequence has crossed its token-count budget without a natural "
+                "final-channel-open, in which case p is one-hot forced onto the next token of the "
+                "final-channel-open boundary AND the strict branch is forced directly (force_commit_mask "
+                "OR'd into defer_mask, since a one-hot p alone is not guaranteed to clear the JSD switch "
+                "at every alpha/draft-confidence combination) -- see patches/HASHES.txt"
+            )
+        if self.name == "spec_casc_opt_force_commit":
+            return (
+                f"defer to strict p/q test iff max_u q(u) < max_u p(u) - {alpha:g}*TV(p,q), else accept "
+                "unconditionally -- UNLESS this sequence has crossed its token-count budget without a "
+                "natural final-channel-open, in which case p is one-hot forced onto the next token of the "
+                "final-channel-open boundary AND the strict branch is forced directly (force_commit_mask "
+                "OR'd into defer_mask, since a one-hot p alone is not guaranteed to clear the TV-based "
+                "switch at every alpha/draft-confidence combination -- verified by hand) -- see patches/HASHES.txt"
             )
         if self.name == "spec_casc_tok_self_check":
             return (
@@ -180,6 +217,15 @@ class MethodSpec:
                 "would accept (min(p,pi_rej) as the effective target, same AND-combination as "
                 "spec_casc_tok_semantic_guard_and but applied to the K-window instead of the marker "
                 "itself) -- see analysis/semantic_guard/README.md"
+            )
+        if self.name == "spec_casc_tok_autoguard":
+            return (
+                f"pi_rej(v) = q(v)+eta*p(v) for v with p(v) >= (1-{alpha:g})*max(p), else eta*p(v) -- "
+                "UNLESS vllm/v1/sample/autoguard.py::decide() (the one file the autoresearch loop "
+                "edits) returns True for that drafted position, in which case the trusted top set is "
+                "forced empty (pi_rej=p exactly, this method's own strict limit) for that position -- "
+                "round-granular plain Python, no kernel-carried state, same mechanism as "
+                "spec_casc_tok_semantic_guard/spec_casc_tok_hsr_guard -- see autoresearch/README.md"
             )
         if self.name == "spec_casc_tok_hsr_guard":
             return (
@@ -468,6 +514,80 @@ METHODS: dict[str, MethodSpec] = {
             },
         ),
         MethodSpec(
+            name="cactus_force_commit",
+            hashes_label="cactus-force-commit",
+            env_var="CACTUS_FORCE_COMMIT_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-cactus-force-commit-alpha-{_uid()}"),
+            log_prefix="[CACTUS-FORCE-COMMIT PATCH]",
+            strict_alpha=0.0,
+            alpha_domain="[0, inf)",
+            default_alpha=0.25,
+            taxonomy={
+                "family": "cactus + reactive budget-exhaustion breaker (force-commit mechanically "
+                "ported from spec-casc-tok-force-commit onto cactus's own base; cross-method "
+                "validation, this repo's own pilot experiment, not in Xia et al.)",
+                "paper_name": "cactus-force-commit",
+                "reference": "patches/HASHES.txt",
+            },
+        ),
+        MethodSpec(
+            name="mentored_dec_force_commit",
+            hashes_label="mentored-dec-force-commit",
+            env_var="MENTORED_DEC_FORCE_COMMIT_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-mentored-dec-force-commit-alpha-{_uid()}"),
+            log_prefix="[MENTORED-DEC-FORCE-COMMIT PATCH]",
+            strict_alpha=0.0,
+            alpha_domain="[0, 1)",
+            default_alpha=0.37,
+            touches_v2=True,
+            taxonomy={
+                "family": "mentored-dec + reactive budget-exhaustion breaker (force-commit mechanically "
+                "ported from spec-casc-tok-force-commit onto mentored-dec's own base; cross-method "
+                "validation, this repo's own pilot experiment, not in Xia et al.)",
+                "paper_name": "mentored-dec-force-commit",
+                "reference": "patches/HASHES.txt",
+            },
+        ),
+        MethodSpec(
+            name="r_fuzzy_force_commit",
+            hashes_label="r-fuzzy-force-commit",
+            env_var="R_FUZZY_FORCE_COMMIT_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-r-fuzzy-force-commit-alpha-{_uid()}"),
+            log_prefix="[R-FUZZY-FORCE-COMMIT PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf), NOT 0.0 for strict",
+            default_alpha=0.3,
+            taxonomy={
+                "family": "r-fuzzy + reactive budget-exhaustion breaker (force-commit mechanically "
+                "ported from spec-casc-tok-force-commit onto r-fuzzy's own base, with "
+                "force_commit_mask additionally OR'd into r-fuzzy's own switch-based defer_mask "
+                "so a forced position always takes the strict branch; cross-method validation, "
+                "this repo's own pilot experiment, not in Xia et al.)",
+                "paper_name": "r-fuzzy-force-commit",
+                "reference": "patches/HASHES.txt",
+            },
+        ),
+        MethodSpec(
+            name="spec_casc_opt_force_commit",
+            hashes_label="spec-casc-opt-force-commit",
+            env_var="SPEC_CASC_OPT_FORCE_COMMIT_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-opt-force-commit-alpha-{_uid()}"),
+            log_prefix="[SPEC-CASC-OPT-FORCE-COMMIT PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf), NOT 0.0 for strict",
+            default_alpha=0.05,
+            taxonomy={
+                "family": "spec-casc-opt + reactive budget-exhaustion breaker (force-commit mechanically "
+                "ported from spec-casc-tok-force-commit onto spec-casc-opt's own base, with "
+                "force_commit_mask additionally OR'd into spec-casc-opt's own switch-based "
+                "defer_mask so a forced position always takes the strict branch -- verified by "
+                "hand to matter at this method's own aggressive alpha; cross-method validation, "
+                "this repo's own pilot experiment, not in Xia et al.)",
+                "paper_name": "spec-casc-opt-force-commit",
+                "reference": "patches/HASHES.txt",
+            },
+        ),
+        MethodSpec(
             name="spec_casc_tok_self_check",
             hashes_label="spec-casc-tok-self-check",
             env_var="SPEC_CASC_TOK_SELF_CHECK_ALPHA",
@@ -624,6 +744,24 @@ METHODS: dict[str, MethodSpec] = {
                 "found to have a real, reproducible rearm-while-active bug this investigation)",
                 "paper_name": "spec-casc-tok-hsr-guard",
                 "reference": "analysis/semantic_guard/README.md",
+            },
+        ),
+        MethodSpec(
+            name="spec_casc_tok_autoguard",
+            hashes_label="spec-casc-tok-autoguard",
+            env_var="SPEC_CASC_TOK_AUTOGUARD_ALPHA",
+            alpha_file=pathlib.Path(f"/tmp/lossy-token-eff-spec-casc-tok-autoguard-alpha-{_uid()}"),
+            log_prefix="[SPEC-CASC-TOK-AUTOGUARD PATCH]",
+            strict_alpha=float("-inf"),
+            alpha_domain="(-inf, inf), NOT 0.0 for strict",
+            default_alpha=0.3,
+            taxonomy={
+                "family": "spec-casc-tok + autoguard (autoresearch/, this repo's own autonomous-"
+                "experiment scaffold, not in Xia et al.) -- the guard mask is whatever "
+                "vllm/v1/sample/autoguard.py::decide() returns, the one file autoresearch/ rewrites "
+                "each iteration; everything else (kernel, this patch, harness, grading) is frozen",
+                "paper_name": "spec-casc-tok-autoguard",
+                "reference": "autoresearch/README.md",
             },
         ),
     )

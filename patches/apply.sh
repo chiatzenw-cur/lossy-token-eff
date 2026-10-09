@@ -26,9 +26,9 @@ HASHES="$here/HASHES.txt"
 
 METHOD="${1:-}"
 case "$METHOD" in
-  cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard|spec-casc-opt-ent|spec-casc-tok-lt|spec-casc-diff|spec-casc-chow|spec-casc-opt-head) ;;
+  qwen3-force-commit-v2|cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard|spec-casc-tok-autoguard|cactus-force-commit|mentored-dec-force-commit|r-fuzzy-force-commit|spec-casc-opt-force-commit|spec-casc-opt-ent|spec-casc-tok-lt|spec-casc-diff|spec-casc-chow|spec-casc-opt-head) ;;
   *)
-    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard|spec-casc-opt-ent|spec-casc-tok-lt|spec-casc-diff|spec-casc-chow|spec-casc-opt-head>" >&2
+    echo "usage: $0 <cactus|spec-casc-opt|mentored-dec|r-fuzzy|spec-casc-tok|spec-casc-tok-antiloop|spec-casc-tok-force-commit|spec-casc-tok-self-check|spec-casc-tok-free-judgment|spec-casc-tok-rv|spec-casc-tok-judge-nudge|r-fuzzy-semantic-guard|r-fuzzy-semantic-guard-v2|r-fuzzy-window-entropy-guard|spec-casc-tok-semantic-guard|spec-casc-tok-semantic-guard-v2|spec-casc-tok-semantic-guard-and|spec-casc-tok-semantic-guard-future-guard|spec-casc-tok-semantic-guard-future-guard-and|spec-casc-tok-hsr-guard|spec-casc-tok-autoguard|cactus-force-commit|mentored-dec-force-commit|r-fuzzy-force-commit|spec-casc-opt-force-commit|spec-casc-opt-ent|spec-casc-tok-lt|spec-casc-diff|spec-casc-chow|spec-casc-opt-head>" >&2
     exit 2
     ;;
 esac
@@ -47,6 +47,28 @@ hash_of() { sha256sum "$1" | cut -d' ' -f1; }
 label_for_hash() {  # $1: file basename key in HASHES.txt ("rejection_sampler.py" or "utils"), $2: hash
   awk -v h="$2" '$1==h {print $2; found=1} END{if(!found) print ""}' "$HASHES"
 }
+
+if [[ "$METHOD" == "qwen3-force-commit-v2" ]]; then
+  # V2 sampler only: no other arm patches this file (V1 methods never reach it).
+  v2s="$pkg/v1/worker/gpu/spec_decode/rejection_sampler.py"
+  v2_hash="$(hash_of "$v2s")"
+  v2_label="$(label_for_hash x "$v2_hash")"
+  if [[ "$v2_label" == "qwen3-force-commit-v2" ]]; then
+    echo "qwen3-force-commit-v2 already applied to $v2s (sha256 matches)"
+  elif [[ "$v2_label" == "v2-base-spec-decode-rejection-sampler" ]]; then
+    patch -p1 -d "$sp" < "$here/vllm-0.26.0-qwen3-force-commit-v2.patch"
+    new_hash="$(hash_of "$v2s")"
+    if [[ "$(label_for_hash x "$new_hash")" != "qwen3-force-commit-v2" ]]; then
+      echo "patched V2 sampler does not match HASHES.txt's recorded qwen3-force-commit-v2 hash (got $new_hash)" >&2
+      exit 1
+    fi
+    echo "installed qwen3-force-commit-v2"
+  else
+    echo "$v2s matches no known V2 state (hash $v2_hash); refusing. Expected v2-base-spec-decode-rejection-sampler (see patches/v2_base/README.md)." >&2
+    exit 1
+  fi
+  exec "$PYTHON" "$here/test_qwen3_force_commit_v2.py"
+fi
 
 V1_REL="v1/sample/rejection_sampler.py"
 V2_REL="v1/worker/gpu/spec_decode/rejection_sampler_utils.py"
@@ -140,6 +162,8 @@ case "$METHOD" in
   spec-casc-tok-rv) gmr_label_for_method="rv-model-runner" ;;
   spec-casc-tok-judge-nudge) gmr_label_for_method="jn-model-runner" ;;
   spec-casc-tok-hsr-guard) gmr_label_for_method="hsr-guard-model-runner" ;;
+  spec-casc-tok-force-commit) gmr_label_for_method="force-commit-model-runner" ;;
+  mentored-dec-force-commit) gmr_label_for_method="force-commit-model-runner" ;;
 esac
 if [[ -n "$gmr_label_for_method" ]]; then
   gmr_patch_file="$here/vllm-0.26.0-$gmr_label_for_method.patch"
@@ -186,6 +210,20 @@ fi
 if [[ ! -f "$TRACE_DST" ]] || ! cmp -s "$here/relaxation_trace.py" "$TRACE_DST"; then
   cp "$here/relaxation_trace.py" "$TRACE_DST"
   echo "installed $TRACE_DST"
+fi
+
+# autoguard.py: same "genuinely new file, plain cp is safe" case as
+# relaxation_trace.py. Installed for spec-casc-tok-autoguard only (the patch
+# imports it at module load). Deliberately NOT hash-checked -- autoresearch/
+# rewrites patches/autoguard.py every iteration on purpose; the frozen
+# rejection_sampler.py patch is what's pinned. Refreshed here so `apply.sh
+# spec-casc-tok-autoguard` after an edit re-installs the new decide().
+AUTOGUARD_DST="$pkg/v1/sample/autoguard.py"
+if [[ "$METHOD" == "spec-casc-tok-autoguard" ]]; then
+  if [[ ! -f "$AUTOGUARD_DST" ]] || ! cmp -s "$here/autoguard.py" "$AUTOGUARD_DST"; then
+    cp "$here/autoguard.py" "$AUTOGUARD_DST"
+    echo "installed $AUTOGUARD_DST"
+  fi
 fi
 
 test_file="$here/test_$(echo "$METHOD" | tr '-' '_').py"
@@ -285,6 +323,18 @@ select alpha by writing it to:
     "yes" force-injects a pivot phrase (or force-commit's final-channel
     push if the budget is nearly exhausted). See the patch's module
     comment and analysis/semantic_guard/README.md)
+  cactus-force-commit:        /tmp/lossy-token-eff-cactus-force-commit-alpha-\$(id -u) (own file, not cactus's plain one; alpha >= 0; 0.0 = strict)
+                            /tmp/lossy-token-eff-cactus-force-commit-threshold-\$(id -u) (positive int; default 28000 if missing)
+  mentored-dec-force-commit: /tmp/lossy-token-eff-mentored-dec-force-commit-alpha-\$(id -u) (own file, not mentored-dec's plain one; alpha in [0,1); 0.0 = strict)
+                            /tmp/lossy-token-eff-mentored-dec-force-commit-threshold-\$(id -u) (positive int; default 28000 if missing)
+  r-fuzzy-force-commit:      /tmp/lossy-token-eff-r-fuzzy-force-commit-alpha-\$(id -u) (own file, not r-fuzzy's plain one; any real; -inf = strict)
+                            /tmp/lossy-token-eff-r-fuzzy-force-commit-threshold-\$(id -u) (positive int; default 28000 if missing)
+  spec-casc-opt-force-commit: /tmp/lossy-token-eff-spec-casc-opt-force-commit-alpha-\$(id -u) (own file, not spec-casc-opt's plain one; any real; -inf = strict)
+                            /tmp/lossy-token-eff-spec-casc-opt-force-commit-threshold-\$(id -u) (positive int; default 28000 if missing)
+    (same force-commit mechanism as spec-casc-tok-force-commit, mechanically
+    ported onto each method's own base -- see patches/HASHES.txt's own entry
+    for the full port writeup, including why r-fuzzy/spec-casc-opt also OR
+    force_commit_mask into their own switch-based defer_mask)
 remote/run_server_vllm.sh writes all ten for every mode (baseline/strict/lossy)
 so a stale value from a previous run cannot silently leak into a control arm.
 EOF

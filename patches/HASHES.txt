@@ -28,7 +28,13 @@ ed129377a5f8bd7fae85e5ba7c79661eaf395af444916ae8a763c8b907adf484  spec-casc-diff
 ca3837c67ec914fd7e2e664f134f5d2aa6fc4601aa0920a189325e512872f53f  spec-casc-chow
 517e7f88433039d5b169ad25853197c06ab0a5aa70c0531f72605c6595220cf5  spec-casc-opt-head
 eeaaf46b172a029871af0f4c1d68ca6b59d76cb8a003edff6cd4ed6be92738ab  spec-casc-tok-antiloop
-049e966d2100de5598450896c89c8e7e31140ac45d08617a097ac65a0be77360  spec-casc-tok-force-commit
+049e966d2100de5598450896c89c8e7e31140ac45d08617a097ac65a0be77360  spec-casc-tok-force-commit-superseded-global-state
+# 2026-10-04: force-commit state is now keyed per request id (runner hook below).
+# The previous global-state version is kept above as superseded: a warm server's
+# state persisted across requests, so forcing was disabled after the first final
+# channel. Do not install that hash for any new run.
+3b422e8ed28a63829828322295e632ace68f401c86b5b7a8acb215c8549f2444  spec-casc-tok-force-commit
+3405cbca21f3b25b61998a13151596a6ca26097b638148460350fd452bcc4172  force-commit-model-runner
 # fixed 2026-08-13: _force_commit_apply had the exact same "forces only
 # start0" bug caught live on spec-casc-tok-self-check (which shares this
 # code shape) -- if start0's forced token happened to be genuinely
@@ -758,6 +764,80 @@ b86e0f3643a715b7f15c7a3fa0e314baa40aa00dc3af5ceeaf26cd5ad146804b  hidden-state-c
 # tolerated here because the actuator, unlike every earlier one in this
 # investigation, is SAFE even when wrong).
 
+a5c55528c77f5c36ebb401a2a00bed1af59d17ee00f5801f611fdc7d5658da13  spec-casc-tok-autoguard
+
+# added 2026-10-03, force-commit mechanically ported from spec-casc-tok-
+# force-commit onto the other 4 methods' own bases -- cross-method
+# validation requested after FINDINGS.md's own scope-limit note (force-
+# commit was previously only shown to work for spec-casc-tok). Mechanism
+# is additive at a shared anchor present in every method's own patch
+# (right after the common `target_probs = target_logits.softmax(...);
+# assert target_probs.is_contiguous()` pristine lines, before any
+# method-specific relaxation math reads target_probs) -- verified
+# mechanical by diffing spec-casc-tok-force-commit against plain
+# spec-casc-tok and confirming the ENTIRE diff is additive at exactly
+# that anchor plus the _TRACER.record call and the final return. Each
+# variant gets its own alpha-knob file (e.g.
+# cactus-force-commit-alpha, not cactus's plain cactus-alpha) -- same
+# "own file, never alias" rule spec-casc-tok-force-commit's own entry
+# above already documents, extended here rather than re-broken.
+#
+# cactus and mentored-dec are direct ports with no further change: both
+# methods' own accept tests are continuous functions of target_probs with
+# no "trust the draft unconditionally" escape hatch (cactus's own gamma_x
+# blend, mentored-dec's own unconditional scaled ratio), so one-hot-forcing
+# target_probs before their math runs propagates exactly like it does for
+# spec-casc-tok.
+#
+# r-fuzzy and spec-casc-opt are SWITCH-based (a per-token defer_mask picks
+# between "run the strict ratio test" and "always accept the draft, no
+# target_probs check at all"). Forcing target_probs to one-hot numerically
+# pushes their own switch condition (JSD for r-fuzzy, a TV-based margin for
+# spec-casc-opt) toward "defer to strict" in the common case, but this is
+# not guaranteed for every alpha/draft-confidence combination -- verified
+# by hand for spec-casc-opt: at a small positive alpha against an EXTREMELY
+# confident (0.999) draft, the TV-based margin can numerically stay False
+# even with target_probs forced elsewhere, which would silently make the
+# force a no-op. Fixed by explicitly OR-ing force_commit_mask into each
+# method's own defer_mask right after it's computed, so a forced position
+# ALWAYS takes the strict branch regardless of the numeric edge case --
+# confirmed by a real-kernel end-to-end test at each method's own
+# aggressive AIME24 sweep alpha (r-fuzzy 0.25, spec-casc-opt 0.05) against
+# an 0.999-confident competing draft token
+# (patches/test_r_fuzzy_force_commit.py /
+# patches/test_spec_casc_opt_force_commit.py's own
+# test_end_to_end_real_kernel_forces_full_pattern_under_aggressive_alpha).
+#
+# Round-trip verified: each new patch applies cleanly to a freshly-
+# reconstructed pristine rejection_sampler.py and reproduces the grafted
+# file byte-for-byte; hashes below are of that reproduced file.
+57cb258370388df8efcc5d11aceac0481551952942cd74e0def1c72a39bb19dd  cactus-force-commit
+21d968fe07a41585e3b0d7f4c9d5159d8e3859113371c0658530f4e4eebb81fb  mentored-dec-force-commit-superseded-global-state
+# 2026-10-04: keyed per request id, same fix as spec-casc-tok-force-commit (see that entry).
+ab5116f4f69338c70b5a58c2d315fbe46abf03fb7b693e38d43a9329ee53d220  mentored-dec-force-commit
+8fe4dac3cd5e2442169c5aa8aa85f0b42d53fed5df1d5b89d8cb2d4c523d9651  r-fuzzy-force-commit
+6be37559762d97b4896517f48a1117c5440261db772d94733c7e3646035d13fb  spec-casc-opt-force-commit
+# added 2026-09-02, for autoresearch/ (Karpathy-style autonomous experiment
+# loop -- see autoresearch/README.md and autoresearch/program.md). A
+# verbatim copy of spec-casc-tok-semantic-guard's patch with ONE change:
+# the hard-coded 18-id hesitation-marker list + _semantic_guard_mask() are
+# replaced by a call into vllm/v1/sample/autoguard.py::decide(), a plain-
+# Python round-granular function returning a [num_tokens] "force strict
+# here" bool mask. Same STATELESS-in-kernel top-set-forcing mechanism as
+# semantic-guard / hsr-guard (own alpha file
+# /tmp/lossy-token-eff-spec-casc-tok-autoguard-alpha-$UID; forcing the
+# trusted top set empty at a masked row is provably identical to this
+# method's own alpha=-inf strict limit there -- see spec-casc-tok-
+# semantic-guard's entry above). autoguard.py is a NEW file installed by
+# apply.sh with a plain cp (like relaxation_trace.py); it is NOT hashed
+# here -- it is intentionally rewritten every autoresearch iteration, and
+# a broken decide() degrades to an all-False (plain spec_casc_tok) mask via
+# the frozen wrapper _autoguard_mask, never a crash. Only THIS file
+# (rejection_sampler.py in the spec-casc-tok-autoguard state) is frozen and
+# hash-pinned. Adds a post-kernel _autoguard_observe() bookkeeping call
+# (round counter + rolling committed-token history) -- pure observation,
+# never influences acceptance.
+
 497c86d7b3de85ace94f9e53ae1d5ea0feff1221d005a556322ac8e2913eea99  hsr-guard-model-runner
 # fixed 2026-08-14: default parameters (window=600, budget=3, pct=99.0)
 # corrected after a real 8-case AIME24 pilot -- own analysis bug first
@@ -845,3 +925,10 @@ b86e0f3643a715b7f15c7a3fa0e314baa40aa00dc3af5ceeaf26cd5ad146804b  hidden-state-c
 # class (_HSRecurrenceGuard) is self-contained tensor/file-I/O logic with
 # no scheduling-state to mock, unlike those three patches' own draft-
 # content-overwrite hooks.
+
+# --- V2 model-runner base (recorded 2026-10-05; see patches/v2_base/README.md for origin) ---
+49ba999e6ba5661365c65c3f71bea75f7182cc5583252c8f16b71baf9ac3f670  v2-base-gpu-model-runner
+63d52ec3a453be6733f8efe699b03260d0ee43633c4da52031ec0110383a0825  v2-base-spec-decode-rejection-sampler
+# v2-base spec-decode rejection_sampler_utils.py = 68d0a904... is the consolidated V2 kernel, recorded above as label mentored-dec (not duplicated here)
+# Qwen3 force-commit hook on the V2 sampler (vllm-0.26.0-qwen3-force-commit-v2.patch): stateless per request, inert unless the knob file is set.
+e3318e0ed2fc8626f9fec580517a3ddf4bd056025327f57df37f4fa02c82c7b2  qwen3-force-commit-v2

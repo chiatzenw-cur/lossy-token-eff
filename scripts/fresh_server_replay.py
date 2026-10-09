@@ -95,6 +95,16 @@ def parse_args() -> argparse.Namespace:
         default=28000,
         help="spec_casc_tok_force_commit only: cumulative token count before forcing a final-channel-open.",
     )
+    # force-commit mechanically ported onto the other 4 methods' own bases
+    # (see patches/HASHES.txt's 2026-10-03 entry) -- own threshold flag per
+    # variant, same convention as spec_casc_tok_force_commit's own above.
+    for _fc_method in ("cactus", "mentored-dec", "r-fuzzy", "spec-casc-opt"):
+        parser.add_argument(
+            f"--{_fc_method}-force-commit-threshold",
+            type=int,
+            default=28000,
+            help=f"{_fc_method.replace('-', '_')}_force_commit only: cumulative token count before forcing a final-channel-open.",
+        )
     parser.add_argument(
         "--spec-casc-tok-self-check-interval",
         type=int,
@@ -230,6 +240,19 @@ def parse_args() -> argparse.Namespace:
         "e.g. '{\"rope_type\":\"yarn\",\"factor\":1.6,\"original_max_position_embeddings\":40960}'). "
         "Empty (default) = no override, matches every model whose native window already covers --max-new-tokens.",
     )
+    parser.add_argument(
+        "--warm-server",
+        action="store_true",
+        help="Start one server per (arm, alpha, threshold) group and reuse it across cases. "
+        "Per-case proposals.jsonl tracing is off in this mode.",
+    )
+    parser.add_argument(
+        "--qwen3-force-commit-threshold",
+        type=int,
+        default=0,
+        help="Qwen3 V2 force-commit threshold in generated tokens (0 = off). Applies to spec_casc_tok, "
+        "mentored_dec, cactus, r_fuzzy and spec_casc_opt arms; runs land under <arm>_qwen3_force_commit/alpha<a>_t<thr>.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -252,7 +275,25 @@ def tag_for(args: argparse.Namespace, arm: str) -> str:
     return f"{camel}{compact}" + args.tag_suffix
 
 
+def qwen3_close_id(model_path: str) -> int:
+    from transformers import AutoTokenizer
+
+    ids = AutoTokenizer.from_pretrained(model_path).encode("</think>", add_special_tokens=False)
+    if len(ids) != 1:
+        raise RuntimeError(f"'</think>' is not one token for {model_path}: {ids}")
+    return ids[0]
+
+
 def method_and_params_for(args: argparse.Namespace, arm: str) -> tuple[str, str]:
+    if args.qwen3_force_commit_threshold > 0 and arm in (
+        "spec_casc_tok", "mentored_dec", "cactus", "r_fuzzy", "spec_casc_opt",
+    ):
+        method, params = method_and_params_for_base(args, arm)
+        return f"{method}_qwen3_force_commit", f"{params}_t{args.qwen3_force_commit_threshold}"
+    return method_and_params_for_base(args, arm)
+
+
+def method_and_params_for_base(args: argparse.Namespace, arm: str) -> tuple[str, str]:
     """(method, params) for the run directory: runs-root/<bench>/<method>/
     <params>/<case>/seed_N/. params always starts with alpha<value> for
     every relaxed method (the one knob every MethodSpec has), with any
@@ -281,6 +322,14 @@ def method_and_params_for(args: argparse.Namespace, arm: str) -> tuple[str, str]
         params += f"_k{args.spec_casc_tok_semantic_guard_future_guard_and_k}"
     if arm == "spec_casc_tok_force_commit":
         params += f"_t{args.spec_casc_tok_force_commit_threshold}"
+    if arm == "cactus_force_commit":
+        params += f"_t{args.cactus_force_commit_threshold}"
+    if arm == "mentored_dec_force_commit":
+        params += f"_t{args.mentored_dec_force_commit_threshold}"
+    if arm == "r_fuzzy_force_commit":
+        params += f"_t{args.r_fuzzy_force_commit_threshold}"
+    if arm == "spec_casc_opt_force_commit":
+        params += f"_t{args.spec_casc_opt_force_commit_threshold}"
     if arm == "spec_casc_tok_self_check":
         params += f"_i{args.spec_casc_tok_self_check_interval}"
     if arm == "spec_casc_tok_hsr_guard":
@@ -471,6 +520,15 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
     env["MODEL_PATH"] = args.model_path
     env["DRAFT_MODEL_PATH"] = args.draft_model_path
     env["SERVED_MODEL_NAME"] = args.served_model_name
+    if args.qwen3_force_commit_threshold > 0:
+        if arm not in ("spec_casc_tok", "mentored_dec", "cactus", "r_fuzzy", "spec_casc_opt"):
+            raise RuntimeError(
+                "--qwen3-force-commit-threshold applies only to spec_casc_tok, mentored_dec, "
+                "cactus, r_fuzzy and spec_casc_opt"
+            )
+        subprocess.run(["bash", str(REPO_ROOT / "patches" / "apply.sh"), "qwen3-force-commit-v2"], cwd=REPO_ROOT, check=True, capture_output=True, text=True)
+        env["QWEN3_FORCE_COMMIT_THRESHOLD"] = str(args.qwen3_force_commit_threshold)
+        env["QWEN3_FORCE_COMMIT_CLOSE_ID"] = str(qwen3_close_id(args.model_path))
     env["ROPE_SCALING_JSON"] = args.rope_scaling_json
     mode = "baseline" if arm == "baseline" else ("strict" if arm == "strict" else "lossy")
     if arm not in ("baseline", "strict"):
@@ -484,6 +542,14 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
             env["SPEC_CASC_TOK_FUTURE_GUARD_AND_K"] = str(args.spec_casc_tok_semantic_guard_future_guard_and_k)
         if arm == "spec_casc_tok_force_commit":
             env["SPEC_CASC_TOK_FORCE_COMMIT_THRESHOLD"] = str(args.spec_casc_tok_force_commit_threshold)
+        if arm == "cactus_force_commit":
+            env["CACTUS_FORCE_COMMIT_THRESHOLD"] = str(args.cactus_force_commit_threshold)
+        if arm == "mentored_dec_force_commit":
+            env["MENTORED_DEC_FORCE_COMMIT_THRESHOLD"] = str(args.mentored_dec_force_commit_threshold)
+        if arm == "r_fuzzy_force_commit":
+            env["R_FUZZY_FORCE_COMMIT_THRESHOLD"] = str(args.r_fuzzy_force_commit_threshold)
+        if arm == "spec_casc_opt_force_commit":
+            env["SPEC_CASC_OPT_FORCE_COMMIT_THRESHOLD"] = str(args.spec_casc_opt_force_commit_threshold)
         if arm == "spec_casc_tok_self_check":
             env["SPEC_CASC_TOK_SELF_CHECK_INTERVAL"] = str(args.spec_casc_tok_self_check_interval)
             env["SPEC_CASC_TOK_SELF_CHECK_FINAL_THRESHOLD"] = str(args.spec_casc_tok_self_check_final_threshold)
@@ -529,7 +595,7 @@ def start_server(args: argparse.Namespace, arm: str, log_path: pathlib.Path):
 
 def request_once(
     args: argparse.Namespace, arm: str, case: str, seed: int, tag: str, method: str, params: str,
-    runs_root: pathlib.Path, log_path: pathlib.Path,
+    runs_root: pathlib.Path, log_path: pathlib.Path, assert_fresh: bool = True,
 ) -> subprocess.CompletedProcess:
     mode = "baseline" if arm == "baseline" else ("strict" if arm == "strict" else "lossy")
     command = [
@@ -549,7 +615,7 @@ def request_once(
         "--timeout", str(args.request_timeout),
         "--server-url", f"http://127.0.0.1:{args.port}",
         "--server-log", str(log_path),
-        "--assert-fresh-server",
+        *(["--assert-fresh-server"] if assert_fresh else []),
         "--model", args.served_model_name,
         "--draft-model", args.draft_model_path,
     ]
@@ -561,6 +627,78 @@ def request_once(
     if args.overwrite:
         command.append("--overwrite")
     return subprocess.run(command, cwd=REPO_ROOT, check=False)
+
+
+def write_manifest(args: argparse.Namespace, runs_root: pathlib.Path, results: list) -> None:
+    manifest = runs_root / "fresh_server_replay.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    previous = []
+    if manifest.is_file():
+        try:
+            previous = json.loads(manifest.read_text(encoding="utf-8")).get("batches", [])
+        except (OSError, json.JSONDecodeError):
+            previous = []
+    previous.append(
+        {
+            "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "arms": args.arms,
+            "alphas": {name: alpha_for(args, name) for name in METHODS},
+            "warm_server": bool(args.warm_server),
+            "command": sys.argv,
+            "runs": results,
+        }
+    )
+    manifest.write_text(json.dumps({"batches": previous}, indent=2) + "\n", encoding="utf-8")
+
+
+def run_warm(args: argparse.Namespace, todo: list, runs_root: pathlib.Path) -> tuple[list, int]:
+    results = []
+    failures = 0
+    process = None
+    current = None
+    log_path = None
+    set_trace_destination(None)
+    set_hidden_state_destination(None)
+    try:
+        for index, (case, seed, arm, tag, method, params) in enumerate(todo, start=1):
+            key = (arm, method, params)
+            if key != current:
+                stop_server()
+                if process is not None and process.poll() is None:
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                log_path = REPO_ROOT / args.log_root / f"{tag}_warm_seed{seed}_{stamp}.log"
+                print(f"\n[warm server] {arm} {method}/{params} -> {log_path}", flush=True)
+                process = start_server(args, arm, log_path)
+                current = key
+            print(f"[{index}/{len(todo)}] {case} seed={seed} arm={arm}", flush=True)
+            started = time.perf_counter()
+            completed = request_once(
+                args, arm, case, seed, tag, method, params, runs_root, log_path, assert_fresh=False
+            )
+            elapsed = time.perf_counter() - started
+            status = "ok" if completed.returncode == 0 else f"request failed (exit {completed.returncode})"
+            if completed.returncode != 0:
+                failures += 1
+            print(f"[{index}/{len(todo)}] {status} in {elapsed:.0f}s", flush=True)
+            results.append(
+                {
+                    "case": case,
+                    "seed": seed,
+                    "arm": arm,
+                    "tag": tag,
+                    "method": method,
+                    "params": params,
+                    "status": status,
+                    "wall_time_seconds": round(elapsed, 1),
+                    "server_log": os.path.relpath(log_path, REPO_ROOT),
+                }
+            )
+    finally:
+        stop_server()
+        if process is not None and process.poll() is None:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    return results, failures
 
 
 def main() -> int:
@@ -594,6 +732,12 @@ def main() -> int:
         return 0
     if not todo:
         return 0
+
+    if args.warm_server:
+        results, failures = run_warm(args, todo, runs_root)
+        write_manifest(args, runs_root, results)
+        print(f"\nwrote manifest; {len(results) - failures}/{len(results)} ok")
+        return 1 if failures else 0
 
     if args.capture_hidden_states:
         ensure_hidden_state_capture_applied()
@@ -676,25 +820,8 @@ def main() -> int:
             }
         )
 
-    manifest = runs_root / "fresh_server_replay.json"
-    manifest.parent.mkdir(parents=True, exist_ok=True)
-    previous = []
-    if manifest.is_file():
-        try:
-            previous = json.loads(manifest.read_text(encoding="utf-8")).get("batches", [])
-        except (OSError, json.JSONDecodeError):
-            previous = []
-    previous.append(
-        {
-            "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
-            "arms": args.arms,
-            "alphas": {name: alpha_for(args, name) for name in METHODS},
-            "command": sys.argv,
-            "runs": results,
-        }
-    )
-    manifest.write_text(json.dumps({"batches": previous}, indent=2) + "\n", encoding="utf-8")
-    print(f"\nwrote {manifest}; {len(results) - failures}/{len(results)} ok")
+    write_manifest(args, runs_root, results)
+    print(f"\nwrote {runs_root / 'fresh_server_replay.json'}; {len(results) - failures}/{len(results)} ok")
     return 1 if failures else 0
 
 

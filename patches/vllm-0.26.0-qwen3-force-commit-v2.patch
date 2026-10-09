@@ -1,0 +1,76 @@
+--- a/vllm/v1/worker/gpu/spec_decode/rejection_sampler.py
++++ b/vllm/v1/worker/gpu/spec_decode/rejection_sampler.py
+@@ -1,5 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++import os
++
+ import torch
+ 
+ from vllm.config import SpeculativeConfig
+@@ -20,6 +22,55 @@
+ )
+ 
+ 
++# QWEN3-FORCE-COMMIT (not upstream vLLM). Forces the closing token `</think>` once a
++# request's generated-token count reaches the threshold without `</think>` in its own
++# token buffer. Stateless: every decision reads only that request's buffer, so state
++# cannot carry across requests. Disabled (threshold 0) unless the knob file says so.
++_QWEN3_FC_THRESHOLD_FILE = f"/tmp/lossy-token-eff-qwen3-force-commit-threshold-{os.getuid()}"
++_QWEN3_FC_CLOSE_ID_FILE = f"/tmp/lossy-token-eff-qwen3-force-commit-close-id-{os.getuid()}"
++
++
++def _read_int_knob(path: str, default: int) -> int:
++    try:
++        with open(path) as handle:
++            return int(float(handle.read().strip()))
++    except (OSError, ValueError):
++        return default
++
++
++_QWEN3_FC_THRESHOLD = _read_int_knob(_QWEN3_FC_THRESHOLD_FILE, 0)
++_QWEN3_FC_CLOSE_ID = _read_int_knob(_QWEN3_FC_CLOSE_ID_FILE, -1)
++print(
++    f"[QWEN3-FORCE-COMMIT V2 PATCH] threshold={_QWEN3_FC_THRESHOLD} close_id={_QWEN3_FC_CLOSE_ID}",
++    flush=True,
++)
++
++
++def _qwen3_force_commit(logits, input_batch, pos, req_states):
++    if _QWEN3_FC_THRESHOLD <= 0 or _QWEN3_FC_CLOSE_ID < 0:
++        return logits
++    rows = (input_batch.expanded_local_pos == 0).nonzero(as_tuple=True)[0]
++    if rows.numel() == 0:
++        return logits
++    reqs = input_batch.expanded_idx_mapping[rows]
++    row_pos = pos[rows]
++    prompt_lens = req_states.prompt_len.gpu[reqs]
++    buffer = req_states.all_token_ids.gpu
++    out = logits
++    for row, req, p, plen in zip(
++        rows.tolist(), reqs.tolist(), row_pos.tolist(), prompt_lens.tolist()
++    ):
++        if p - plen < _QWEN3_FC_THRESHOLD:
++            continue
++        if bool((buffer[req, plen:p] == _QWEN3_FC_CLOSE_ID).any()):
++            continue
++        if out is logits:
++            out = logits.clone()
++        out[row] = torch.finfo(out.dtype).min
++        out[row, _QWEN3_FC_CLOSE_ID] = 0.0
++    return out
++
++
+ @triton.jit
+ def _flatten_sampled_kernel(
+     # [num_logits]
+@@ -120,6 +171,9 @@
+             draft_sampled,
+             input_batch.expanded_local_pos,
+         )
++        processed_logits = _qwen3_force_commit(
++            processed_logits, input_batch, pos, self.sampler.req_states
++        )
+         sampled, num_sampled = rejection_sample(
+             processed_logits,
+             draft_logits,
