@@ -17,7 +17,8 @@ RUNS = REPO / "autoresearch" / "cross_method_runs"
 LEDGER_DIR = REPO / "autoresearch" / "cross_method_metrics"
 METHODS = ("spec_casc_tok", "spec_casc_tok_force_commit", "mentored_dec", "mentored_dec_force_commit",
            "spec_casc_tok_qwen3_force_commit", "mentored_dec_qwen3_force_commit",
-           "cactus_force_commit", "r_fuzzy_force_commit", "spec_casc_opt_force_commit")
+           "cactus_force_commit", "r_fuzzy_force_commit", "spec_casc_opt_force_commit",
+           "cactus_qwen3_force_commit", "r_fuzzy_qwen3_force_commit", "spec_casc_opt_qwen3_force_commit")
 RAW_FILES = ("output.txt", "proposals.jsonl", "response.json")
 FIELDS = ["dataset", "method", "params", "case", "server_mode", "output_tokens", "finish_reason",
           "hit_cap", "reached_final_channel", "l_bar", "verdict", "correct", "record_valid",

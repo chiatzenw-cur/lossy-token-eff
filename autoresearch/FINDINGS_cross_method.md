@@ -380,3 +380,46 @@ Rescued ≫ lost (156 vs 17, ~9:1) and correctness nearly quadruples on this sel
 - GPT-OSS cactus/r_fuzzy/spec_casc_opt baselines are the original campaign (fresh-per-case); spec_casc_tok/mentored_dec baselines (both models) are the in-session warm rerun already used elsewhere in this file. Different provenance, same validity standard (unaffected by the warm-state bug either way).
 - Cases below each threshold were not rerun; their identity to baseline rests on the mechanism (the hook is a no-op below threshold) plus the one empirical 123/123 check on longbench, not a per-arm re-verification.
 - `cross_method_metrics.py`'s `METHODS`/`FIXED_RS_SHA256` now also cover `cactus_force_commit`, `r_fuzzy_force_commit`, `spec_casc_opt_force_commit` (added for this run; previously only the two force arms + both Qwen3 force arms were recognized, so these three were silently never ingested before). All three validated against the per-request-fix hash in `patches/HASHES.txt` (`record_valid: True` on every row).
+
+## Qwen3 extension: cactus, r_fuzzy, spec_casc_opt via the same V2 hook (2026-10-08/09)
+
+The restriction above ("the Qwen3 force hook only supports spec_casc_tok/mentored_dec") turned out to be caution, not a real limit. The hook patches `vllm/v1/worker/gpu/spec_decode/rejection_sampler.py` — the file sits downstream of whichever method's verification logic ran in the consolidated V2 kernel (`rejection_sampler_utils.py`, always hash-labeled "mentored-dec" regardless of the actual selected method, per the comment in `scripts/run_experiment_vllm.py`). No per-method patch touches this file (`patches/apply.sh`: "V2 sampler only: no other arm patches this file"), so the force-commit decision is generic — it operates on `processed_logits` after sampling, before `rejection_sample(...)`, independent of method.
+
+Confirmed with a 3-case GPU check (threshold=2000, cap=4000, aime24_qwen3) before committing to the full run: `</think>` forced at tokens 2008/2318/2801 (cactus), 1626/2278/2721 (r_fuzzy); spec_casc_opt forced on 2/3 cases, with the third finishing naturally before the threshold. Extended `fresh_server_replay.py`'s arm-check in two places to allow `cactus`/`r_fuzzy`/`spec_casc_opt` through the `--qwen3-force-commit-threshold` path (commit `324068d31`).
+
+Ran the same cap−p95 collection as above for these three methods on Qwen3, reusing the same thresholds (aime24=31260, gsm8k=1684, humaneval=8150, livecodebench=11004, longbench_v2=6894) and the same selection rule (baseline capped, or past threshold). Baselines for these three methods are the original campaign `runs/` data (fresh-per-case; these methods were never rerun in-session, so there's no ledger baseline for them, same provenance situation as the GPT-OSS side of the table above). Correctness uses the same grader-bug rule (`hit_cap and not think_close_seen` ⇒ incorrect) on both sides.
+
+**736 selected arm-cases** (vs. 396 in the first collection — these aggressive methods have far higher baseline cap-hit rates):
+
+| method | n | base→force correct | rescued | lost | still capped |
+|---|--:|--:|--:|--:|--:|
+| cactus | 245 | 28 → 93 | 66 | 1 | 149 |
+| r_fuzzy | 214 | 16 → 59 | 44 | 1 | 108 |
+| spec_casc_opt | 277 | 31 → 98 | 70 | 3 | 137 |
+| **total** | **736** | **75 → 250** | **180** | **5** | **394** |
+
+Rescued:lost is ~36:1, even more lopsided than the first collection's ~9:1 — these methods sit further from the cap at baseline more often, but when they are capped, forcing almost never regresses a case. Per dataset × method (n, base_correct→force_correct, rescued/lost, still_capped):
+
+- cactus aime24: n=17, 1→1, 0/0, stillcap=14
+- cactus gsm8k: n=56, 15→45, 30/0, stillcap=11
+- cactus humaneval: n=32, 1→10, 9/0, stillcap=16
+- cactus livecodebench: n=51, 3→18, 16/1, stillcap=33
+- cactus longbench: n=89, 8→19, 11/0, stillcap=75
+- r_fuzzy aime24: n=13, 1→2, 1/0, stillcap=9
+- r_fuzzy gsm8k: n=62, 8→47, 39/0, stillcap=13
+- r_fuzzy humaneval: n=65, 4→3, 0/1, stillcap=38
+- r_fuzzy livecodebench: n=55, 0→0, 0/0, stillcap=42
+- r_fuzzy longbench: n=19, 3→7, 4/0, stillcap=6
+- spec_casc_opt aime24: n=19, 0→1, 1/0, stillcap=17
+- spec_casc_opt gsm8k: n=102, 18→60, 44/2, stillcap=27
+- spec_casc_opt humaneval: n=67, 7→18, 11/0, stillcap=39
+- spec_casc_opt livecodebench: n=58, 3→14, 12/1, stillcap=30
+- spec_casc_opt longbench: n=31, 3→5, 2/0, stillcap=24
+
+**Reading.** Same pattern as the first collection, more pronounced: gsm8k rescues the large majority of capped cases (30/56, 39/62, 44/102 — roughly half to two-thirds of all selected cases on that dataset) since a short numeric answer almost always fits in the reclaimed budget. The code/long-context datasets (livecodebench, humaneval, longbench_v2) still hit the cap on a third to five-sixths of forced cases — longbench_v2/cactus is the extreme (75/89 still capped), consistent with cactus being the most aggressive (highest alpha=0.35) of the three and so having the most severely-truncated baselines to begin with. r_fuzzy/livecodebench rescued nothing at all (0/55) — every one of its 55 selected cases was still capped or still wrong after forcing, the only dataset×method cell in either collection with zero correct on both sides.
+
+Combined with the first collection (396 cases, 2 methods on Qwen3 + 5 on GPT-OSS), the full picture across **all 5 methods on both models, 5 deterministic datasets, 1132 cap-adjacent arm-cases**: 125 → 439 correct, 336 rescued, 22 lost (~15:1). The mechanism is directionally robust across methods, models, and alpha values, with the regression rate staying low (<3% of selected cases) even as the rescue population grows 3x with the more aggressive methods.
+
+**Caveats (additional to those above):**
+- Ingestion required adding `cactus_qwen3_force_commit`/`r_fuzzy_qwen3_force_commit`/`spec_casc_opt_qwen3_force_commit` to `cross_method_metrics.py`'s `METHODS` tuple — the naming convention is `{method}_qwen3_force_commit` (matching `fresh_server_replay.py`'s `method_and_params_for()`), distinct from the GPT-OSS-side `{method}_force_commit` names already present. All 736 rows: `record_valid: True` (the Qwen3 hook's validity check is unconditional — stateless per-request, no hash gate needed).
+- As with the first collection, n per cell varies widely (13-102) and reflects case availability, not a controlled sample.
