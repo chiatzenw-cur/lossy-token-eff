@@ -34,6 +34,9 @@ DOC_EXCLUDE = DATA_DIRS + ("prompts/",)  # "docs"-scoped terms are not applied h
 # (regenerate cascade/results/final_results.pdf with cascade/analysis/results_pdf.py
 # from the snapshot if it is needed).
 DROP = ("tools/anonymize/", "cascade/results/final_results.pdf")
+# Also dropped with --slim: large intermediates whose summaries sit next to them and
+# whose inputs (hidden-state dumps) are not in the repository anyway.
+SLIM_DROP = ("analysis/semantic_guard/results/recurrence_vs_unproductive.jsonl",)
 
 # Raw tokens checked after replacement, independent of terms.tsv's patterns.
 # Person names are only checked outside run data / prompts, which hold unrelated dataset text.
@@ -66,6 +69,8 @@ def scrub(text, path, terms):
 
 def keep(path, slim):
     if path.startswith(DROP):
+        return False
+    if slim and path.startswith(SLIM_DROP):
         return False
     if slim and path.startswith(DATA_DIRS):
         name = path.rsplit("/", 1)[-1].lower()
@@ -130,7 +135,8 @@ def main():
             total += os.path.getsize(p)
             low = (rel + "\n").lower() + open(p, "rb").read().decode("utf-8", "replace").lower()
             for tok in LEAK_CHECK + ([] if rel.startswith(DOC_EXCLUDE) else LEAK_CHECK_DOCS):
-                if tok in low:
+                # left boundary only: catches compounds (nibiref) but not base64 noise (...HNibIf...)
+                if re.search(r"(?<![a-z0-9+/])" + re.escape(tok), low):
                     leaks[tok] += 1
                     examples.setdefault(tok, rel)
 
@@ -139,14 +145,15 @@ def main():
     env = {**os.environ, "GIT_AUTHOR_NAME": "Anonymous", "GIT_AUTHOR_EMAIL": "anonymous@example.com",
            "GIT_COMMITTER_NAME": "Anonymous", "GIT_COMMITTER_EMAIL": "anonymous@example.com",
            "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"}
-    subprocess.run(["git", "-C", out, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "Initial commit"],
+    subprocess.run(["git", "-C", out, "-c", "commit.gpgsign=false", "-c", "gc.auto=0", "commit", "-q", "-m", "Initial commit"],
                    check=True, env=env)
+    subprocess.run(["git", "-C", out, "gc", "-q", "--prune=now"], check=True)
     packed = subprocess.run(["git", "-C", out, "count-objects", "-v"], capture_output=True, text=True).stdout
-    loose_kb = int(re.search(r"^size: (\d+)", packed, re.M).group(1))
+    pack_kb = int(re.search(r"^size-pack: (\d+)", packed, re.M).group(1))
 
-    print(f"working tree: {total / 2**20:.1f} MB; git objects (uncompressed-ish): {loose_kb / 1024:.1f} MB")
-    print(f"anonymous.4open.science full-download mode needs <= {FULL_MODE_LIMIT // 1000} MB as GitHub reports it"
-          f" ({'likely OK' if loose_kb < FULL_MODE_LIMIT else 'too big: it will stream files instead, or use --slim'})")
+    print(f"working tree: {total / 2**20:.1f} MB; packed git repo: {pack_kb / 1024:.1f} MB")
+    print(f"anonymous.4open.science full-download mode needs <= {FULL_MODE_LIMIT // 1000} MB packed"
+          f" ({'OK' if pack_kb <= FULL_MODE_LIMIT else 'over: it will stream files from GitHub instead'})")
     big = [(n, d) for d, n in folder.items() if n > MAX_FOLDER]
     for n, d in sorted(big, reverse=True):
         print(f"  folder over {MAX_FOLDER} entries (not fully listable there): {d} ({n})")
