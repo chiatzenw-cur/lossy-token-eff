@@ -2,7 +2,7 @@ import pathlib, re, sys, statistics, json
 sys.path.insert(0,"scripts")
 from openai_harmony import load_harmony_encoding, HarmonyEncodingName
 enc=load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
-REPO=pathlib.Path("/home/chiatzen/lossy-token-eff")
+REPO=pathlib.Path(__file__).resolve().parents[2]
 FINAL=re.compile(r"<\|channel\|>final<\|message\|>")
 def tl(s):
     try: return len(enc.encode(s, allowed_special="all"))

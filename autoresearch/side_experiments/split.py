@@ -3,7 +3,7 @@ sys.path.insert(0,"scripts")
 from grade_aime import grade
 from openai_harmony import load_harmony_encoding, HarmonyEncodingName
 enc=load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
-REPO=pathlib.Path("/home/chiatzen/lossy-token-eff")
+REPO=pathlib.Path(__file__).resolve().parents[2]
 pr=REPO/"prompts"/"aime24"
 FINAL=re.compile(r"<\|channel\|>final<\|message\|>")
 def toklen(s):

@@ -1,7 +1,7 @@
 import sys, pathlib, re, json
 sys.path.insert(0,"scripts")
 from grade_aime import grade
-REPO=pathlib.Path("/home/chiatzen/lossy-token-eff")
+REPO=pathlib.Path(__file__).resolve().parents[2]
 pr=REPO/"prompts"/"aime24"
 md=REPO/"autoresearch"/"runs"/"aime24"/"spec_casc_tok"
 from openai_harmony import load_harmony_encoding, HarmonyEncodingName
