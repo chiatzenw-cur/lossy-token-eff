@@ -63,17 +63,21 @@ def grades() -> dict[str, int | None]:
     global _grades
     if _grades is None:
         _grades = {}
-        path = ADD / "analysis" / "grades.csv"
-        if path.is_file():
-            with path.open(newline="", encoding="utf-8") as handle:
-                for r in csv.DictReader(handle):
-                    _grades[r["relpath"]] = int(r["correct"]) if r["correct"] in ("0", "1") else None
+        # steps 8 and 9 grade their own runs into step8/ and step9/grades.csv (scripts/step{8,9}_campaign.py grade); same
+        # format, disjoint keys
+        for path in (ADD / "analysis" / "grades.csv", ADD / "step8" / "grades.csv", ADD / "step9" / "grades.csv",
+                     ADD / "step9" / "grades_lmdraft.csv"):
+            if path.is_file():
+                with path.open(newline="", encoding="utf-8") as handle:
+                    for r in csv.DictReader(handle):
+                        _grades[r["relpath"]] = int(r["correct"]) if r["correct"] in ("0", "1") else None
     return _grades
 
 
-def load_cell(ds: str, method: str, alpha: str, seed: int, run_root: str = "runs") -> dict[str, dict]:
-    """case -> run record (ok runs only) with 'correct' attached (None if not graded)."""
-    root = REPO / run_root / ds / method / params_dir(method, alpha)
+def load_cell(ds: str, method: str, alpha: str, seed: int, run_root: str = "runs", params: str | None = None) -> dict[str, dict]:
+    """case -> run record (ok runs only) with 'correct' attached (None if not graded). `params` overrides the
+    params dir (a second knob, e.g. spec_casc_opt_head's alpha<a>_beta<b>)."""
+    root = REPO / run_root / ds / method / (params or params_dir(method, alpha))
     out = {}
     for run_json in sorted(root.glob(f"case_*/seed_{seed}/run.json")):
         try:
@@ -197,7 +201,10 @@ def run_config(run: dict) -> dict:
 
 def run_node(run: dict) -> str:
     """The node a run ran on, matched by its config.json timestamp to its item's interval in the lane journals
-    ('' when no journal covers it)."""
+    ('' when no journal covers it). Runs from step 8 on record their host in config.json; that wins."""
+    host = run_config(run).get("host")
+    if host:
+        return host
     parts = run["_rel"].split("/")
     if parts[0] == "addendum":  # runs/addendum/<condition>/[<target>/ for step 7]<dataset>/...
         condition, rest = parts[1], parts[3:] if parts[1].startswith("speedbench") else parts[2:]
@@ -421,6 +428,23 @@ def cmd_qwenT(args) -> int:
 def cmd_lmdraft(args) -> int:
     arms = [("strict", "strict"), ("mentored_dec", "0.75"), ("cactus", "0.35"), ("spec_casc_tok", "0.8")]
     arm_table("lmdraft", arms, ["gsm8k_qwen3", "livecodebench_qwen3"])
+    # step 9 (README deviation 46): spec_casc_opt 0.05 and r_fuzzy 0.25 filled in 2026-10-06, against the same lossless
+    # reference; appended with a bootstrap stream of their own so the three step-4.3 rows stay byte-identical
+    rng = np.random.default_rng(RNG_SEED + 1)
+    for ds in ["gsm8k_qwen3", "livecodebench_qwen3"]:
+        path = ADD / "tables" / f"lmdraft__{ds}.csv"
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            fields, rows = list(reader.fieldnames), list(reader)
+        strict = load_cell(ds, "strict", "strict", 0, run_root="runs/addendum/lmdraft")
+        for method, alpha in (("spec_casc_opt", "0.05"), ("r_fuzzy", "0.25")):
+            runs = load_cell(ds, method, alpha, 0, run_root="runs/addendum/lmdraft")
+            if not runs:
+                continue
+            c = compare(runs, strict, rng)
+            rows.append({"condition": "lmdraft", "dataset": ds, "method": method, "alpha": alpha, **c})
+        fields += [k for r in rows for k in r if k not in fields]
+        write_csv(path, rows, list(dict.fromkeys(fields)))
     return 0
 
 
@@ -710,11 +734,153 @@ def cmd_speedbench(args) -> int:
     return 0
 
 
+# ------------------------------------------------------------------ step 8 (campaign/addendum/step8/GOAL.md)
+
+def cmd_step8(args) -> int:
+    """tables/step8__<target>__<drafter>.csv: one row per (target, drafter, rule, setting, dataset), every arm paired
+    with its own pair's lossless reference on the cases both have. Dedicated drafters: the three matched-l_bar settings
+    (low / mid / high = the 20/55/90th-percentile targets of campaign/calibration/<base>_<family>_<drafter>.json);
+    standalone: loosest; fix (block 6): Qwen3-8B + EAGLE-3 against the Killarney Qwen3 lossless reference
+    (runs/addendum/nibiref, README deviation 12)."""
+    import step8_campaign as s8
+    from campaign_run import base_dataset
+    rng = np.random.default_rng(RNG_SEED)
+    label = lambda p: {"target": s8.CANONICAL.get(s8.MODEL_FAMILIES[p["family"]][0], s8.MODEL_FAMILIES[p["family"]][0]),
+                       "drafter": s8.CANONICAL.get(p["drafter"], p["drafter"]), "drafter_family": p["drafter_family"],
+                       "spec_method": p["spec"], "sampler_path": p["sampler"]}
+    for p in s8.PAIRS:
+        root = f"{s8.RUN_SUBROOT}/{p['id']}"
+        rows = []
+        for base in p["datasets"]:
+            ds = base + s8.SUFFIX[p["family"]]
+            if p["kind"] == "fix":
+                strict = load_cell(ds, "strict", "strict", 0, run_root="runs/addendum/nibiref")
+                arms = [(m, a, b, "fix") for m, a, b in p["arms"]]
+            else:
+                strict = load_cell(ds, "strict", "strict", 0, run_root=root)
+                if p["kind"] == "standalone":
+                    arms = [(m, f"{s8.LOOSEST[m]:g}", None, "loosest") for m in FIVE]
+                else:
+                    path = s8.calib_path(p, base)
+                    if not path.is_file():
+                        continue
+                    cal = json.loads(path.read_text(encoding="utf-8"))
+                    targets = cal["targets_l_bar"]
+                    arms = []
+                    for m in FIVE:
+                        # setting = the target(s) this alpha is the nearest grid point to (campaign_run.pick_alphas);
+                        # "extra" = a grid extreme pick_alphas adds when two targets share one alpha
+                        pts = [(g["alpha"], g["mean_l_bar"]) for g in cal["grid_results"][m]]
+                        nearest = [min(pts, key=lambda q: abs(q[1] - t))[0] for t in targets] if pts else []
+                        for a in cal["chosen_alphas"][m]:
+                            names = [n for n, pick in zip(("low", "mid", "high"), nearest) if pick == a]
+                            arms.append((m, f"{float(a):g}", None, "+".join(names) or "extra"))
+            for m, a, b, setting in arms:
+                runs = load_cell(ds, m, a, 0, run_root=root, params=s8.params_dir(m, a, b))
+                c = compare(runs, strict, rng)
+                extra = {}
+                if p["kind"] == "dedicated":
+                    names = [n for n in setting.split("+") if n in ("low", "mid", "high")]
+                    extra["l_bar_target"] = "/".join(f"{targets[['low', 'mid', 'high'].index(n)]:.3f}" for n in names) or None
+                rows.append({**label(p), "dataset": ds, "method": m, "alpha": a, "beta": b or "", "setting": setting,
+                             **extra, **c})
+        if rows:
+            write_csv(ADD / "tables" / f"step8__{s8.TARGET_SLUG[p['family']]}__{p['slug']}.csv", rows)
+    return 0
+
+
+# ------------------------------------------------------------------ step 9 (campaign/addendum/step9/GOAL.md)
+
+def cmd_step9(args) -> int:
+    """tables/step9__<target>__<drafter>.csv: cmd_step8's dedicated-drafter rows for the step-9 datasets of the five
+    dedicated pairs (run root runs/addendum/step9/<pair>, calibration campaign/calibration/<base>_<family>_<drafter>.json),
+    columns exactly those of the pair's step8__ file, in its order. tables/pairs__<target>__<drafter>.csv: the pair's
+    step8__ rows as written, then its step9__ rows, same columns (what the paper script reads)."""
+    import step9_campaign as s9
+    rng = np.random.default_rng(RNG_SEED)
+    label = lambda p: {"target": s9.s8.CANONICAL.get(s9.MODEL_FAMILIES[p["family"]][0], s9.MODEL_FAMILIES[p["family"]][0]),
+                       "drafter": s9.s8.CANONICAL.get(p["drafter"], p["drafter"]), "drafter_family": p["drafter_family"],
+                       "spec_method": p["spec"], "sampler_path": p["sampler"]}
+    for pid in dict.fromkeys(pid for _, pid, _ in s9.BLOCKS):
+        p = s9.PAIRS[pid]
+        root = f"{s9.RUN_SUBROOT}/{pid}"
+        rows = []
+        for block, bpid, base in s9.BLOCKS:
+            if bpid != pid or block in s9.DROPPED:
+                continue
+            ds = s9.ds_of(pid, base)
+            strict = load_cell(ds, "strict", "strict", 0, run_root=root)
+            arms, targets = [], []
+            if s9.KIND[block] == "standalone":  # Phase 2: each rule at its loosest grid alpha (as step 8's standalone rows)
+                arms = [(m, f"{s9.LOOSEST[m]:g}", "loosest") for m in FIVE]
+            else:
+                path = s9.calib_path(pid, base)
+                if not path.is_file():
+                    continue
+                cal = json.loads(path.read_text(encoding="utf-8"))
+                targets = cal["targets_l_bar"]
+                for m in FIVE:
+                    # setting = the target(s) this alpha is the nearest grid point to; "extra" = a grid extreme
+                    # pick_alphas adds when two targets share one alpha (as cmd_step8)
+                    pts = [(g["alpha"], g["mean_l_bar"]) for g in cal["grid_results"][m]]
+                    nearest = [min(pts, key=lambda q: abs(q[1] - t))[0] for t in targets] if pts else []
+                    for a in cal["chosen_alphas"][m]:
+                        names = [n for n, pick in zip(("low", "mid", "high"), nearest) if pick == a]
+                        arms.append((m, f"{float(a):g}", "+".join(names) or "extra"))
+            for m, a, setting in arms:
+                c = compare(load_cell(ds, m, a, 0, run_root=root), strict, rng)
+                if not c.get("n_pairs"):
+                    continue
+                extra = {}
+                if s9.KIND[block] == "dedicated":
+                    names = [n for n in setting.split("+") if n in ("low", "mid", "high")]
+                    extra["l_bar_target"] = "/".join(f"{targets[['low', 'mid', 'high'].index(n)]:.3f}" for n in names) or None
+                rows.append({**label(p), "dataset": ds, "method": m, "alpha": a, "beta": "", "setting": setting,
+                             **extra, **c})
+        slug = f"{s9.s8.TARGET_SLUG[p['family']]}__{p['slug']}"
+        step8_path = ADD / "tables" / f"step8__{slug}.csv"
+        # Qwen3-8B + Qwen3-0.6B has no step-8 table (its earlier rows are the addendum's tables/lmdraft__*, another
+        # schema): its columns are those of the other Qwen3 standalone pair
+        schema_path = step8_path if step8_path.is_file() else ADD / "tables" / "step8__qwen3-8b__qwen3-1.7b.csv"
+        with schema_path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            fields, step8_rows = list(reader.fieldnames), list(reader)
+        if not step8_path.is_file():
+            step8_rows = []
+        if not rows:
+            continue
+        # time_ratio_same_node is a step-8 column that cmd_step8 writes only when some row has >= 10 same-node pairs,
+        # so a step-8 table whose rows never did lacks it (the standalone ones): appended, blank for the step-8 rows
+        if "time_ratio_same_node" not in fields and any("time_ratio_same_node" in r for r in rows):
+            fields.append("time_ratio_same_node")
+        extra = sorted({k for r in rows for k in r} - set(fields))
+        if extra:
+            raise SystemExit(f"step-9 rows of {slug} carry columns the step-8 table lacks: {extra}")
+        write_csv(ADD / "tables" / f"step9__{slug}.csv", rows, fields)
+        write_csv(ADD / "tables" / f"pairs__{slug}.csv", step8_rows + rows, fields)
+    readme = ADD / "tables" / "README.md"
+    text = readme.read_text(encoding="utf-8") if readme.is_file() else "# campaign/addendum/tables\n"
+    lines = {
+        "step9__<target>__<drafter>.csv": "step 9 (step9/GOAL.md): the five dedicated step-8 pairs on their remaining "
+        "datasets (AIME24, LongBench-v2, HumanEval), the step-8 matched-l_bar protocol, one row per (dataset, rule, "
+        "setting) paired with the pair's own lossless run; columns exactly those of the pair's step8__ file. "
+        "(scripts/addendum_tables.py step9)",
+        "pairs__<target>__<drafter>.csv": "step 8 + step 9 of one dedicated pair: the step8__ rows as written, then the "
+        "step9__ rows, same columns. (scripts/addendum_tables.py step9)",
+    }
+    for name, desc in lines.items():
+        if f"- `{name}`:" not in text:
+            text = text.rstrip("\n") + f"\n- `{name}`: {desc}\n"
+    readme.write_text(text, encoding="utf-8")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name, fn in (("seeds", cmd_seeds), ("nspec", cmd_nspec), ("temp", cmd_temp), ("qwenT", cmd_qwenT),
-                     ("lmdraft", cmd_lmdraft), ("aime", cmd_aime), ("speedbench", cmd_speedbench)):
+                     ("lmdraft", cmd_lmdraft), ("aime", cmd_aime), ("speedbench", cmd_speedbench),
+                     ("step8", cmd_step8), ("step9", cmd_step9)):
         sub.add_parser(name).set_defaults(fn=fn)
     p = sub.add_parser("best")
     p.add_argument("--plan", action="store_true")

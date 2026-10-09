@@ -594,6 +594,11 @@ def run_one(
 
     config = {
         "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        # the node this request ran on (time per round depends on it) and, under persistent_arm_replay.py, when
+        # its arm's server started (campaign/addendum/README.md deviation 30)
+        "host": os.uname().nodename,
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "server_started_utc": os.environ.get("LOSSY_SERVER_STARTED_UTC"),
         "backend": "vllm",
         "tag": tag,
         **provenance["acceptance"],

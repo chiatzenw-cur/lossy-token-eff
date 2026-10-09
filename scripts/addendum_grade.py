@@ -28,6 +28,7 @@ import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from campaign_run import base_dataset  # noqa: E402  (stdlib-only module)
 
 # Mirrors scripts/campaign_report.py GRADERS (kept literal here so importing
 # this module does not pull in matplotlib).
@@ -61,7 +62,7 @@ def grade_one(args: tuple[str, str]) -> dict:
     run_dir = pathlib.Path(runs_root) / rel
     parts = pathlib.Path(rel).parts  # [..., dataset, method, params, case, seed_N]
     dataset, method, params, case, seed_dir = parts[-5:]
-    base = dataset.removesuffix("_qwen3")
+    base = base_dataset(dataset)
     row = {"relpath": rel, "dataset": dataset, "method": method, "params": params, "case": case,
            "seed": seed_dir.removeprefix("seed_"), "verdict": "", "correct": ""}
     if base not in GRADERS:

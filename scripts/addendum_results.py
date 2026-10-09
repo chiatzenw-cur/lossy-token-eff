@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import csv
 import datetime as dt
+import json
 import pathlib
+import sys
 from collections import Counter, defaultdict
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -385,6 +387,154 @@ def section_tables(title: str, pattern: str) -> list[str]:
     return out
 
 
+STEP8_BLOCKS = {
+    "1": "Block 1: DeepSeek-R1-Distill-Llama-8B + EAGLE-3 (yuhuili), matched-l_bar protocol",
+    "2": "Block 2: Llama-3.1-8B-Instruct: EAGLE-3, EAGLE-1 (matched l_bar) and Llama-3.2-1B standalone (loosest)",
+    "3": "Block 3: Qwen3-8B: DSpark (matched l_bar) and Qwen3-1.7B standalone (loosest)",
+    "4": "Block 4: GPT-OSS-20B + RedHatAI EAGLE-3, matched-l_bar protocol",
+    "5": "Block 5: DeepSeek-R1-Distill-Llama-8B + Llama-3.2-1B standalone (loosest)",
+    "6": "Block 6: the fix (head-restricted relaxation) on Qwen3-8B; GPT-OSS-20B re-export",
+    "7": "Block 7 (optional): Qwen3-8B + RedHatAI P-EAGLE (parallel drafting), loosest",
+}
+
+
+def arm_table(t: list[dict]) -> list[str]:
+    """The step-8 arm table (one row per dataset, rule, setting of a tables/step{8,9}__ file)."""
+    out = ["| dataset | rule | setting | alpha | n | l_bar (lossless) | tokens (lossless) | lambda [95%] | "
+           "R [95%] | T | cap-out (lossless) | acc (lossless) | nodes |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for r in t:
+        alpha = r["alpha"] + (f", beta {r['beta']}" if r.get("beta") else "")
+        out.append(
+            f"| {r['dataset']} | {r['method']} | {r['setting']} | {alpha} | {r['n_pairs']} | "
+            f"{f(r['l_bar'])} ({f(r['l_bar_strict'])}) | {f(r['mean_tokens'], 0)} ({f(r['mean_tokens_strict'], 0)}) | "
+            f"{f(r['lambda'])} [{f(r['lambda_ci_lo'])}, {f(r['lambda_ci_hi'])}]{arrow(r['lambda_ci_lo'], r['lambda_ci_hi'])} | "
+            f"{f(r['rounds_ratio'])} [{f(r['rounds_ratio_ci_lo'])}, {f(r['rounds_ratio_ci_hi'])}]"
+            f"{arrow(r['rounds_ratio_ci_lo'], r['rounds_ratio_ci_hi'])} | {f(r['time_ratio'])}{same_node_note(r)} | "
+            f"{pct(r['capout_rate'])} ({pct(r['capout_rate_strict'])}) | "
+            f"{pct(r['accuracy']) if r.get('accuracy') else '-'} ({pct(r['accuracy_strict']) if r.get('accuracy_strict') else '-'}) | "
+            f"{r.get('nodes', '')} |")
+    return out
+
+
+def step8_gpu_hours() -> dict[str, float]:
+    """Actual GPU-h per block: item wall time from the step-8 lane journals (campaign/addendum/step8/lanes/), by the
+    pair named in each item id (s8|<pair>|...), plus warm-up items (by pair)."""
+    sys.path.insert(0, str(REPO / "scripts"))
+    import step8_campaign as s8
+    block_of = {p["id"]: p["block"] for p in s8.PAIRS}
+    hours: dict[str, float] = {}
+    for path in sorted((ADD / "step8" / "lanes").glob("*_status.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("event") != "item_end":
+                continue
+            parts = str(r.get("item", "")).split("|")
+            pid = parts[1] if len(parts) > 1 and parts[0] in ("s8", "warm") else None
+            if pid in block_of:
+                hours[block_of[pid]] = hours.get(block_of[pid], 0.0) + float(r.get("elapsed_s") or 0) / 3600
+    return hours
+
+
+def section_step8() -> list[str]:
+    """Step 8 (campaign/addendum/step8/GOAL.md): one subsection per block from tables/step8__<target>__<drafter>.csv
+    (scripts/addendum_tables.py step8)."""
+    sys.path.insert(0, str(REPO / "scripts"))
+    import step8_campaign as s8
+    out = ["## Step 8: more drafters, the Llama-3.1-8B family, the fix on Qwen3-8B", "",
+           "Seed 0, N_draft 6, T 1.0, top-p 1.0, the paper's budgets; one persistent server per arm (README deviation "
+           "30); every arm paired case by case with its own pair's lossless run. Ratios: lambda (completion tokens), R "
+           "(draft rounds), T (wall time), relaxed / lossless, with 95% bootstrap intervals over cases (arrows: interval "
+           "excludes 1). Accuracy: the campaign's graders (MT-Bench: none). `sampler_path`: V2 = vLLM's V2 runner, whose "
+           "sampler is accept-test-only for cactus and spec_casc_tok; V1 = full patches. Block 0: `step8/BLOCK0.md`.", ""]
+    hours = step8_gpu_hours()
+    for block, title in STEP8_BLOCKS.items():
+        out += [f"### {title}", "", f"GPU-h actual (lane journals): {hours.get(block, 0.0):.1f}.", ""]
+        found = False
+        for p in s8.PAIRS:
+            if p["block"] != block:
+                continue
+            path = ADD / "tables" / f"step8__{s8.TARGET_SLUG[p['family']]}__{p['slug']}.csv"
+            t = [r for r in rows(path) if r.get("n_pairs") not in ("", "0")] if path.is_file() else []
+            if not t:
+                continue
+            found = True
+            out += [f"`{rel(path)}` -- {t[0]['target']} + {t[0]['drafter']} ({t[0]['drafter_family']}, "
+                    f"{t[0]['sampler_path']}):", ""] + arm_table(t)
+            out.append("")
+        if block == "6":
+            out += section_tables("GPT-OSS-20B fix results re-exported (cascade workspace, 3 seeds on Nibi):",
+                                  "fix__gpt-oss-20b.csv")[2:]
+            found = True
+        if not found:
+            out += ["Pending.", ""]
+    return out
+
+
+def step9_gpu_hours() -> dict[str, float]:
+    """Actual GPU-h per step-9 block: item wall time (item_end elapsed_s) from the step-9 lane journals
+    (campaign/addendum/step9/lanes/), by the (pair, dataset) in each item id s9|<pair>|<dataset>|..., as step 8."""
+    sys.path.insert(0, str(REPO / "scripts"))
+    import step9_campaign as s9
+    from campaign_run import base_dataset
+    hours: dict[str, float] = {}
+    for path in sorted((ADD / "step9" / "lanes").glob("*_status.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            parts = str(r.get("item", "")).split("|")
+            if r.get("event") != "item_end" or parts[0] != "s9" or len(parts) < 3:
+                continue
+            block = s9.BLOCK_OF.get((parts[1], base_dataset(parts[2])))
+            if block:
+                hours[block] = hours.get(block, 0.0) + float(r.get("elapsed_s") or 0) / 3600
+    return hours
+
+
+def section_step9() -> list[str]:
+    """Step 9 (campaign/addendum/step9/GOAL.md): one subsection per (pair, dataset) block, in Bill's order, from
+    tables/step9__<target>__<drafter>.csv (scripts/addendum_tables.py step9)."""
+    sys.path.insert(0, str(REPO / "scripts"))
+    import step9_campaign as s9
+    out = ["## Step 9: the five rules on every dataset for the five dedicated step-8 pairs", "",
+           "The step-8 protocol on AIME24, LongBench-v2 and HumanEval (the paper's budgets and case sets): seed 0, "
+           "N_draft 6, T 1.0, top-p 1.0, one persistent server per arm, every arm paired case by case with its own "
+           "pair's lossless run; three matched-l_bar settings per rule plus the grid extremes when two targets share an "
+           "alpha (\"extra\"). Ratios relaxed / lossless with 95% bootstrap intervals over cases (arrows: interval "
+           "excludes 1). Each block ran whole on one cluster (H100 80GB HBM3 on both; README deviation 42). Block 0: "
+           "`step9/BLOCK0.md`. Step 8 + step 9 per pair: `tables/pairs__<target>__<drafter>.csv`.", ""]
+    hours = s9_hours = step9_gpu_hours()
+    phase2 = bool(s9.load_state().get("phase2"))
+    for block, pid, base in s9.BLOCKS:
+        if block == s9.PHASE2[0]:
+            out += ["### Phase 2: standalone drafters at each rule's loosest alpha", ""]
+            if not phase2:
+                out += ["Not started (GOAL.md: only if Phase 1 ends before 2026-10-08 18:00 ET).", ""]
+                break
+        p = s9.PAIRS[pid]
+        title = (f"### Block {block}: {s9.s8.CANONICAL.get(s9.MODEL_FAMILIES[p['family']][0], s9.MODEL_FAMILIES[p['family']][0])}"
+                 f" + {s9.s8.CANONICAL.get(p['drafter'], p['drafter'])}, {base} ({s9.block_host(block)})")
+        if block in s9.DROPPED:
+            out += [title, "", f"Dropped: {s9.DROPPED[block]}.", ""]
+            continue
+        out += [title, "", f"GPU-h actual (lane journals): {hours.get(block, 0.0):.1f}.", ""]
+        path = ADD / "tables" / f"step9__{s9.s8.TARGET_SLUG[p['family']]}__{p['slug']}.csv"
+        ds = s9.ds_of(pid, base)
+        t = [r for r in rows(path) if r.get("dataset") == ds and r.get("n_pairs") not in ("", "0")] if path.is_file() else []
+        if not t:
+            out += ["Pending.", ""]
+            continue
+        out += [f"`{rel(path)}` ({t[0]['drafter_family']}, {t[0]['sampler_path']}):", ""] + arm_table(t) + [""]
+    total = sum(s9_hours.values())
+    out += [f"Step 9 GPU-h so far (lane journals): {total:.1f} over {sum(1 for h in s9_hours.values() if h)} blocks.", ""]
+    return out
+
+
 def main() -> int:
     lines = ["# NAACL-2027 addendum: results", "",
              f"Generated {dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} by `scripts/addendum_results.py` "
@@ -401,6 +551,8 @@ def main() -> int:
     lines += section_best()
     lines += section_aime()
     lines += section_speedbench()
+    lines += section_step8()
+    lines += section_step9()
     notes = ADD / "RESULTS_notes.md"
     lines += ["## Observations, failures and anything that looked wrong", ""]
     lines += [notes.read_text(encoding="utf-8").strip() if notes.is_file() else "(none yet)", ""]

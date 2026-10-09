@@ -116,13 +116,33 @@ QWEN3_ROPE_SCALING = '{"rope_type":"yarn","factor":1.6,"original_max_position_em
 MODEL_FAMILIES: dict[str, tuple[str, str, str, str]] = {
     "gpt_oss_20b": ("openai/gpt-oss-20b", "nebius/EAGLE3-gpt-oss-20b", "gpt-oss-20b", ""),
     "qwen3": ("Qwen/Qwen3-8B", "RedHatAI/Qwen3-8B-speculator.eagle3", "qwen3-8b", QWEN3_ROPE_SCALING),
+    # Step 8 (campaign/addendum/step8/GOAL.md): the Llama-3.1-8B family, prompts/<dataset>_llama31 and
+    # prompts/<dataset>_r1llama (scripts/build_prompts_qwen3.py --chat-format). Native 128k context, so no
+    # rope override at MAX_MODEL_LEN 65536. meta-llama/Llama-3.1-8B-Instruct is gated; RedHatAI's mirror has
+    # every non-weight file blob-identical to Meta's (incl. the current chat template) and the same weight
+    # sha256s as two independent copies (campaign/addendum/README.md deviation 29). The drafter here is each
+    # family's EAGLE-3 head; the step-8 rows pass their other drafters explicitly.
+    "llama31": ("RedHatAI/Llama-3.1-8B-Instruct", "yuhuili/EAGLE3-LLaMA3.1-Instruct-8B", "llama31-8b-instruct", ""),
+    "r1llama": ("deepseek-ai/DeepSeek-R1-Distill-Llama-8B", "yuhuili/EAGLE3-DeepSeek-R1-Distill-LLaMA-8B", "r1-distill-llama-8b", ""),
 }
+FAMILY_SUFFIXES = {"_qwen3": "qwen3", "_llama31": "llama31", "_r1llama": "r1llama"}
+TOKEN_BUDGETS.update({f"{name}{suffix}": budget for name, budget in list(TOKEN_BUDGETS.items())
+                      if not name.endswith("_qwen3") for suffix in ("_llama31", "_r1llama")})
+
+
+def base_dataset(dataset: str) -> str:
+    """gsm8k_qwen3 / gsm8k_llama31 / gsm8k_r1llama -> gsm8k (the grader and token-budget key)."""
+    for suffix in FAMILY_SUFFIXES:
+        if dataset.endswith(suffix):
+            return dataset.removesuffix(suffix)
+    return dataset
 
 
 def model_family_for(dataset: str) -> tuple[str, str, str, str]:
     """(model_path, draft_model_path, served_model_name, rope_scaling_json) for this dataset name."""
-    if dataset.endswith("_qwen3"):
-        return MODEL_FAMILIES["qwen3"]
+    for suffix, family in FAMILY_SUFFIXES.items():
+        if dataset.endswith(suffix):
+            return MODEL_FAMILIES[family]
     return MODEL_FAMILIES["gpt_oss_20b"]
 
 

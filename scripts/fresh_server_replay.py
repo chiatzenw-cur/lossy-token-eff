@@ -554,7 +554,8 @@ def request_once(
         "--draft-model", args.draft_model_path,
     ]
     if arm not in ("baseline", "strict"):
-        command += ["--lossy-method", arm, "--alpha", f"{alpha_for(args, arm):g}"]
+        # "=" form: a separate "-inf" argument is taken for an option by argparse (the strict point of four rules)
+        command += ["--lossy-method", arm, f"--alpha={alpha_for(args, arm):g}"]
     if args.top_k is not None:
         command += ["--top-k", str(args.top_k)]
     if args.overwrite:

@@ -1020,3 +1020,564 @@ for what is done; this file records every action and failure.
 - 2026-10-02T17:13:10Z grading: uploaded 0 run dir(s) to the Nibi mirror, submitted CPU grading job 23143323
 - 2026-10-02T17:13:12Z grading: pulled 46342 verdicts into campaign/addendum/analysis/grades.csv
 - 2026-10-02T23:13:21Z Bill dropped the SPEED-Bench HLE prompts (not essential): the 14 step-7 rows stay blocked with that reason (README deviation 21). Campaign closed: 278 done, 14 blocked.
+- 2026-10-03T17:29:31Z step 8: pulled 28 run dir(s)
+- 2026-10-03T18:30:39Z step 8: pulled 14 run dir(s)
+- 2026-10-03T19:31:48Z step 8: pulled 16 run dir(s)
+- 2026-10-03T20:33:35Z step 8: warm-up job 5915423 on killarney (8 pair caches)
+- 2026-10-03T20:33:38Z step 8: warm-up job 23211714 on nibi (1 pair caches)
+- 2026-10-03T20:33:43Z step 8 lane K1: submitted job 5915424, ~7.0 GPU-h assigned
+- 2026-10-03T20:33:44Z step 8 lane K1: submitted job 5915425 (afterany:5915424), ~7.0 GPU-h assigned
+- 2026-10-03T20:33:46Z step 8 lane K1: submitted job 5915426 (afterany:5915425), ~7.0 GPU-h assigned
+- 2026-10-03T20:33:47Z step 8 lane K2: submitted job 5915427, ~7.0 GPU-h assigned
+- 2026-10-03T20:33:49Z step 8 lane K2: submitted job 5915428 (afterany:5915427), ~7.0 GPU-h assigned
+- 2026-10-03T20:33:50Z step 8 lane K2: submitted job 5915429 (afterany:5915428), ~7.0 GPU-h assigned
+- 2026-10-03T20:33:52Z step 8 lane K3: submitted job 5915430, ~7.0 GPU-h assigned
+- 2026-10-03T20:33:53Z step 8 lane K3: submitted job 5915432 (afterany:5915430), ~7.0 GPU-h assigned
+- 2026-10-03T20:33:54Z step 8 lane K3: submitted job 5915433 (afterany:5915432), ~7.0 GPU-h assigned
+- 2026-10-03T20:33:56Z step 8 lane K4: submitted job 5915434, ~6.9 GPU-h assigned
+- 2026-10-03T20:33:57Z step 8 lane K4: submitted job 5915435 (afterany:5915434), ~6.9 GPU-h assigned
+- 2026-10-03T20:33:58Z step 8 lane K4: submitted job 5915436 (afterany:5915435), ~6.9 GPU-h assigned
+- 2026-10-03T20:34:00Z step 8 lane K5: submitted job 5915437, ~6.9 GPU-h assigned
+- 2026-10-03T20:34:03Z step 8 lane K5: submitted job 5915438 (afterany:5915437), ~6.9 GPU-h assigned
+- 2026-10-03T20:34:05Z step 8 lane K5: submitted job 5915440 (afterany:5915438), ~6.9 GPU-h assigned
+- 2026-10-03T20:34:07Z step 8 lane K6: submitted job 5915441, ~7.0 GPU-h assigned
+- 2026-10-03T20:34:09Z step 8 lane K6: submitted job 5915442 (afterany:5915441), ~7.0 GPU-h assigned
+- 2026-10-03T20:34:10Z step 8 lane K6: submitted job 5915443 (afterany:5915442), ~7.0 GPU-h assigned
+- 2026-10-03T20:34:11Z step 8 lane K7: submitted job 5915444, ~7.0 GPU-h assigned
+- 2026-10-03T20:34:13Z step 8 lane K7: submitted job 5915445 (afterany:5915444), ~7.0 GPU-h assigned
+- 2026-10-03T20:34:14Z step 8 lane K7: submitted job 5915446 (afterany:5915445), ~7.0 GPU-h assigned
+- 2026-10-03T20:34:16Z step 8 lane K8: submitted job 5915448, ~7.0 GPU-h assigned
+- 2026-10-03T20:34:17Z step 8 lane K8: submitted job 5915449 (afterany:5915448), ~7.0 GPU-h assigned
+- 2026-10-03T20:34:19Z step 8 lane K8: submitted job 5915450 (afterany:5915449), ~7.0 GPU-h assigned
+- 2026-10-03T20:34:20Z step 8 lane A: submitted job 23211736, ~2.9 GPU-h assigned
+- 2026-10-03T20:34:22Z step 8 lane A: submitted job 23211737 (afterany:23211736), ~2.9 GPU-h assigned
+- 2026-10-03T20:34:25Z step 8 lane B: submitted job 23211740, ~2.9 GPU-h assigned
+- 2026-10-03T20:34:28Z step 8 lane B: submitted job 23211747 (afterany:23211740), ~2.9 GPU-h assigned
+- 2026-10-03T20:45:36Z step 8: warm-up job 5915590 on killarney (1 pair caches)
+- 2026-10-03T20:55:07Z step 8: pulled 15 run dir(s)
+- 2026-10-03T20:55:14Z step 8 lane K1: submitted job 5915646 (afterany:5915426), ~7.6 GPU-h assigned
+- 2026-10-03T20:55:15Z step 8 lane K2: submitted job 5915647 (afterany:5915429), ~7.6 GPU-h assigned
+- 2026-10-03T20:55:16Z step 8 lane K3: submitted job 5915648 (afterany:5915433), ~7.7 GPU-h assigned
+- 2026-10-03T20:55:20Z step 8 lane K4: submitted job 5915650 (afterany:5915436), ~7.6 GPU-h assigned
+- 2026-10-03T20:55:22Z step 8 lane K5: submitted job 5915651 (afterany:5915440), ~7.7 GPU-h assigned
+- 2026-10-03T20:55:24Z step 8 lane K6: submitted job 5915652 (afterany:5915443), ~7.7 GPU-h assigned
+- 2026-10-03T20:55:26Z step 8 lane K7: submitted job 5915653 (afterany:5915446), ~7.7 GPU-h assigned
+- 2026-10-03T20:55:27Z step 8 lane K8: submitted job 5915654 (afterany:5915450), ~7.7 GPU-h assigned
+- 2026-10-03T20:55:33Z step 8 grading: 15 new run dir(s) uploaded, 15 pending, CPU job 23211914
+- 2026-10-03T21:41:17Z step 8: pulled 133 run dir(s)
+- 2026-10-03T21:41:17Z step 8: calibrated r1-distill-llama-8b__eagle3 gsm8k_r1llama: targets [3.032, 3.648, 4.265], mentored_dec [0.15, 0.75], cactus [0.03, 0.08, 0.35], spec_casc_opt [-0.3, -0.02, 0.05], r_fuzzy [0.08, 0.15, 0.25], spec_casc_tok [0.8, 0.15]
+- 2026-10-03T21:41:30Z step 8 grading: 104 new run dir(s) uploaded, 104 pending, CPU job 23212394
+- 2026-10-03T21:56:55Z step 8: pulled 42 run dir(s)
+- 2026-10-03T21:56:55Z step 8: calibrated r1-distill-llama-8b__eagle3 livecodebench_r1llama: targets [1.193, 2.474, 3.755], mentored_dec [0.75, 0.15], cactus [0.03, 0.18, 0.35], spec_casc_opt [0.05, -0.3], r_fuzzy [0.25, 0.03], spec_casc_tok [0.55, 0.15, 0.8]
+- 2026-10-03T21:57:06Z step 8 grading: 20 new run dir(s) uploaded, 20 pending, CPU job 23212465
+- 2026-10-03T22:27:01Z step 8: pulled 90 run dir(s)
+- 2026-10-03T22:27:01Z step 8: calibrated r1-distill-llama-8b__eagle3 mtbench_r1llama: targets [2.222, 3.228, 4.234], mentored_dec [0.35, 0.75, 0.15], cactus [0.03, 0.08, 0.35], spec_casc_opt [-0.1, 0.05, -0.3], r_fuzzy [0.25, 0.03], spec_casc_tok [0.8, 0.15]
+- 2026-10-03T22:27:26Z step 8 grading: 78 new run dir(s) uploaded, 78 pending, CPU job 23213035
+- 2026-10-04T00:32:04Z step 8: pulled 365 run dir(s)
+- 2026-10-04T00:32:04Z step 8: calibrated r1-distill-llama-8b__eagle3 aime24_r1llama: targets [1.195, 2.335, 3.475], mentored_dec [0.35, 0.15, 0.75], cactus [0.03, 0.18, 0.35], spec_casc_opt [-0.1, 0.05, -0.3], r_fuzzy [0.03, 0.25], spec_casc_tok [0.55, 0.15, 0.8]
+- 2026-10-04T00:32:04Z step 8: calibrated llama31-8b-instruct__eagle3 gsm8k_llama31: targets [1.524, 2.753, 3.982], mentored_dec [0.35, 0.55, 0.75], cactus [0.03, 0.18, 0.35], spec_casc_opt [-0.1, -0.02, 0.05], r_fuzzy [0.15, 0.03, 0.25], spec_casc_tok [0.15, 0.8]
+- 2026-10-04T00:32:04Z step 8: calibrated llama31-8b-instruct__eagle3 livecodebench_llama31: targets [1.415, 2.944, 4.473], mentored_dec [0.75, 0.35, 0.15], cactus [0.03, 0.08, 0.35], spec_casc_opt [-0.3, -0.02, 0.05], r_fuzzy [0.08, 0.03, 0.25], spec_casc_tok [0.35, 0.8, 0.15]
+- 2026-10-04T00:32:04Z step 8: calibrated llama31-8b-instruct__eagle3 mtbench_llama31: targets [1.901, 3.286, 4.67], mentored_dec [0.15, 0.75], cactus [0.03, 0.18, 0.35], spec_casc_opt [-0.3, 0.05], r_fuzzy [0.15, 0.03, 0.25], spec_casc_tok [0.55, 0.8, 0.15]
+- 2026-10-04T00:32:04Z step 8: calibrated llama31-8b-instruct__eagle1 gsm8k_llama31: targets [1.57, 2.246, 2.921], mentored_dec [0.55, 0.75, 0.15], cactus [0.03, 0.08, 0.35], spec_casc_opt [-0.3, 0.05, -0.02], r_fuzzy [0.15, 0.25, 0.03], spec_casc_tok [0.55, 0.8, 0.15]
+- 2026-10-04T00:32:27Z step 8 lane K1: submitted job 5918875 (afterany:5915646), ~11.0 GPU-h assigned
+- 2026-10-04T00:32:29Z step 8 lane K2: submitted job 5918877 (afterany:5915647), ~11.0 GPU-h assigned
+- 2026-10-04T00:32:31Z step 8 lane K3: submitted job 5918878 (afterany:5915648), ~11.0 GPU-h assigned
+- 2026-10-04T00:32:33Z step 8 lane K4: submitted job 5918879 (afterany:5915650), ~11.0 GPU-h assigned
+- 2026-10-04T00:32:34Z step 8 lane K5: submitted job 5918880 (afterany:5915651), ~11.0 GPU-h assigned
+- 2026-10-04T00:32:36Z step 8 lane K6: submitted job 5918885 (afterany:5915652), ~10.9 GPU-h assigned
+- 2026-10-04T00:32:38Z step 8 lane K7: submitted job 5918886 (afterany:5915653), ~11.1 GPU-h assigned
+- 2026-10-04T00:32:40Z step 8 lane K8: submitted job 5918888 (afterany:5915654), ~11.0 GPU-h assigned
+- 2026-10-04T00:32:55Z step 8 grading: 263 new run dir(s) uploaded, 263 pending, CPU job 23215968
+- 2026-10-04T00:43:47Z step 8: pulled 33 run dir(s)
+- 2026-10-04T00:44:08Z step 8 grading: 12 new run dir(s) uploaded, 12 pending, CPU job 23216035
+- 2026-10-04T01:50:08Z step 8: pulled 656 run dir(s)
+- 2026-10-04T01:50:08Z step 8: calibrated llama31-8b-instruct__eagle1 livecodebench_llama31: targets [1.482, 2.33, 3.178], mentored_dec [0.35, 0.75, 0.15], cactus [0.08, 0.03, 0.35], spec_casc_opt [-0.3, 0.05], r_fuzzy [0.15, 0.03, 0.25], spec_casc_tok [0.35, 0.15, 0.8]
+- 2026-10-04T01:50:08Z step 8: calibrated llama31-8b-instruct__eagle1 mtbench_llama31: targets [1.406, 2.172, 2.938], mentored_dec [0.75, 0.15], cactus [0.03, 0.08, 0.35], spec_casc_opt [-0.3, -0.1, 0.05], r_fuzzy [0.25, 0.03], spec_casc_tok [0.35, 0.15, 0.8]
+- 2026-10-04T01:50:08Z step 8: calibrated qwen3-8b__dspark gsm8k_qwen3: targets [2.805, 3.246, 3.687], mentored_dec [0.35, 0.75, 0.15], cactus [0.03, 0.35], spec_casc_opt [-0.3, -0.1, 0.05], r_fuzzy [0.08, 0.25, 0.03], spec_casc_tok [0.8, 0.15]
+- 2026-10-04T01:50:34Z step 8 grading: 590 new run dir(s) uploaded, 590 pending, CPU job 23216368
+- 2026-10-04T02:01:22Z step 8: pulled 577 run dir(s)
+- 2026-10-04T02:01:22Z step 8: calibrated qwen3-8b__dspark livecodebench_qwen3: targets [2.861, 2.882, 2.904], mentored_dec [0.35, 0.55, 0.15], cactus [0.08, 0.03, 0.35], spec_casc_opt [-0.3, 0.05], r_fuzzy [0.15, 0.03, 0.25], spec_casc_tok [0.8, 0.15]
+- 2026-10-04T02:02:52Z step 8 grading: 571 new run dir(s) uploaded, 571 pending, CPU job 23216437
+- 2026-10-04T02:13:25Z step 8: pulled 219 run dir(s)
+- 2026-10-04T02:13:25Z step 8: calibrated qwen3-8b__dspark mtbench_qwen3: targets [2.034, 2.635, 3.237], mentored_dec [0.55, 0.75, 0.15], cactus [0.08, 0.35, 0.03], spec_casc_opt [-0.3, -0.1, 0.05], r_fuzzy [0.15, 0.25, 0.03], spec_casc_tok [0.8, 0.15]
+- 2026-10-04T02:17:13Z step 8 grading: 210 new run dir(s) uploaded, 210 pending, CPU job 23216551
+- 2026-10-04T02:31:20Z step 8: pulled 313 run dir(s)
+- 2026-10-04T02:31:21Z step 8: calibrated gpt-oss-20b__rh-eagle3 gsm8k: targets [2.477, 3.326, 4.175], mentored_dec [0.35, 0.75, 0.15], cactus [0.03, 0.35], spec_casc_opt [-0.1, 0.05, -0.3], r_fuzzy [0.15, 0.25, 0.03], spec_casc_tok [0.55, 0.15, 0.8]
+- 2026-10-04T02:31:49Z step 8 grading: 286 new run dir(s) uploaded, 286 pending, CPU job 23216627
+- 2026-10-04T02:42:20Z step 8: pulled 533 run dir(s)
+- 2026-10-04T02:42:21Z step 8: calibrated gpt-oss-20b__rh-eagle3 livecodebench: targets [2.025, 3.291, 4.556], mentored_dec [0.55, 0.75, 0.15], cactus [0.03, 0.08, 0.18], spec_casc_opt [-0.02, -0.3, 0.05], r_fuzzy [0.08, 0.03, 0.25], spec_casc_tok [0.55, 0.15, 0.8]
+- 2026-10-04T02:42:21Z step 8: calibrated gpt-oss-20b__rh-eagle3 mtbench: targets [2.316, 3.683, 5.051], mentored_dec [0.35, 0.75, 0.15], cactus [0.03, 0.18, 0.35], spec_casc_opt [-0.02, 0.05, -0.3], r_fuzzy [0.08, 0.25, 0.03], spec_casc_tok [0.8, 0.15]
+- 2026-10-04T02:42:47Z step 8 grading: 527 new run dir(s) uploaded, 527 pending, CPU job 23216699
+- 2026-10-04T03:01:25Z step 8: pulled 406 run dir(s)
+- 2026-10-04T03:01:35Z step 8 lane K1: submitted job 5920139 (afterany:5918875), ~13.9 GPU-h assigned
+- 2026-10-04T03:01:36Z step 8 lane K2: submitted job 5920140 (afterany:5918877), ~13.8 GPU-h assigned
+- 2026-10-04T03:01:38Z step 8 lane K3: submitted job 5920141 (afterany:5918878), ~13.8 GPU-h assigned
+- 2026-10-04T03:01:39Z step 8 lane K4: submitted job 5920142 (afterany:5918879), ~13.8 GPU-h assigned
+- 2026-10-04T03:01:41Z step 8 lane K5: submitted job 5920143 (afterany:5918880), ~14.0 GPU-h assigned
+- 2026-10-04T03:01:42Z step 8 lane K6: submitted job 5920144 (afterany:5918885), ~13.9 GPU-h assigned
+- 2026-10-04T03:01:44Z step 8 lane K7: submitted job 5920145 (afterany:5918886), ~14.0 GPU-h assigned
+- 2026-10-04T03:01:46Z step 8 lane K8: submitted job 5920146 (afterany:5918888), ~13.8 GPU-h assigned
+- 2026-10-04T03:02:07Z step 8 grading: 406 new run dir(s) uploaded, 406 pending, CPU job 23216838
+- 2026-10-04T03:12:30Z step 8: pulled 132 run dir(s)
+- 2026-10-04T03:12:45Z step 8 grading: 128 new run dir(s) uploaded, 128 pending, CPU job 23216986
+- 2026-10-04T03:31:42Z step 8: pulled 416 run dir(s)
+- 2026-10-04T03:32:02Z step 8 grading: 179 new run dir(s) uploaded, 179 pending, CPU job 23217083
+- 2026-10-04T03:42:30Z step 8: pulled 296 run dir(s)
+- 2026-10-04T03:42:47Z step 8 grading: 75 new run dir(s) uploaded, 75 pending, CPU job 23217143
+- 2026-10-04T04:01:34Z step 8: pulled 367 run dir(s)
+- 2026-10-04T04:01:55Z step 8 grading: 138 new run dir(s) uploaded, 138 pending, CPU job 23217327
+- 2026-10-04T04:12:16Z step 8: pulled 214 run dir(s)
+- 2026-10-04T04:12:30Z step 8 grading: 75 new run dir(s) uploaded, 75 pending, CPU job 23217515
+- 2026-10-04T04:31:30Z step 8: pulled 358 run dir(s)
+- 2026-10-04T04:31:49Z step 8 grading: 194 new run dir(s) uploaded, 194 pending, CPU job 23217670
+- 2026-10-04T04:42:14Z step 8: pulled 335 run dir(s)
+- 2026-10-04T04:42:35Z step 8 grading: 328 new run dir(s) uploaded, 328 pending, CPU job 23217731
+- 2026-10-04T05:01:49Z step 8: pulled 393 run dir(s)
+- 2026-10-04T05:02:19Z step 8 grading: 393 new run dir(s) uploaded, 393 pending, CPU job 23217919
+- 2026-10-04T05:12:49Z step 8: pulled 201 run dir(s)
+- 2026-10-04T05:13:08Z step 8 grading: 201 new run dir(s) uploaded, 201 pending, CPU job 23218147
+- 2026-10-04T05:31:51Z step 8: pulled 966 run dir(s)
+- 2026-10-04T05:32:23Z step 8 grading: 814 new run dir(s) uploaded, 814 pending, CPU job 23218373
+- 2026-10-04T05:42:56Z step 8: pulled 644 run dir(s)
+- 2026-10-04T05:43:20Z step 8 grading: 423 new run dir(s) uploaded, 423 pending, CPU job 23218457
+- 2026-10-04T06:01:52Z step 8: pulled 1266 run dir(s)
+- 2026-10-04T06:02:03Z step 8 lane K1: submitted job 5923721 (afterany:5920139), ~10.8 GPU-h assigned
+- 2026-10-04T06:02:06Z step 8 lane K2: submitted job 5923722 (afterany:5920140), ~9.9 GPU-h assigned
+- 2026-10-04T06:02:08Z step 8 lane K3: submitted job 5923724 (afterany:5920141), ~9.6 GPU-h assigned
+- 2026-10-04T06:02:10Z step 8 lane K4: submitted job 5923725 (afterany:5920142), ~9.9 GPU-h assigned
+- 2026-10-04T06:02:12Z step 8 lane K5: submitted job 5923726 (afterany:5920143), ~10.4 GPU-h assigned
+- 2026-10-04T06:02:14Z step 8 lane K6: submitted job 5923728 (afterany:5920144), ~9.3 GPU-h assigned
+- 2026-10-04T06:02:16Z step 8 lane K7: submitted job 5923730 (afterany:5920145), ~9.4 GPU-h assigned
+- 2026-10-04T06:02:18Z step 8 lane K8: submitted job 5923732 (afterany:5920146), ~8.3 GPU-h assigned
+- 2026-10-04T06:03:19Z step 8 grading: 1174 new run dir(s) uploaded, 1174 pending, CPU job 23218625
+- 2026-10-04T06:14:03Z step 8: pulled 997 run dir(s)
+- 2026-10-04T06:14:32Z step 8 grading: 701 new run dir(s) uploaded, 701 pending, CPU job 23218699
+- 2026-10-04T06:32:12Z step 8: pulled 1414 run dir(s)
+- 2026-10-04T06:33:25Z step 8 grading: 1362 new run dir(s) uploaded, 1362 pending, CPU job 23218866
+- 2026-10-04T06:44:01Z step 8: pulled 665 run dir(s)
+- 2026-10-04T06:44:23Z step 8 grading: 323 new run dir(s) uploaded, 323 pending, CPU job 23218943
+- 2026-10-04T07:02:10Z step 8: pulled 1454 run dir(s)
+- 2026-10-04T07:03:07Z step 8 grading: 1060 new run dir(s) uploaded, 1060 pending, CPU job 23219128
+- 2026-10-04T07:13:50Z step 8: pulled 863 run dir(s)
+- 2026-10-04T07:14:22Z step 8 grading: 786 new run dir(s) uploaded, 786 pending, CPU job 23219217
+- 2026-10-04T07:32:07Z step 8: pulled 978 run dir(s)
+- 2026-10-04T07:32:54Z step 8 grading: 856 new run dir(s) uploaded, 856 pending, CPU job 23219309
+- 2026-10-04T07:43:36Z step 8: pulled 554 run dir(s)
+- 2026-10-04T07:44:07Z step 8 grading: 520 new run dir(s) uploaded, 520 pending, CPU job 23219401
+- 2026-10-04T08:02:14Z step 8: pulled 1027 run dir(s)
+- 2026-10-04T08:03:11Z step 8 grading: 798 new run dir(s) uploaded, 798 pending, CPU job 23219627
+- 2026-10-04T08:14:03Z step 8: pulled 847 run dir(s)
+- 2026-10-04T08:14:37Z step 8 grading: 722 new run dir(s) uploaded, 722 pending, CPU job 23219693
+- 2026-10-04T08:32:18Z step 8: pulled 926 run dir(s)
+- 2026-10-04T08:32:52Z step 8 grading: 602 new run dir(s) uploaded, 602 pending, CPU job 23219812
+- 2026-10-04T08:43:46Z step 8: pulled 576 run dir(s)
+- 2026-10-04T08:44:12Z step 8 grading: 301 new run dir(s) uploaded, 301 pending, CPU job 23219884
+- 2026-10-04T09:02:17Z step 8: pulled 588 run dir(s)
+- 2026-10-04T09:02:29Z step 8 lane K1: submitted job 5925115 (afterany:5923721), ~7.0 GPU-h assigned
+- 2026-10-04T09:02:30Z step 8 lane K5: submitted job 5925116 (afterany:5923726), ~5.9 GPU-h assigned
+- 2026-10-04T09:02:48Z step 8 grading: 428 new run dir(s) uploaded, 428 pending, CPU job 23219994
+- 2026-10-04T09:13:36Z step 8: pulled 265 run dir(s)
+- 2026-10-04T09:13:59Z step 8 grading: 167 new run dir(s) uploaded, 167 pending, CPU job 23220065
+- 2026-10-04T09:32:26Z step 8: pulled 647 run dir(s)
+- 2026-10-04T09:32:58Z step 8 grading: 548 new run dir(s) uploaded, 548 pending, CPU job 23220162
+- 2026-10-04T09:43:46Z step 8: pulled 879 run dir(s)
+- 2026-10-04T09:44:26Z step 8 grading: 763 new run dir(s) uploaded, 763 pending, CPU job 23220225
+- 2026-10-04T10:02:32Z step 8: pulled 1033 run dir(s)
+- 2026-10-04T10:03:14Z step 8 grading: 768 new run dir(s) uploaded, 768 pending, CPU job 23220449
+- 2026-10-04T10:14:05Z step 8: pulled 637 run dir(s)
+- 2026-10-04T10:14:39Z step 8 grading: 588 new run dir(s) uploaded, 588 pending, CPU job 23220650
+- 2026-10-04T10:32:43Z step 8: pulled 1164 run dir(s)
+- 2026-10-04T10:33:28Z step 8 grading: 943 new run dir(s) uploaded, 943 pending, CPU job 23220857
+- 2026-10-04T10:44:19Z step 8: pulled 540 run dir(s)
+- 2026-10-04T10:44:53Z step 8 grading: 495 new run dir(s) uploaded, 495 pending, CPU job 23220889
+- 2026-10-04T11:02:36Z step 8: pulled 502 run dir(s)
+- 2026-10-04T11:03:09Z step 8 grading: 348 new run dir(s) uploaded, 348 pending, CPU job 23220965
+- 2026-10-04T11:14:03Z step 8: pulled 368 run dir(s)
+- 2026-10-04T11:14:34Z step 8 grading: 368 new run dir(s) uploaded, 368 pending, CPU job 23221028
+- 2026-10-04T11:32:52Z step 8: pulled 994 run dir(s)
+- 2026-10-04T11:33:31Z step 8 grading: 763 new run dir(s) uploaded, 763 pending, CPU job 23221106
+- 2026-10-04T11:44:28Z step 8: pulled 298 run dir(s)
+- 2026-10-04T11:44:55Z step 8 grading: 221 new run dir(s) uploaded, 221 pending, CPU job 23221182
+- 2026-10-04T12:02:50Z step 8: pulled 461 run dir(s)
+- 2026-10-04T12:03:22Z step 8 grading: 403 new run dir(s) uploaded, 403 pending, CPU job 23221316
+- 2026-10-04T12:14:23Z step 8: pulled 156 run dir(s)
+- 2026-10-04T12:14:46Z step 8 grading: 137 new run dir(s) uploaded, 137 pending, CPU job 23221383
+- 2026-10-04T12:32:53Z step 8: pulled 243 run dir(s)
+- 2026-10-04T12:33:27Z step 8 grading: 243 new run dir(s) uploaded, 243 pending, CPU job 23221458
+- 2026-10-04T12:44:24Z step 8: pulled 138 run dir(s)
+- 2026-10-04T12:44:36Z step 8 lane K4: submitted job 5926129, ~0.1 GPU-h assigned
+- 2026-10-04T12:44:49Z step 8 grading: 100 new run dir(s) uploaded, 100 pending, CPU job 23221532
+- 2026-10-04T13:02:57Z step 8: pulled 460 run dir(s)
+- 2026-10-04T13:03:31Z step 8 grading: 344 new run dir(s) uploaded, 344 pending, CPU job 23221638
+- 2026-10-04T13:14:27Z step 8: pulled 131 run dir(s)
+- 2026-10-04T13:14:52Z step 8 grading: 131 new run dir(s) uploaded, 131 pending, CPU job 23221721
+- 2026-10-04T13:33:26Z step 8: pulled 176 run dir(s)
+- 2026-10-04T13:33:56Z step 8 grading: 176 new run dir(s) uploaded, 176 pending, CPU job 23221839
+- 2026-10-04T13:44:53Z step 8: pulled 55 run dir(s)
+- 2026-10-04T13:45:18Z step 8 grading: 55 new run dir(s) uploaded, 55 pending, CPU job 23221934
+- 2026-10-04T14:59:45Z step 8: pulled 307 run dir(s)
+- 2026-10-04T15:00:12Z step 8 grading: 230 new run dir(s) uploaded, 230 pending, CPU job 23222507
+- 2026-10-04T15:01:14Z step 8: warm-up job 5927427 on killarney (1 pair caches)
+- 2026-10-04T15:01:17Z step 8 lane K1: submitted job 5927428, ~1.0 GPU-h assigned
+- 2026-10-04T15:01:18Z step 8 lane K2: submitted job 5927429, ~1.0 GPU-h assigned
+- 2026-10-04T15:01:20Z step 8 lane K3: submitted job 5927430, ~1.0 GPU-h assigned
+- 2026-10-04T15:01:22Z step 8 lane K4: submitted job 5927431, ~1.0 GPU-h assigned
+- 2026-10-04T15:01:23Z step 8 lane K5: submitted job 5927432, ~1.0 GPU-h assigned
+- 2026-10-04T15:01:25Z step 8 lane K6: submitted job 5927433, ~1.0 GPU-h assigned
+- 2026-10-04T15:01:26Z step 8 lane K7: submitted job 5927434, ~1.0 GPU-h assigned
+- 2026-10-04T15:01:28Z step 8 lane K8: submitted job 5927435, ~1.0 GPU-h assigned
+- 2026-10-04T15:12:15Z step 8: pulled 39 run dir(s)
+- 2026-10-04T15:12:36Z step 8 grading: 39 new run dir(s) uploaded, 39 pending, CPU job 23222560
+- 2026-10-04T15:23:35Z step 8: pulled 442 run dir(s)
+- 2026-10-04T15:24:06Z step 8 grading: 442 new run dir(s) uploaded, 442 pending, CPU job 23222627
+- 2026-10-04T15:42:23Z step 8: pulled 780 run dir(s)
+- 2026-10-04T15:42:36Z step 8 lane K2: submitted job 5927687, ~0.1 GPU-h assigned
+- 2026-10-04T15:42:59Z step 8 grading: 780 new run dir(s) uploaded, 780 pending, CPU job 23222709
+- 2026-10-04T15:53:58Z step 8: pulled 174 run dir(s)
+- 2026-10-04T15:54:21Z step 8 grading: 174 new run dir(s) uploaded, 174 pending, CPU job 23222810
+- 2026-10-05T01:07:11Z step 8: pulled 5 run dir(s)
+- 2026-10-05T01:07:30Z step 8 grading: 5 new run dir(s) uploaded, 5 pending, CPU job 23230650
+- 2026-10-05T18:49:21Z step 9 lane K1: submitted job 5966710, ~0.1 GPU-h assigned
+- 2026-10-05T18:49:23Z step 9 lane K2: submitted job 5966711, ~0.2 GPU-h assigned
+- 2026-10-05T18:49:24Z step 9 lane K3: submitted job 5966712, ~0.2 GPU-h assigned
+- 2026-10-05T18:49:25Z step 9 lane K4: submitted job 5966713, ~0.3 GPU-h assigned
+- 2026-10-05T18:49:27Z step 9 lane K5: submitted job 5966714, ~0.2 GPU-h assigned
+- 2026-10-05T18:49:28Z step 9 lane K6: submitted job 5966715, ~0.3 GPU-h assigned
+- 2026-10-05T18:49:30Z step 9 lane K7: submitted job 5966716, ~0.3 GPU-h assigned
+- 2026-10-05T18:49:31Z step 9 lane K8: submitted job 5966717, ~0.2 GPU-h assigned
+- 2026-10-05T19:13:55Z step 9: warm-up job 23268722 on nibi (3 pair caches: gpt-oss-20b__rh-eagle3, llama31-8b-instruct__eagle1, llama31-8b-instruct__eagle3)
+- 2026-10-05T19:14:07Z step 9 lane N1: submitted job 23268731 (--dependency=afterok:23268722), ~0.5 GPU-h assigned
+- 2026-10-05T19:14:11Z step 9 lane N2: submitted job 23268736 (--dependency=afterok:23268722), ~0.6 GPU-h assigned
+- 2026-10-05T19:20:00Z step 9: warm-up job 23268986 on nibi (3 pair caches: gpt-oss-20b__rh-eagle3, llama31-8b-instruct__eagle1, llama31-8b-instruct__eagle3)
+- 2026-10-05T19:20:09Z step 9 lane N1: submitted job 23268993 (--dependency=afterok:23268986), ~0.5 GPU-h assigned
+- 2026-10-05T19:20:13Z step 9 lane N2: submitted job 23268997 (--dependency=afterok:23268986), ~0.6 GPU-h assigned
+- 2026-10-05T19:28:56Z step 9: warm-up job 23269394 on nibi (2 pair caches: llama31-8b-instruct__eagle1, llama31-8b-instruct__eagle3)
+- 2026-10-05T19:31:04Z step 9 lane N1: submitted job 23269428 (--dependency=afterok:23269394), ~0.4 GPU-h assigned
+- 2026-10-05T19:31:38Z step 9 lane N2: submitted job 23269469 (--dependency=afterok:23269394), ~0.4 GPU-h assigned
+- 2026-10-05T19:34:32Z step 9: pulled 12 run dir(s)
+- 2026-10-05T19:34:58Z step 9 Block 0 passed: 1, 2, 3b, 3e, 4a, 4e
+- 2026-10-05T19:35:18Z step 9 lane K9: submitted job 5967091, ~1.3 GPU-h assigned
+- 2026-10-05T19:35:19Z step 9 lane K10: submitted job 5967092, ~1.3 GPU-h assigned
+- 2026-10-05T19:35:20Z step 9 lane K11: submitted job 5967093, ~1.3 GPU-h assigned
+- 2026-10-05T19:35:22Z step 9 lane K12: submitted job 5967094, ~1.3 GPU-h assigned
+- 2026-10-05T19:35:23Z step 9 lane K13: submitted job 5967095, ~1.3 GPU-h assigned
+- 2026-10-05T19:35:24Z step 9 lane K14: submitted job 5967096, ~1.3 GPU-h assigned
+- 2026-10-05T19:35:26Z step 9 lane K15: submitted job 5967097, ~1.5 GPU-h assigned
+- 2026-10-05T19:35:27Z step 9 lane K16: submitted job 5967098, ~1.3 GPU-h assigned
+- 2026-10-05T19:36:58Z step 9: pulled 2 run dir(s)
+- 2026-10-05T19:38:42Z step 9: pulled 2 run dir(s)
+- 2026-10-05T19:39:12Z step 9 Block 0 passed: 3a, 4b
+- 2026-10-05T19:40:18Z step 9: pulled 1 run dir(s)
+- 2026-10-05T19:40:38Z step 9 grading: 1 new run dir(s) uploaded, 1 pending, CPU job 23269901
+- 2026-10-05T19:50:55Z step 9: pulled 17 run dir(s)
+- 2026-10-05T19:51:07Z step 9 lane K1: submitted job 5967251 (--dependency=afterany:5966710), ~4.2 GPU-h assigned
+- 2026-10-05T19:51:09Z step 9 lane K2: submitted job 5967252 (--dependency=afterany:5966711), ~2.9 GPU-h assigned
+- 2026-10-05T19:51:10Z step 9 lane K3: submitted job 5967253 (--dependency=afterany:5966712), ~3.0 GPU-h assigned
+- 2026-10-05T19:51:11Z step 9 lane K4: submitted job 5967254 (--dependency=afterany:5966713), ~3.0 GPU-h assigned
+- 2026-10-05T19:51:13Z step 9 lane K5: submitted job 5967255 (--dependency=afterany:5966714), ~3.0 GPU-h assigned
+- 2026-10-05T19:51:24Z step 9 grading: 17 new run dir(s) uploaded, 17 pending, CPU job 23270647
+- 2026-10-05T20:01:40Z step 9: pulled 26 run dir(s)
+- 2026-10-05T20:02:25Z step 9 grading: 26 new run dir(s) uploaded, 26 pending, CPU job 23271632
+- 2026-10-05T20:12:44Z step 9: pulled 29 run dir(s)
+- 2026-10-05T20:14:18Z step 9 grading: 29 new run dir(s) uploaded, 29 pending, CPU job 23272588
+- 2026-10-05T20:24:34Z step 9: pulled 26 run dir(s)
+- 2026-10-05T20:25:49Z step 9 lane K8: submitted job 5967540 (--dependency=afterany:5966717), ~3.3 GPU-h assigned
+- 2026-10-05T20:26:24Z step 9 lane N3: submitted job 23273907 (--dependency=afterok:23269394), ~0.0 GPU-h assigned
+- 2026-10-05T20:26:29Z step 9 lane N4: submitted job 23273912 (--dependency=afterok:23269394), ~0.0 GPU-h assigned
+- 2026-10-05T20:26:37Z step 9 grading: 26 new run dir(s) uploaded, 26 pending, CPU job 23273918
+- 2026-10-05T20:36:58Z step 9: pulled 34 run dir(s)
+- 2026-10-05T20:36:58Z step 9 block 1: calibrated gpt-oss-20b__rh-eagle3 aime24: targets [1.651, 2.845, 4.039], mentored_dec [0.55, 0.15, 0.75], cactus [0.03, 0.08, 0.18], spec_casc_opt [0.05, -0.3], r_fuzzy [0.25, 0.03], spec_casc_tok [0.8, 0.15]
+- 2026-10-05T20:37:10Z step 9 lane K6: submitted job 5967646 (--dependency=afterany:5966715), ~2.8 GPU-h assigned
+- 2026-10-05T20:38:54Z step 9 grading: 34 new run dir(s) uploaded, 34 pending, CPU job 23274916
+- 2026-10-05T20:49:16Z step 9: pulled 50 run dir(s)
+- 2026-10-05T20:50:39Z step 9 grading: 50 new run dir(s) uploaded, 50 pending, CPU job 23275846
+- 2026-10-05T20:51:27Z step 9: pulled 5 run dir(s)
+- 2026-10-05T20:51:39Z step 9 grading: 5 new run dir(s) uploaded, 5 pending, CPU job 23275876
+- 2026-10-05T21:02:05Z step 9: pulled 146 run dir(s)
+- 2026-10-05T21:02:53Z step 9 grading: 146 new run dir(s) uploaded, 146 pending, CPU job 23277409
+- 2026-10-05T21:03:41Z step 9: pulled 20 run dir(s)
+- 2026-10-05T21:04:06Z step 9 grading: 20 new run dir(s) uploaded, 20 pending, CPU job 23278450
+- 2026-10-05T21:14:30Z step 9: pulled 131 run dir(s)
+- 2026-10-05T21:14:56Z step 9 grading: 131 new run dir(s) uploaded, 131 pending, CPU job 23278869
+- 2026-10-05T21:16:06Z step 9: pulled 19 run dir(s)
+- 2026-10-05T21:16:06Z step 9 block 2: calibrated qwen3-8b__dspark aime24_qwen3: targets [2.797, 3.408, 4.019], mentored_dec [0.35, 0.75, 0.15], cactus [0.03, 0.35], spec_casc_opt [-0.3, -0.1, 0.05], r_fuzzy [0.15, 0.25, 0.03], spec_casc_tok [0.35, 0.8, 0.15]
+- 2026-10-05T21:16:19Z step 9 lane K11: submitted job 5968019 (--dependency=afterany:5967093), ~2.8 GPU-h assigned
+- 2026-10-05T21:16:30Z step 9 grading: 19 new run dir(s) uploaded, 19 pending, CPU job 23278903
+- 2026-10-05T22:01:24Z step 9: pulled 582 run dir(s)
+- 2026-10-05T22:01:33Z step 9 lane N1: submitted job 23280747, ~0.1 GPU-h assigned
+- 2026-10-05T22:01:36Z step 9 lane N2: submitted job 23280749, ~0.1 GPU-h assigned
+- 2026-10-05T22:01:38Z step 9 lane N3: submitted job 23280750, ~0.3 GPU-h assigned
+- 2026-10-05T22:01:40Z step 9 lane N4: submitted job 23280751, ~0.3 GPU-h assigned
+- 2026-10-05T22:02:41Z step 9 grading: 582 new run dir(s) uploaded, 582 pending, CPU job 23280777
+- 2026-10-05T22:03:04Z step 9: pulled 37 run dir(s)
+- 2026-10-05T22:14:03Z step 9: pulled 167 run dir(s)
+- 2026-10-05T22:14:31Z step 9 grading: 165 new run dir(s) uploaded, 165 pending, CPU job 23281214
+- 2026-10-05T22:15:17Z step 9: pulled 11 run dir(s)
+- 2026-10-05T22:15:32Z step 9 Block 0 passed: 3d
+- 2026-10-05T22:26:00Z step 9: pulled 109 run dir(s)
+- 2026-10-05T22:26:23Z step 9 grading: 107 new run dir(s) uploaded, 107 pending, CPU job 23281662
+- 2026-10-05T22:26:37Z step 9 Block 0 passed: 3c
+- 2026-10-05T22:27:08Z step 9: pulled 12 run dir(s)
+- 2026-10-05T22:37:51Z step 9: pulled 49 run dir(s)
+- 2026-10-05T22:37:51Z step 9 block 3b: calibrated qwen3-8b__dspark longbench_v2_qwen3: targets [1.759, 2.228, 2.697], mentored_dec [0.55, 0.35, 0.15], cactus [0.08, 0.35, 0.03], spec_casc_opt [-0.3, -0.02, 0.05], r_fuzzy [0.15, 0.25, 0.03], spec_casc_tok [0.8, 0.15]
+- 2026-10-05T22:38:00Z step 9 lane K16: submitted job 5969204 (--dependency=afterany:5967098), ~2.8 GPU-h assigned
+- 2026-10-05T22:38:14Z step 9 grading: 47 new run dir(s) uploaded, 47 pending, CPU job 23282305
+- 2026-10-05T22:40:44Z step 9: pulled 4 run dir(s)
+- 2026-10-05T22:41:12Z step 9 Block 0 passed: 4c
+- 2026-10-05T22:41:31Z step 9: pulled 4 run dir(s)
+- 2026-10-05T22:42:32Z step 9 grading: 8 new run dir(s) uploaded, 8 pending, CPU job 23282505
+- 2026-10-05T22:53:20Z step 9: pulled 401 run dir(s)
+- 2026-10-05T22:53:28Z step 9 lane K14: submitted job 5969348 (--dependency=afterany:5967096), ~2.8 GPU-h assigned
+- 2026-10-05T22:55:06Z step 9 grading: 401 new run dir(s) uploaded, 401 pending, CPU job 23283135
+- 2026-10-05T22:56:06Z step 9: pulled 208 run dir(s)
+- 2026-10-05T23:08:10Z step 9: pulled 880 run dir(s)
+- 2026-10-05T23:08:19Z step 9 lane K7: submitted job 5969684, ~1.2 GPU-h assigned
+- 2026-10-05T23:08:21Z step 9 lane K9: submitted job 5969685, ~1.2 GPU-h assigned
+- 2026-10-05T23:09:20Z step 9 grading: 880 new run dir(s) uploaded, 880 pending, CPU job 23284359
+- 2026-10-05T23:20:21Z step 9: pulled 649 run dir(s)
+- 2026-10-05T23:20:22Z step 9 block 3c: calibrated llama31-8b-instruct__eagle3 longbench_v2_llama31: targets [0.945, 2.486, 4.027], mentored_dec [0.75, 0.15], cactus [0.03, 0.18, 0.35], spec_casc_opt [-0.1, -0.02, 0.05], r_fuzzy [0.25, 0.03], spec_casc_tok [0.15, 0.8]
+- 2026-10-05T23:20:29Z step 9 lane K10: submitted job 5969969, ~2.5 GPU-h assigned
+- 2026-10-05T23:20:31Z step 9 lane K12: submitted job 5969970, ~1.3 GPU-h assigned
+- 2026-10-05T23:20:32Z step 9 lane K13: submitted job 5969971, ~1.4 GPU-h assigned
+- 2026-10-05T23:20:34Z step 9 lane K15: submitted job 5969972, ~1.3 GPU-h assigned
+- 2026-10-05T23:23:39Z step 9 grading: 649 new run dir(s) uploaded, 649 pending, CPU job 23284988
+- 2026-10-05T23:24:30Z step 9: pulled 199 run dir(s)
+- 2026-10-05T23:24:30Z step 9 block 3e: calibrated r1-distill-llama-8b__eagle3 longbench_v2_r1llama: targets [0.827, 2.23, 3.634], mentored_dec [0.75, 0.15], cactus [0.03, 0.08, 0.35], spec_casc_opt [0.05, -0.3], r_fuzzy [0.03, 0.25], spec_casc_tok [0.15, 0.8]
+- 2026-10-05T23:25:34Z step 9 grading: 199 new run dir(s) uploaded, 199 pending, CPU job 23285051
+- 2026-10-05T23:36:49Z step 9: pulled 774 run dir(s)
+- 2026-10-05T23:36:49Z step 9 block 3a: calibrated gpt-oss-20b__rh-eagle3 longbench_v2: targets [0.958, 2.524, 4.09], mentored_dec [0.75, 0.15], cactus [0.03, 0.08, 0.35], spec_casc_opt [0.05, -0.3], r_fuzzy [0.15, 0.03, 0.25], spec_casc_tok [0.8, 0.15]
+- 2026-10-05T23:36:57Z step 9 lane K2: submitted job 5970192 (--dependency=afterany:5967252), ~3.8 GPU-h assigned
+- 2026-10-05T23:38:17Z step 9 grading: 774 new run dir(s) uploaded, 774 pending, CPU job 23285501
+- 2026-10-05T23:49:34Z step 9: pulled 1081 run dir(s)
+- 2026-10-05T23:49:42Z step 9 lane K11: submitted job 5970265 (--dependency=afterany:5968019), ~3.1 GPU-h assigned
+- 2026-10-05T23:58:36Z step 9 grading: 1081 new run dir(s) uploaded, 1081 pending, CPU job 23286164
+- 2026-10-06T00:00:39Z step 9: pulled 731 run dir(s)
+- 2026-10-06T00:00:46Z step 9 lane K4: submitted job 5970520 (--dependency=afterany:5967254), ~2.9 GPU-h assigned
+- 2026-10-06T00:02:59Z step 9 grading: 731 new run dir(s) uploaded, 731 pending, CPU job 23286259
+- 2026-10-06T00:14:10Z step 9: pulled 670 run dir(s)
+- 2026-10-06T00:19:28Z step 9 grading: 667 new run dir(s) uploaded, 667 pending, CPU job 23287104
+- 2026-10-06T00:19:50Z step 9 Block 0 passed: 5a
+- 2026-10-06T00:20:47Z step 9: pulled 349 run dir(s)
+- 2026-10-06T00:22:40Z step 9 grading: 348 new run dir(s) uploaded, 1015 pending, CPU job 23287181
+- 2026-10-06T00:23:03Z step 9 Block 0 passed: 5b
+- 2026-10-06T00:23:46Z step 9: pulled 192 run dir(s)
+- 2026-10-06T00:25:34Z step 9 grading: 192 new run dir(s) uploaded, 192 pending, CPU job 23287243
+- 2026-10-06T00:36:55Z step 9: pulled 658 run dir(s)
+- 2026-10-06T00:43:30Z step 9 grading: 658 new run dir(s) uploaded, 658 pending, CPU job 23287839
+- 2026-10-06T00:54:55Z step 9: pulled 719 run dir(s)
+- 2026-10-06T00:54:56Z step 9 block 3d: calibrated llama31-8b-instruct__eagle1 longbench_v2_llama31: targets [1.031, 1.901, 2.772], mentored_dec [0.35, 0.15, 0.75], cactus [0.03, 0.08, 0.35], spec_casc_opt [-0.3, -0.02, 0.05], r_fuzzy [0.03, 0.25], spec_casc_tok [0.55, 0.15, 0.8]
+- 2026-10-06T01:01:34Z step 9 grading: 719 new run dir(s) uploaded, 719 pending, CPU job 23289049
+- 2026-10-06T01:03:06Z step 9: pulled 448 run dir(s)
+- 2026-10-06T01:04:19Z step 9 grading: 448 new run dir(s) uploaded, 1167 pending, CPU job 23289129
+- 2026-10-06T01:16:16Z step 9: pulled 902 run dir(s)
+- 2026-10-06T01:23:08Z step 9 grading: 902 new run dir(s) uploaded, 902 pending, CPU job 23289785
+- 2026-10-06T01:24:38Z step 9: pulled 455 run dir(s)
+- 2026-10-06T01:24:47Z step 9 lane K1: submitted job 5971843, ~1.6 GPU-h assigned
+- 2026-10-06T01:26:23Z step 9 grading: 453 new run dir(s) uploaded, 453 pending, CPU job 23289823
+- 2026-10-06T01:26:57Z step 9 Block 0 passed: 4d
+- 2026-10-06T01:27:41Z step 9: pulled 112 run dir(s)
+- 2026-10-06T01:28:10Z step 9 grading: 112 new run dir(s) uploaded, 112 pending, CPU job 23289843
+- 2026-10-06T01:39:11Z step 9: pulled 349 run dir(s)
+- 2026-10-06T01:39:14Z step 9 block 4a: calibrated gpt-oss-20b__rh-eagle3 humaneval: targets [2.316, 3.358, 4.4], mentored_dec [0.55, 0.75, 0.15], cactus [0.03, 0.08, 0.18], spec_casc_opt [0.05, -0.02, -0.3], r_fuzzy [0.15, 0.25, 0.03], spec_casc_tok [0.8, 0.15]
+- 2026-10-06T01:39:14Z step 9 block 4b: calibrated qwen3-8b__dspark humaneval_qwen3: targets [2.699, 3.134, 3.569], mentored_dec [0.55, 0.75, 0.15], cactus [0.08, 0.35, 0.03], spec_casc_opt [-0.3, -0.1, 0.05], r_fuzzy [0.15, 0.25, 0.03], spec_casc_tok [0.8, 0.15]
+- 2026-10-06T01:39:14Z step 9 block 4c: calibrated llama31-8b-instruct__eagle3 humaneval_llama31: targets [1.429, 2.906, 4.383], mentored_dec [0.35, 0.55, 0.15], cactus [0.03, 0.18, 0.35], spec_casc_opt [-0.1, -0.3, 0.05], r_fuzzy [0.25, 0.08, 0.03], spec_casc_tok [0.35, 0.55, 0.15]
+- 2026-10-06T01:39:21Z step 9 lane K3: submitted job 5971900, ~2.8 GPU-h assigned
+- 2026-10-06T01:39:22Z step 9 lane K3: submitted job 5971901 (--dependency=afterany:5971900), ~2.8 GPU-h assigned
+- 2026-10-06T01:39:24Z step 9 lane K5: submitted job 5971902, ~1.9 GPU-h assigned
+- 2026-10-06T01:40:08Z step 9 grading: 349 new run dir(s) uploaded, 349 pending, CPU job 23290456
+- 2026-10-06T01:51:24Z step 9: pulled 1200 run dir(s)
+- 2026-10-06T01:55:07Z step 9 grading: 1200 new run dir(s) uploaded, 1200 pending, CPU job 23291084
+- 2026-10-06T02:06:51Z step 9: pulled 1190 run dir(s)
+- 2026-10-06T02:07:02Z step 9 lane K6: submitted job 5972039, ~1.6 GPU-h assigned
+- 2026-10-06T02:07:04Z step 9 lane K8: submitted job 5972040, ~1.5 GPU-h assigned
+- 2026-10-06T02:09:10Z step 9 grading: 1190 new run dir(s) uploaded, 1190 pending, CPU job 23292355
+- 2026-10-06T02:20:24Z step 9: pulled 1210 run dir(s)
+- 2026-10-06T02:20:34Z step 9 lane K7: submitted job 5972283, ~2.0 GPU-h assigned
+- 2026-10-06T02:20:35Z step 9 lane K9: submitted job 5972284, ~1.6 GPU-h assigned
+- 2026-10-06T02:20:36Z step 9 lane K14: submitted job 5972285, ~1.2 GPU-h assigned
+- 2026-10-06T02:20:38Z step 9 lane K16: submitted job 5972286, ~1.2 GPU-h assigned
+- 2026-10-06T02:22:15Z step 9 grading: 1210 new run dir(s) uploaded, 1210 pending, CPU job 23292766
+- 2026-10-06T02:33:31Z step 9: pulled 949 run dir(s)
+- 2026-10-06T02:33:41Z step 9 lane K10: submitted job 5972390, ~1.8 GPU-h assigned
+- 2026-10-06T02:33:42Z step 9 lane K12: submitted job 5972392, ~1.1 GPU-h assigned
+- 2026-10-06T02:33:44Z step 9 lane K13: submitted job 5972393, ~1.1 GPU-h assigned
+- 2026-10-06T02:33:45Z step 9 lane K15: submitted job 5972395, ~1.2 GPU-h assigned
+- 2026-10-06T02:35:09Z step 9 grading: 949 new run dir(s) uploaded, 949 pending, CPU job 23293202
+- 2026-10-06T02:36:24Z step 9: pulled 145 run dir(s)
+- 2026-10-06T02:49:04Z step 9: pulled 639 run dir(s)
+- 2026-10-06T02:51:49Z step 9 grading: 639 new run dir(s) uploaded, 784 pending, CPU job 23293747
+- 2026-10-06T03:03:22Z step 9: pulled 1397 run dir(s)
+- 2026-10-06T03:03:25Z step 9 block 4e: calibrated r1-distill-llama-8b__eagle3 humaneval_r1llama: targets [1.947, 3.006, 4.065], mentored_dec [0.15, 0.55, 0.75], cactus [0.03, 0.08, 0.18], spec_casc_opt [-0.1, 0.05, -0.3], r_fuzzy [0.08, 0.25, 0.03], spec_casc_tok [0.8, 0.55, 0.15]
+- 2026-10-06T03:05:02Z step 9 grading: 1397 new run dir(s) uploaded, 1397 pending, CPU job 23294656
+- 2026-10-06T03:06:23Z step 9: pulled 114 run dir(s)
+- 2026-10-06T03:19:03Z step 9: pulled 894 run dir(s)
+- 2026-10-06T03:19:06Z step 9 block 4d: calibrated llama31-8b-instruct__eagle1 humaneval_llama31: targets [1.914, 3.194, 4.474], mentored_dec [0.15, 0.75], cactus [0.08, 0.18, 0.35], spec_casc_opt [-0.3, 0.05], r_fuzzy [0.03, 0.25], spec_casc_tok [0.8, 0.15]
+- 2026-10-06T03:21:12Z step 9 grading: 894 new run dir(s) uploaded, 1004 pending, CPU job 23295308
+- 2026-10-06T03:32:24Z step 9: pulled 673 run dir(s)
+- 2026-10-06T03:33:30Z step 9 grading: 673 new run dir(s) uploaded, 673 pending, CPU job 23295741
+- 2026-10-06T03:34:53Z step 9: pulled 108 run dir(s)
+- 2026-10-06T03:49:47Z step 9: pulled 665 run dir(s)
+- 2026-10-06T03:51:42Z step 9 grading: 665 new run dir(s) uploaded, 773 pending, CPU job 23297046
+- 2026-10-06T04:03:09Z step 9: pulled 1269 run dir(s)
+- 2026-10-06T04:05:05Z step 9 grading: 1269 new run dir(s) uploaded, 1269 pending, CPU job 23297538
+- 2026-10-06T04:16:22Z step 9: pulled 437 run dir(s)
+- 2026-10-06T04:16:26Z step 9 block 5a: calibrated llama31-8b-instruct__eagle3 aime24_llama31: targets [1.486, 3.078, 4.671], mentored_dec [0.75, 0.15], cactus [0.03, 0.18, 0.35], spec_casc_opt [-0.1, 0.05, -0.02], r_fuzzy [0.03, 0.25], spec_casc_tok [0.8, 0.15]
+- 2026-10-06T04:17:27Z step 9 grading: 437 new run dir(s) uploaded, 437 pending, CPU job 23297830
+- 2026-10-06T04:18:51Z step 9: pulled 66 run dir(s)
+- 2026-10-06T04:32:00Z step 9: pulled 426 run dir(s)
+- 2026-10-06T04:32:12Z step 9 lane K1: submitted job 5973912, ~0.2 GPU-h assigned
+- 2026-10-06T04:32:15Z step 9 lane K2: submitted job 5973913, ~0.7 GPU-h assigned
+- 2026-10-06T04:33:58Z step 9 grading: 426 new run dir(s) uploaded, 454 pending, CPU job 23298355
+- 2026-10-06T04:45:21Z step 9: pulled 171 run dir(s)
+- 2026-10-06T04:45:25Z step 9 block 5b: calibrated llama31-8b-instruct__eagle1 aime24_llama31: targets [1.538, 3.011, 4.485], mentored_dec [0.75, 0.15], cactus [0.35, 0.18, 0.08], spec_casc_opt [-0.3, -0.1, -0.02], r_fuzzy [0.25, 0.03], spec_casc_tok [0.35, 0.15, 0.8]
+- 2026-10-06T04:45:32Z step 9 lane K4: submitted job 5974018, ~0.5 GPU-h assigned
+- 2026-10-06T04:47:02Z step 9 grading: 171 new run dir(s) uploaded, 171 pending, CPU job 23298587
+- 2026-10-06T04:58:24Z step 9: pulled 309 run dir(s)
+- 2026-10-06T04:58:38Z step 9 lane K5: submitted job 5974145, ~0.3 GPU-h assigned
+- 2026-10-06T04:59:16Z step 9 grading: 309 new run dir(s) uploaded, 309 pending, CPU job 23298919
+- 2026-10-06T05:10:39Z step 9: pulled 131 run dir(s)
+- 2026-10-06T05:10:50Z step 9 lane K6: submitted job 5974255, ~0.0 GPU-h assigned
+- 2026-10-06T05:10:51Z step 9 lane K8: submitted job 5974256, ~0.1 GPU-h assigned
+- 2026-10-06T05:11:17Z step 9 grading: 131 new run dir(s) uploaded, 131 pending, CPU job 23299115
+- 2026-10-06T05:12:47Z step 9: pulled 3 run dir(s)
+- 2026-10-06T05:12:57Z step 9 lane K2: submitted job 5974271, ~0.0 GPU-h assigned
+- 2026-10-06T05:12:58Z step 9 lane K4: submitted job 5974272, ~0.0 GPU-h assigned
+- 2026-10-06T05:13:00Z step 9 lane K6: submitted job 5974273, ~0.0 GPU-h assigned
+- 2026-10-06T05:13:02Z step 9 lane K7: submitted job 5974274, ~0.0 GPU-h assigned
+- 2026-10-06T05:13:03Z step 9 lane K9: submitted job 5974275, ~0.0 GPU-h assigned
+- 2026-10-06T05:13:05Z step 9 lane K12: submitted job 5974276, ~0.0 GPU-h assigned
+- 2026-10-06T05:13:06Z step 9 lane K13: submitted job 5974277, ~0.0 GPU-h assigned
+- 2026-10-06T05:13:08Z step 9 lane K14: submitted job 5974278, ~0.0 GPU-h assigned
+- 2026-10-06T05:13:09Z step 9 lane K15: submitted job 5974279, ~0.0 GPU-h assigned
+- 2026-10-06T05:13:11Z step 9 lane K16: submitted job 5974280, ~0.0 GPU-h assigned
+- 2026-10-06T05:14:42Z step 9 grading: 3 new run dir(s) uploaded, 3 pending, CPU job 23299222
+- 2026-10-06T05:16:14Z step 9: pulled 1 run dir(s)
+- 2026-10-06T05:16:32Z step 9 grading: 1 new run dir(s) uploaded, 1 pending, CPU job 23299233
+- 2026-10-06T05:28:54Z step 9: Phase 1 complete; Phase 2 (standalone pairs, loosest + lossless) started
+- 2026-10-06T05:29:21Z step 9: warm-up job 5974366 on killarney (1 pair caches: qwen3-8b__qwen3-0.6b)
+- 2026-10-06T05:37:04Z step 9 lane K1: submitted job 5974451, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:05Z step 9 lane K2: submitted job 5974452, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:07Z step 9 lane K3: submitted job 5974453, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:10Z step 9 lane K4: submitted job 5974457, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:12Z step 9 lane K5: submitted job 5974459, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:14Z step 9 lane K6: submitted job 5974460, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:15Z step 9 lane K7: submitted job 5974462, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:17Z step 9 lane K8: submitted job 5974463, ~2.7 GPU-h assigned
+- 2026-10-06T05:37:18Z step 9 lane K8: submitted job 5974464 (--dependency=afterany:5974463), ~2.7 GPU-h assigned
+- 2026-10-06T05:37:20Z step 9 lane K9: submitted job 5974465, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:22Z step 9 lane K10: submitted job 5974466, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:23Z step 9 lane K11: submitted job 5974467, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:25Z step 9 lane K12: submitted job 5974468, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:26Z step 9 lane K13: submitted job 5974469, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:28Z step 9 lane K14: submitted job 5974471, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:29Z step 9 lane K15: submitted job 5974473, ~0.0 GPU-h assigned
+- 2026-10-06T05:37:31Z step 9 lane K16: submitted job 5974474, ~0.0 GPU-h assigned
+- 2026-10-06T05:50:57Z step 9: pulled 2 run dir(s)
+- 2026-10-06T06:18:00Z step 9: pulled 14 run dir(s)
+- 2026-10-06T06:18:12Z step 9 Block 0 passed: 6a, 6b, 6c, 6d, 7a, 7b, 7c, 8a
+- 2026-10-06T06:44:01Z step 9: pulled 24 run dir(s)
+- 2026-10-06T06:44:13Z step 9 Block 0 passed: 7d, 8b, 8c, 8d, 9a, 9b, 9c, 9d, 10a, 10b, 10c, 10d
+- 2026-10-06T06:44:58Z step 9 lane K1: submitted job 5975119, ~6.9 GPU-h assigned
+- 2026-10-06T06:44:59Z step 9 lane K1: submitted job 5975121 (--dependency=afterany:5975119), ~6.9 GPU-h assigned
+- 2026-10-06T06:45:00Z step 9 lane K1: submitted job 5975122 (--dependency=afterany:5975121), ~6.9 GPU-h assigned
+- 2026-10-06T06:45:02Z step 9 lane K2: submitted job 5975123, ~6.9 GPU-h assigned
+- 2026-10-06T06:45:03Z step 9 lane K2: submitted job 5975124 (--dependency=afterany:5975123), ~6.9 GPU-h assigned
+- 2026-10-06T06:45:05Z step 9 lane K2: submitted job 5975125 (--dependency=afterany:5975124), ~6.9 GPU-h assigned
+- 2026-10-06T06:45:06Z step 9 lane K3: submitted job 5975127, ~4.9 GPU-h assigned
+- 2026-10-06T06:45:08Z step 9 lane K3: submitted job 5975128 (--dependency=afterany:5975127), ~4.9 GPU-h assigned
+- 2026-10-06T06:45:09Z step 9 lane K4: submitted job 5975129, ~4.9 GPU-h assigned
+- 2026-10-06T06:45:11Z step 9 lane K4: submitted job 5975130 (--dependency=afterany:5975129), ~4.9 GPU-h assigned
+- 2026-10-06T06:45:12Z step 9 lane K5: submitted job 5975131, ~5.1 GPU-h assigned
+- 2026-10-06T06:45:13Z step 9 lane K5: submitted job 5975132 (--dependency=afterany:5975131), ~5.1 GPU-h assigned
+- 2026-10-06T06:45:15Z step 9 lane K6: submitted job 5975133, ~5.1 GPU-h assigned
+- 2026-10-06T06:45:16Z step 9 lane K6: submitted job 5975134 (--dependency=afterany:5975133), ~5.1 GPU-h assigned
+- 2026-10-06T06:45:18Z step 9 lane K7: submitted job 5975135 (--dependency=afterany:5974462), ~5.0 GPU-h assigned
+- 2026-10-06T06:45:19Z step 9 lane K9: submitted job 5975136 (--dependency=afterany:5974465), ~5.6 GPU-h assigned
+- 2026-10-06T06:45:20Z step 9 lane K9: submitted job 5975137 (--dependency=afterany:5975136), ~5.6 GPU-h assigned
+- 2026-10-06T06:45:22Z step 9 lane K10: submitted job 5975138 (--dependency=afterany:5974466), ~5.6 GPU-h assigned
+- 2026-10-06T06:45:23Z step 9 lane K10: submitted job 5975139 (--dependency=afterany:5975138), ~5.6 GPU-h assigned
+- 2026-10-06T06:45:24Z step 9 lane K11: submitted job 5975140 (--dependency=afterany:5974467), ~5.3 GPU-h assigned
+- 2026-10-06T06:45:26Z step 9 lane K12: submitted job 5975141 (--dependency=afterany:5974468), ~5.3 GPU-h assigned
+- 2026-10-06T06:45:27Z step 9 lane K13: submitted job 5975142 (--dependency=afterany:5974469), ~5.0 GPU-h assigned
+- 2026-10-06T06:45:30Z step 9 lane K14: submitted job 5975143 (--dependency=afterany:5974471), ~5.0 GPU-h assigned
+- 2026-10-06T06:45:32Z step 9 lane K15: submitted job 5975145 (--dependency=afterany:5974473), ~5.0 GPU-h assigned
+- 2026-10-06T06:45:35Z step 9 lane K16: submitted job 5975148 (--dependency=afterany:5974474), ~5.0 GPU-h assigned
+- 2026-10-06T06:57:05Z step 9: pulled 609 run dir(s)
+- 2026-10-06T06:57:18Z step 9 lane K7: submitted job 5975228 (--dependency=afterany:5975135), ~6.4 GPU-h assigned
+- 2026-10-06T06:57:19Z step 9 lane K8: submitted job 5975229 (--dependency=afterany:5974464), ~5.8 GPU-h assigned
+- 2026-10-06T06:57:21Z step 9 lane K11: submitted job 5975230 (--dependency=afterany:5975140), ~6.1 GPU-h assigned
+- 2026-10-06T06:57:22Z step 9 lane K12: submitted job 5975231 (--dependency=afterany:5975141), ~6.4 GPU-h assigned
+- 2026-10-06T06:57:23Z step 9 lane K13: submitted job 5975232 (--dependency=afterany:5975142), ~6.1 GPU-h assigned
+- 2026-10-06T06:57:25Z step 9 lane K14: submitted job 5975233 (--dependency=afterany:5975143), ~5.9 GPU-h assigned
+- 2026-10-06T06:57:26Z step 9 lane K15: submitted job 5975234 (--dependency=afterany:5975145), ~5.8 GPU-h assigned
+- 2026-10-06T06:57:28Z step 9 lane K16: submitted job 5975235 (--dependency=afterany:5975148), ~5.9 GPU-h assigned
+- 2026-10-06T06:58:29Z step 9 grading: 215 new run dir(s) uploaded, 215 pending, CPU job 23304463
+- 2026-10-06T07:10:02Z step 9: pulled 540 run dir(s)
+- 2026-10-06T07:11:04Z step 9 grading: 454 new run dir(s) uploaded, 454 pending, CPU job 23304744
+- 2026-10-06T07:12:37Z step 9: pulled 118 run dir(s)
+- 2026-10-06T07:24:28Z step 9: pulled 444 run dir(s)
+- 2026-10-06T07:25:18Z step 9 grading: 444 new run dir(s) uploaded, 456 pending, CPU job 23304888
+- 2026-10-06T07:36:38Z step 9: pulled 347 run dir(s)
+- 2026-10-06T07:37:27Z step 9 grading: 347 new run dir(s) uploaded, 347 pending, CPU job 23304999
+- 2026-10-06T07:48:49Z step 9: pulled 363 run dir(s)
+- 2026-10-06T07:50:17Z step 9 grading: 363 new run dir(s) uploaded, 363 pending, CPU job 23305126
+- 2026-10-06T08:01:52Z step 9: pulled 453 run dir(s)
+- 2026-10-06T08:03:02Z step 9 grading: 453 new run dir(s) uploaded, 453 pending, CPU job 23305428
+- 2026-10-06T08:14:35Z step 9: pulled 510 run dir(s)
+- 2026-10-06T08:15:26Z step 9 grading: 469 new run dir(s) uploaded, 469 pending, CPU job 23305819
+- 2026-10-06T08:26:57Z step 9: pulled 606 run dir(s)
+- 2026-10-06T08:28:02Z step 9 grading: 396 new run dir(s) uploaded, 396 pending, CPU job 23306091
+- 2026-10-06T08:39:30Z step 9: pulled 596 run dir(s)
+- 2026-10-06T08:40:20Z step 9 grading: 367 new run dir(s) uploaded, 367 pending, CPU job 23306177
+- 2026-10-06T08:51:45Z step 9: pulled 620 run dir(s)
+- 2026-10-06T08:52:32Z step 9 grading: 620 new run dir(s) uploaded, 620 pending, CPU job 23306255
+- 2026-10-06T09:04:07Z step 9: pulled 551 run dir(s)
+- 2026-10-06T09:04:59Z step 9 grading: 551 new run dir(s) uploaded, 551 pending, CPU job 23306379
+- 2026-10-06T09:06:40Z step 9: pulled 101 run dir(s)
+- 2026-10-06T09:18:49Z step 9: pulled 739 run dir(s)
+- 2026-10-06T09:19:36Z step 9 grading: 367 new run dir(s) uploaded, 449 pending, CPU job 23306504
+- 2026-10-06T09:31:29Z step 9: pulled 1442 run dir(s)
+- 2026-10-06T09:33:12Z step 9 grading: 1353 new run dir(s) uploaded, 1353 pending, CPU job 23306679
+- 2026-10-06T09:34:54Z step 9: pulled 291 run dir(s)
+- 2026-10-06T09:47:47Z step 9: pulled 1415 run dir(s)
+- 2026-10-06T09:48:57Z step 9 grading: 935 new run dir(s) uploaded, 935 pending, CPU job 23307031
+- 2026-10-06T10:00:34Z step 9: pulled 545 run dir(s)
+- 2026-10-06T10:01:26Z step 9 grading: 521 new run dir(s) uploaded, 521 pending, CPU job 23307296
+- 2026-10-06T10:13:17Z step 9: pulled 825 run dir(s)
+- 2026-10-06T10:14:08Z step 9 grading: 644 new run dir(s) uploaded, 644 pending, CPU job 23307369
+- 2026-10-06T10:15:59Z step 9: pulled 189 run dir(s)
+- 2026-10-06T10:28:02Z step 9: pulled 537 run dir(s)
+- 2026-10-06T10:28:37Z step 9 grading: 344 new run dir(s) uploaded, 344 pending, CPU job 23307514
+- 2026-10-06T10:40:13Z step 9: pulled 245 run dir(s)
+- 2026-10-06T10:40:48Z step 9 grading: 245 new run dir(s) uploaded, 245 pending, CPU job 23307598
+- 2026-10-06T10:52:17Z step 9: pulled 150 run dir(s)
+- 2026-10-06T10:52:30Z step 9 lane K2: submitted job 5977038, ~0.0 GPU-h assigned
+- 2026-10-06T10:52:33Z step 9 lane K3: submitted job 5977040, ~0.0 GPU-h assigned
+- 2026-10-06T10:52:34Z step 9 lane K6: submitted job 5977041, ~0.0 GPU-h assigned
+- 2026-10-06T10:52:35Z step 9 lane K8: submitted job 5977042, ~0.0 GPU-h assigned
+- 2026-10-06T10:52:37Z step 9 lane K9: submitted job 5977043, ~0.0 GPU-h assigned
+- 2026-10-06T10:52:38Z step 9 lane K11: submitted job 5977044, ~0.0 GPU-h assigned
+- 2026-10-06T10:52:39Z step 9 lane K13: submitted job 5977045, ~0.0 GPU-h assigned
+- 2026-10-06T10:52:41Z step 9 lane K15: submitted job 5977046, ~0.0 GPU-h assigned
+- 2026-10-06T10:52:42Z step 9 lane K16: submitted job 5977047, ~0.0 GPU-h assigned
+- 2026-10-06T10:53:01Z step 9 grading: 150 new run dir(s) uploaded, 150 pending, CPU job 23307660
+- 2026-10-06T11:04:30Z step 9: pulled 60 run dir(s)
+- 2026-10-06T11:04:42Z step 9 lane K1: submitted job 5977101, ~0.0 GPU-h assigned
+- 2026-10-06T11:04:44Z step 9 lane K2: submitted job 5977102, ~0.0 GPU-h assigned
+- 2026-10-06T11:04:46Z step 9 lane K3: submitted job 5977104, ~0.0 GPU-h assigned
+- 2026-10-06T11:04:48Z step 9 lane K4: submitted job 5977105, ~0.0 GPU-h assigned
+- 2026-10-06T11:04:50Z step 9 lane K6: submitted job 5977106, ~0.0 GPU-h assigned
+- 2026-10-06T11:04:51Z step 9 lane K7: submitted job 5977107, ~0.0 GPU-h assigned
+- 2026-10-06T11:04:53Z step 9 lane K8: submitted job 5977108, ~0.0 GPU-h assigned
+- 2026-10-06T11:04:54Z step 9 lane K9: submitted job 5977109, ~0.0 GPU-h assigned
+- 2026-10-06T11:04:55Z step 9 lane K10: submitted job 5977110, ~0.0 GPU-h assigned
+- 2026-10-06T11:04:57Z step 9 lane K11: submitted job 5977111, ~0.0 GPU-h assigned
+- 2026-10-06T11:04:58Z step 9 lane K13: submitted job 5977112, ~0.0 GPU-h assigned
+- 2026-10-06T11:05:00Z step 9 lane K14: submitted job 5977113, ~0.0 GPU-h assigned
+- 2026-10-06T11:05:01Z step 9 lane K15: submitted job 5977114, ~0.0 GPU-h assigned
+- 2026-10-06T11:05:03Z step 9 lane K16: submitted job 5977115, ~0.0 GPU-h assigned
+- 2026-10-06T11:05:19Z step 9 grading: 60 new run dir(s) uploaded, 60 pending, CPU job 23307899
+- 2026-10-06T11:16:42Z step 9: pulled 4 run dir(s)
+- 2026-10-06T11:17:01Z step 9 grading: 4 new run dir(s) uploaded, 4 pending, CPU job 23308130
+- 2026-10-06T19:23:18Z step 9 lmdraft fill: gsm8k_qwen3 spec_casc_opt 0.05 / r_fuzzy 0.25, Killarney job 5987261
+- 2026-10-06T19:23:19Z step 9 lmdraft fill: livecodebench_qwen3 spec_casc_opt 0.05 / r_fuzzy 0.25, Killarney job 5987262

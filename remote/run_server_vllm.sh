@@ -309,6 +309,15 @@ common_args=(
   # r_fuzzy/spec_casc_tok showed zero alpha-sensitivity on Qwen3-8B.
   --generation-config vllm
 )
+# Optional tokenizer override (step 8, campaign/addendum/README.md deviation 33). DeepSeek-R1-Distill-Llama-8B's
+# tokenizer_config.json declares LlamaTokenizerFast (legacy) for a byte-level BPE tokenizer.json; under
+# transformers 5.18 that class encodes every prompt wrongly (spaces dropped: 0 of 350 R1 prompts match the
+# tokenizers library's own encoding of tokenizer.json) and decodes without byte-level decoding. The override is a
+# copy of the same tokenizer.json + special tokens + chat template declared PreTrainedTokenizerFast (350 of 350
+# match). Unset = the model's own tokenizer, i.e. the command is unchanged for every other model.
+if [[ -n "${TOKENIZER:-}" ]]; then
+  common_args+=(--tokenizer "$TOKENIZER")
+fi
 if [[ -n "$ROPE_SCALING_JSON" ]]; then
   # max_position_embeddings ALSO needs overriding here, not just
   # rope_scaling -- found 2026-08-22, on longbench_v2_qwen3 (the first

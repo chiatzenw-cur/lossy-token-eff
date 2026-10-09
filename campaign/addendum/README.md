@@ -319,3 +319,162 @@ alpha grows).
    Humanities, Math and STEM keep only their non-HLE prompts (8, 18 and 6
    per arm), so their per-category ratios are thin; RESULTS.md gives n per
    cell. The 14 step-7 rows stay `blocked` in the manifest with this reason.
+
+## Step 8 (more drafters, the Llama-3.1-8B family, the fix on Qwen3-8B)
+
+Branch `addendum-step8` off main d35d52de7; plan and protocol in `step8/GOAL.md`, orchestration in
+`scripts/step8_campaign.py`, Block 0 checks in `scripts/step8_block0.py`. Numbered from 29 (22-28 are used
+by the unmerged `speedbench-oct` branch).
+
+29. **Llama weights from mirrors (2026-10-03, approved by Bill).** `meta-llama/Llama-3.1-8B-Instruct` and
+   `meta-llama/Llama-3.2-1B-Instruct` are gated and no Hugging Face token is set up. The runs use
+   `RedHatAI/Llama-3.1-8B-Instruct` (snapshot 83c92747) and `alpindale/Llama-3.2-1B-Instruct` (snapshot
+   f92201d8). Every non-weight file of both mirrors is blob-identical to Meta's (git oids of config.json
+   0bb6fd75 / 3e3aaf51, generation_config.json cc7276af / 75ae0831, tokenizer.json 5cc5f00a,
+   tokenizer_config.json db88166e / 4ff488a1, special_tokens_map.json 02ee80b6, read from the gated repos'
+   public file listings). Meta hides its weight hashes, so the weights are checked against independent copies:
+   Llama-3.1-8B-Instruct shards sha256 2b1879f356aed350..., 09d433f650646834..., fc1cdddd6bfa9112...,
+   92ecfe1a2414458b... (identical in RedHatAI, NousResearch and unsloth; recomputed on Killarney after download),
+   Llama-3.2-1B-Instruct model.safetensors sha256
+   1ff795ff6a07e6a68085d206fb84417da2f083f68391c2843cd2b8ac6df8538f (identical in alpindale and unsloth). The
+   NousResearch mirror was tried first and dropped: its tokenizer_config.json carries Meta's first-release chat
+   template, which renders no "Cutting Knowledge Date" system header (all 350 prompts differed from the current
+   template). Tables cite Meta's ids.
+30. **Persistent server per arm for calibration and full runs (step 8 protocol, Bill 2026-10-03).** The
+   matched-l_bar protocol of `scripts/campaign_run.py` (calibration on case_001-003 at the 4-point grids, targets
+   at the 20/55/90th percentile of the shared span, nearest grid alpha) runs on one persistent server per arm
+   (`persistent_arm_replay.py`, prefix caching off, one request at a time), never shared across arms: a fresh
+   server costs ~4.5-5 min on these clusters. A full arm's server starts at case_004 (case_001-003 are its
+   calibration runs, on their own server). Every run's config.json records host, Slurm job and its server's
+   start time; the request ordinal is in run.json as before. The paper's Limitations already describes the
+   body's runs as first cases after a fresh start, the rest on a reused process.
+31. **The yuhuili EAGLE heads run from copies whose config allows 65536 positions.**
+   `yuhuili/EAGLE3-DeepSeek-R1-Distill-LLaMA-8B`, `yuhuili/EAGLE3-LLaMA3.1-Instruct-8B` and
+   `yuhuili/EAGLE-LLaMA3.1-Instruct-8B` declare max_position_embeddings 2048; vLLM caps the drafter at that, and
+   R1-Distill's LiveCodeBench strict runs crashed past it (device-side assert in the drafter's compiled rope
+   kernel, Block 0 job 5913648; the deviation-19 failure). `hf/local/<name>-maxpos65536` on Killarney: config.json
+   with max_position_embeddings 65536, weights symlinked. Plain RoPE: positions below 2048 get the values they
+   had. Whether the heads draft well past the length they were trained on is measured in Block 0 (acceptance vs
+   position) and reported in RESULTS.md.
+32. **Consolidated V2 sampler with spec_casc_tok_lt and spec_casc_opt_head (Block 6).**
+   `patches/vllm-0.26.0-v2-consolidated-step8.patch` (sha256 796e3c85...): the 68d0a904 file plus the two
+   rules as defer masks ANDed into the existing one (both are switch rules, so these are complete ports, not
+   accept-test-only), and an observation-only q probe (Block 0(d)). At the two rules' neutral values every other
+   method's decision is unchanged; checked bit for bit on GPU (job 5913862: strict and the five rules on the old
+   and the new file, same case and seed) before the file replaces 68d0a904 in any lane venv.
+33. **DeepSeek-R1-Distill-Llama-8B is served with a corrected tokenizer class.** Its tokenizer_config.json
+   declares `LlamaTokenizerFast` (legacy) for a byte-level BPE tokenizer.json. Under transformers 5.18 (the
+   lane venvs) that class encodes every prompt wrongly (spaces dropped: "Every morning Aya" -> Every / mor /
+   ning / Ay / ago ...; 0 of 350 R1 prompts match the tokenizers library's encoding of the model's own
+   tokenizer.json) and decodes without byte-level decoding (output.txt full of Ġ / Ċ, so LiveCodeBench code
+   blocks could not be extracted). vLLM loads it the same way. The server now gets `--tokenizer
+   hf/local/DeepSeek-R1-Distill-Llama-8B-tokenizer-fast` (`TOKENIZER` in `remote/run_server_vllm.sh`): the same
+   tokenizer.json, special tokens and chat template, declared `PreTrainedTokenizerFast` (350 of 350 prompts match
+   tokenizer.json; decoding correct). Llama-3.1-8B-Instruct (350/350), Qwen3-8B (1322/1322) and GPT-OSS-20B are
+   unaffected. The first Block 0 R1 runs (a_*, b_*) ran on the mis-encoded prompts and are kept only as the
+   record of this; every R1 number comes from the rerun (a2_*, b2_*, prof2_*).
+34. **A compile cache per step-8 pair.** Qwen3-8B + Qwen3-1.7B (draft_model) crashed in the drafter's CUDA-graph
+   capture (illegal memory access) right after vLLM loaded an AOT-compiled graph from the shared
+   `$SCRATCH/vllm_cache`, which already held the same architecture compiled for Qwen3-0.6B (step 4.3). With a
+   cache of its own it ran (strict and mentored_dec 0.75, job 5913861). Every step-8 pair now compiles into
+   `/scratch/billxby/vllm_cache_step8/<pair>` (`VLLM_CACHE_ROOT`).
+35. **A freshly compiled server is not bit-identical to a cache-loaded one on the V2 path; every pair's cache is
+   warmed before its arms.** Llama-3.1-8B-Instruct + EAGLE-3, GSM8K case_001, seed 0: lossless gave 166 tokens
+   whenever its server was the first on a fresh compile cache and 142 tokens on a warm one (two warm reruns, jobs
+   5914666), byte-identical to all five rules at their strict points (Block 0 strict-limit check). Fresh
+   compilation autotunes kernels by timing; a cache load replays one choice. Both outputs are lossless draws; only
+   the numerics differ. Every step-8 pair therefore gets one throwaway warm-up server (case_001, outside the run
+   tree) on its own cache before any measured arm, so no measured arm runs on a fresh compile.
+36. **Medusa dropped from Block 2** (the plan's Medusa fallback). nebius/MEDUSA-Llama-3.1-8B-Instruct (6 heads)
+   loads and serves, but vLLM's medusa path hands the sampler no draft probabilities: all 224 traced proposals have
+   q(x) = 1.0 and no draft entropy (Block 0 q probe). The cascade and fuzzy rules need q (Bill's Block 0(d) rule).
+37. **Block 3's second Qwen3-8B drafter is deepseek-ai/dspark_qwen3_8b_block7 (method dspark)**, the first in Bill's
+   order (DSpark -> DFlash -> Thinking EAGLE-3) to pass the q probe: draft-prob tensor (1024, 6, 151936) present at
+   the patched V2 sampler, 0% one-hot rows, mean max q 0.78-0.92, mean draft entropy 0.28-0.80 nats. vLLM 0.26.0
+   runs dspark on the V2 runner only, so its cactus and spec_casc_tok rows are accept-test-only.
+38. **Block 5 runs although R1-Distill's and Llama-3.2-1B's tokenizers are not identical (Bill, 2026-10-03).** Same
+   vocabulary size (128256) and the same ids for 128249 tokens; the other 7 are special tokens R1 renamed (BOS/EOS
+   128000/128001) or repurposed from Llama's reserved range (128011-128015: `<｜User｜>`, `<｜Assistant｜>`,
+   `<think>`, `</think>`, pad), untrained in the 1B drafter. vLLM requires only the vocabulary size; acceptance
+   near those ids may suffer, correctness cannot (lossless verification by the target).
+39. **Block 4 (GPT-OSS-20B + RedHatAI EAGLE-3) runs on Killarney, not Nibi (2026-10-03 ~20:20Z).** At launch every
+   Nibi GPU node was down or drained (sinfo: 324 "Node unexpectedly rebooted", 96 "gres/gpu count reported", 24
+   drained for an image test / issue #1079); the Nibi warm-up and lane jobs sat in ReqNodeNotAvail and were
+   cancelled. GPT-OSS-20B, the drafter and its prompt sets are on Killarney; the whole block runs there (one node
+   type, like every other step-8 block).
+
+## Step 9 (the 5 rules x 6 datasets grid for the five dedicated step-8 pairs)
+
+Branch `addendum-step9` off main 32517782d; plan and protocol in `step9/GOAL.md`, orchestration in
+`scripts/step9_campaign.py` (step 8's pair definitions imported unchanged), Block 0 in `step9/BLOCK0.md`.
+
+40. **Qwen3-8B + DSpark on LongBench-v2 drafts with a copy of the DSpark head whose config allows 65536 positions.**
+   `deepseek-ai/dspark_qwen3_8b_block7` (snapshot 03326e50) declares max_position_embeddings 40960 with plain RoPE
+   (theta 1e6); Qwen3's longest LongBench-v2 sequence is 51,234 prompt tokens + the 8,192 budget. `hf/local/
+   dspark_qwen3_8b_block7-maxpos65536` on Killarney differs only in that field (config sha256 e470e70a -> cbf2a274;
+   weights symlinked, sha256 5c922d1f... = the published blob), as deviations 19 and 31 did for the EAGLE heads;
+   positions below 40960 get the values they had. Only LongBench-v2 uses it, with a compile cache of its own
+   (`vllm_cache_step8/qwen3-8b__dspark-maxpos65536`, first compiled by the block's Block 0 smoke run, so no measured
+   arm runs on a fresh compile: deviation 35). The other step-9 datasets stay inside 40960 and use the original head.
+41. **Sixteen Killarney lanes (K9-K16 new), prompt sets copied on the cluster.** K9-K16 are copies of K8's repo +
+   venv (`cp -a`, like K5-K8). The Mac's link to Killarney ran at ~60 KB/s on 2026-10-05 (20 MB in 346 s; Nibi: 3 s),
+   so the prompt sets go to the cluster once (`/scratch/billxby/step9/prompts_stage`) and every lane repo is made
+   byte-identical to the committed sets there (`scripts/sync_prompt_sets.py`, sha256 digest per set; a lane whose sets
+   do not verify gets no work). A first push from the Mac, stopped after 10 minutes, had left K1's
+   `prompts/longbench_v2_qwen3/case_040/rendered_prompt.txt` truncated (32,256 of 81,537 bytes); the digest check
+   caught it and the staged copy replaced it before any step-9 run.
+42. **The Llama-3.1-8B-Instruct blocks (EAGLE-3 and EAGLE-1 heads: 3c, 3d, 4c, 4d, 5a, 5b) run on Nibi H100s; the
+   GPT-OSS-20B, Qwen3-8B + DSpark and R1-Distill blocks on Killarney (2026-10-05 ~19:40Z).** Both H100 queues were deep
+   at launch: Killarney's GPUs were CPU-bound (8 idle GPUs, no free CPUs) and Slurm's start estimate for our next
+   Nibi job was ~9 h out, so both clusters take work. Every block runs whole on one cluster, and so does every pair's
+   set of step-9 blocks: H100 80GB HBM3 on both, the lossless reference and every arm of a block on the same hardware
+   and compile cache. (A first split, 19:15Z, also put GPT-OSS on Nibi; it was moved before any run.) Nibi holds the
+   same snapshots as Killarney (Llama-3.1 83c92747 with all four shard sha256s of deviation 29, yuhuili heads ada412b6
+   / d0e4a208; also gpt-oss-20b 6cee5e81 and RH head c2825cb4), the same 65536-position head configs (sha256 3e47bd97
+   / f8aa3860, weights sha256 16d5bf95 / 875f4613 on both clusters) and the same patched samplers (V2 file 63d52ec3 in
+   every Nibi and Killarney lane venv). Nibi has no per-job /tmp and the patched samplers read per-user /tmp knob
+   files, so the four Nibi lanes (N1/N2 = the addendum's lanes A/B, N3/N4 copies of B) each get a disjoint node set
+   (g1-7, g8-14, g15-21, g22-29); each Llama pair compiles into its own Nibi cache
+   (`/scratch/billxby/vllm_cache_step9/<pair>`), warmed by one throwaway job before any Block 0 or measured run
+   (deviation 35). **Superseded 2026-10-05 ~22:00Z:** Nibi's start estimate for that warm-up job slipped to
+   2026-10-08 13:00 while all 16 Killarney lanes ran, so the Llama blocks (no run yet, no Nibi job ever started) moved
+   to Killarney as well, on step 8's warm Llama caches; every step-9 block runs on Killarney H100s and the Nibi jobs
+   were cancelled. Nibi only grades (CPU).
+43. **A FlashInfer JIT workspace per Killarney lane (2026-10-05 ~22:45Z).** Six of the first ~110 step-9 servers hung
+   in engine warmup (no /health within the startup timeout; the lane retried each item, no run affected). Every vLLM
+   server JIT-builds FlashInfer's sampling module into `~/.cache/flashinfer/0.6.14/90a/cached_ops/sampling` under one
+   file lock, and the module's `build.ninja` names the building lane's own venv, so with 16 lanes the shared build was
+   invalidated and redone by each lane in turn (the directory held fresh object files and never a linked module; this
+   rebuild is also why a server start took ~5 min). Each lane now builds into its own workspace
+   (`FLASHINFER_WORKSPACE_BASE=/scratch/billxby/step9/flashinfer/<lane>`): the same sources, flags and compiler, built
+   once per lane and loaded afterwards. Outputs are unaffected; server starts get shorter.
+44. **Step-9 tables and two schema details (2026-10-06).** `tables/step9__<target>__<drafter>.csv` keeps exactly the
+   columns of the pair's `step8__` file, with one exception: cmd_step8 writes `time_ratio_same_node` only when some
+   row has 10 or more same-node pairs, so the standalone step-8 tables (Llama-3.2-1B rows, Qwen3-1.7B, P-EAGLE) lack
+   that column; when a step-9 row of such a pair has it, it is appended last (blank in the step-8 rows of
+   `pairs__`). Qwen3-8B + Qwen3-0.6B has no step-8 table (its earlier GSM8K / LiveCodeBench rows are the addendum's
+   step 4.3, `tables/lmdraft__*`, another schema): its step-9 table takes the Qwen3-1.7B standalone columns, and its
+   `pairs__` file holds the step-9 rows only. Phase 2's LongBench-v2 rows for Qwen3-1.7B, Qwen3-0.6B and P-EAGLE
+   draft with 65536-position config copies (as deviation 40; config sha256 1ddb5b89 -> 4df54204, 660db3b7 ->
+   8408670b, ea17a342 -> ecabb1e3), each with its own compile cache; Qwen3-0.6B's own cache was warmed first
+   (Killarney job 5974366, deviation 35).
+45. **MT-Bench judged for steps 8 and 9; HumanEval checked with a defining-block grader (2026-10-06, Bill).** At Bill's
+   request after step 9 (the step-9 plan had said no judge spend), every MT-Bench arm of the step-8 and step-9 tables
+   was judged exactly as the addendum's step 1.9 (scripts/addendum_mtbench_judge.py unchanged, pointed at the step-8 /
+   step-9 run trees by `scripts/step9_mtbench_judge.py`): FastChat single-answer prompts, turn 1, claude-fable-5-1 at
+   effort medium on the Message Batches API, batch msgbatch_011ouT5reDRgUyekZvEADp4T, 7,525 requests (12.77M input /
+   3.94M output tokens, $162.28), plus 635 runs with no readable answer scored 1 without a request; 63 judge refusals
+   are recorded as such. Llama-3.1 answers are the whole completion; Qwen3 / R1-Distill the text outside `<think>`.
+   Outputs `step9/mtbench_judge/` (per run, per arm, and `mtbench_vs_lossless.csv`, paired by question). HumanEval:
+   the 897 runs (all trees: paper grid 46, addendum 4, step 9 847) whose last code block is not the defining one were
+   re-executed on their last DEFINING block (`scripts/humaneval_regrade.py`, grade_humaneval.execute unchanged); 315
+   pass. The official tables keep the campaign's grader: the alternative does not make same-target lossless
+   accuracies agree better (Qwen3 82.7-84.7% -> 84.0-86.7%, Llama 55.3-58.0% -> 56.0-62.0%; within sampling noise at
+   n = 150) and changes no conclusion; the per-run verdicts are in `step9/humaneval_regrade.csv`.
+46. **Qwen3-8B + Qwen3-0.6B: spec_casc_opt and r_fuzzy filled in on GSM8K and LiveCodeBench (2026-10-06, Bill).** The
+   addendum's step 4.3 ran only mentored_dec 0.75, cactus 0.35 and spec_casc_tok 0.8 for this pair, so the paper's
+   0.6B column had two empty cells per dataset. spec_casc_opt 0.05 and r_fuzzy 0.25 (each rule's loosest grid alpha)
+   ran with the addendum's own step-4.3 item definition (`scripts/step9_lmdraft_fill.py`; Killarney jobs 5987261 /
+   5987262, 2.4 GPU-h) into `runs/addendum/lmdraft`, paired with the same step-4.3 lossless reference, graded with the
+   campaign's graders (`step9/grades_lmdraft.csv`). `tables/lmdraft__*_qwen3.csv` gain two rows each; the three
+   step-4.3 rows are byte-identical (the new rows draw their bootstrap from a stream of their own, seed 20261002).

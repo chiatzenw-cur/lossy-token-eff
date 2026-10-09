@@ -28,6 +28,13 @@ reasoning_effort=medium (real chain-of-thought before the answer), so
 leaving Qwen3's hybrid-thinking mode on is the comparable setting, not the
 odd one out. Qwen3's template does not force an opening `<think>` tag into
 the rendered text either way -- the model opens it itself if it reasons.
+
+--chat-format llama31 / r1llama (step 8, campaign/addendum/step8/GOAL.md):
+the same conversion through Llama-3.1-8B-Instruct's or
+DeepSeek-R1-Distill-Llama-8B's own template (--tokenizer names the repo).
+enable_thinking is a Qwen3-only switch and is neither passed nor recorded
+for them; R1-Distill's template itself ends the generation prompt with an
+opened `<think>` block.
 """
 
 from __future__ import annotations
@@ -48,6 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source", type=pathlib.Path, required=True, help="Existing Harmony prompt root, e.g. prompts/gsm8k.")
     parser.add_argument("--dest", type=pathlib.Path, required=True, help="Output Qwen3 prompt root, e.g. prompts/gsm8k_qwen3.")
     parser.add_argument("--tokenizer", default="Qwen/Qwen3-8B")
+    parser.add_argument("--chat-format", default="qwen3", choices=["qwen3", "llama31", "r1llama"])
     parser.add_argument("--count", type=int, default=12, help="Convert case_001..case_{count:03d} only (campaign never uses more).")
     parser.add_argument("--enable-thinking", dest="enable_thinking", action="store_true", default=True)
     parser.add_argument("--no-enable-thinking", dest="enable_thinking", action="store_false")
@@ -84,11 +92,12 @@ def main() -> int:
         rendered_src = (src_dir / "rendered_prompt.txt").read_text(encoding="utf-8")
         user_content = extract_user_message(rendered_src)
 
+        template_kwargs = {"enable_thinking": args.enable_thinking} if args.chat_format == "qwen3" else {}
         rendered = tokenizer.apply_chat_template(
             [{"role": "user", "content": user_content}],
             tokenize=False,
             add_generation_prompt=True,
-            enable_thinking=args.enable_thinking,
+            **template_kwargs,
         )
         token_count = len(tokenizer(rendered, add_special_tokens=False)["input_ids"])
 
@@ -96,8 +105,9 @@ def main() -> int:
         metadata = dict(src_metadata)
         metadata["tokenizer"] = args.tokenizer
         metadata.pop("harmony_encoding", None)
-        metadata["chat_format"] = "qwen3"
-        metadata["enable_thinking"] = args.enable_thinking
+        metadata["chat_format"] = args.chat_format
+        if args.chat_format == "qwen3":
+            metadata["enable_thinking"] = args.enable_thinking
         metadata["input_tokens"] = token_count
         metadata["ported_from"] = str(args.source / case)
 
@@ -128,8 +138,8 @@ def main() -> int:
                 "source": str(args.source),
                 "selected": len(index_rows),
                 "tokenizer": args.tokenizer,
-                "chat_format": "qwen3",
-                "enable_thinking": args.enable_thinking,
+                "chat_format": args.chat_format,
+                **({"enable_thinking": args.enable_thinking} if args.chat_format == "qwen3" else {}),
                 "min_input_tokens": min(counts),
                 "max_input_tokens": max(counts),
             },
