@@ -136,7 +136,8 @@ def main():
             low = (rel + "\n").lower() + open(p, "rb").read().decode("utf-8", "replace").lower()
             for tok in LEAK_CHECK + ([] if rel.startswith(DOC_EXCLUDE) else LEAK_CHECK_DOCS):
                 # left boundary only: catches compounds (nibiref) but not base64 noise (...HNibIf...)
-                if re.search(r"(?<![a-z0-9+/])" + re.escape(tok), low):
+                # or JSON-escaped newlines in model output ("\\nibility")
+                if re.search(r"(?<![a-z0-9+/\\])" + re.escape(tok), low):
                     leaks[tok] += 1
                     examples.setdefault(tok, rel)
 

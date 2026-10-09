@@ -26,7 +26,8 @@ itself is never modified.
 
 ```bash
 # 1. build (outside this repo); --slim keeps only readme/summary files under
-#    runs/, old_runs/, runs_phase1/, logs/  (~60 MB packed vs ~1.2 GB of files)
+#    runs/, old_runs/, runs_phase1/, logs/  (~61 MB packed; without it ~104 MB packed,
+#    1.2 GB of files, and logs/humaneval_fresh has 1374 entries)
 python3 tools/anonymize/make_snapshot.py ../anon-snapshot --slim
 
 # 2. it must end with "leak scan: clean"; otherwise add the term to terms.tsv and rebuild
