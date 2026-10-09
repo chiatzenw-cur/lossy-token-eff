@@ -51,7 +51,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "analysis" / "semantic_guard"))
 from join_hidden_states import build_sequence, load_committed_rows, load_hidden_states, recurrence_scores  # noqa: E402
 
-RUNS_ROOT = REPO_ROOT / "runs/hidden_state_pilot/aime24"
+RUNS_ROOT = REPO_ROOT / "runs_phase1/hidden_state_pilot/aime24"
 TAG = "rFuzzy0p3"
 K = 32
 MIN_GAP = 32

@@ -49,21 +49,21 @@ CASES = [
     (
         "case_028_onset31322",
         "case_028",
-        REPO_ROOT / "runs/semantic_guard_pilot/aime24/case_028/seed_0/rFuzzy0p3",
+        REPO_ROOT / "runs_phase1/semantic_guard_pilot/aime24/case_028/seed_0/rFuzzy0p3",
         31318,
         "case_028_onset31322",
     ),
     (
         "case_020_onset3673",
         "case_020",
-        REPO_ROOT / "runs/hidden_state_pilot/aime24/case_020/seed_0/rFuzzy0p3",
+        REPO_ROOT / "runs_phase1/hidden_state_pilot/aime24/case_020/seed_0/rFuzzy0p3",
         3659,  # revised intervention point -- see module docstring
         "case_020_onset3673_alt3659",
     ),
     (
         "case_020_onset28786",
         "case_020",
-        REPO_ROOT / "runs/hidden_state_pilot/aime24/case_020/seed_0/rFuzzy0p3",
+        REPO_ROOT / "runs_phase1/hidden_state_pilot/aime24/case_020/seed_0/rFuzzy0p3",
         28770,
         "case_020_onset28786",
     ),

@@ -37,7 +37,7 @@ across runs since they come from the fixed o200k_harmony vocab):
 
 Usage:
     python3 analysis/semantic_guard/find_macro_loop_restarts.py \\
-        --runs-root runs/hidden_state_pilot/aime24 --tag rFuzzy0p3 \\
+        --runs-root runs_phase1/hidden_state_pilot/aime24 --tag rFuzzy0p3 \\
         --out analysis/semantic_guard/results/macro_loop_restarts.jsonl
 """
 

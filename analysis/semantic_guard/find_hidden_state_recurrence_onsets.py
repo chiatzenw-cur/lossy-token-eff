@@ -27,7 +27,7 @@ tends to stay crossed for consecutive positions).
 
 Usage:
     python3 analysis/semantic_guard/find_hidden_state_recurrence_onsets.py \\
-        --runs-root runs/hidden_state_pilot/aime24 --tag rFuzzy0p3 \\
+        --runs-root runs_phase1/hidden_state_pilot/aime24 --tag rFuzzy0p3 \\
         --k 8 --percentile 99 --min-gap 32 \\
         --out analysis/semantic_guard/results/hidden_state_recurrence_onsets.jsonl
 """

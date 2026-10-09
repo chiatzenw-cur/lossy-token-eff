@@ -14,7 +14,7 @@ signal completely.
 
 Usage:
     python3 analysis/semantic_guard/check_round_throughput.py \\
-        --runs-root runs/aime24_fresh --tags rFuzzy0p3 rFuzzySemanticGuard0p3
+        --runs-root runs_phase1/aime24_fresh --tags rFuzzy0p3 rFuzzySemanticGuard0p3
 """
 
 from __future__ import annotations

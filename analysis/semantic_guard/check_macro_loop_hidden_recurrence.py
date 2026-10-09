@@ -48,7 +48,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "analysis" / "semantic_guard"))
 from join_hidden_states import build_sequence, load_committed_rows, load_hidden_states, recurrence_scores  # noqa: E402
 
-RUN_DIR = REPO_ROOT / "runs/hidden_state_pilot/aime24/case_028/seed_0/rFuzzy0p3"
+RUN_DIR = REPO_ROOT / "runs_phase1/hidden_state_pilot/aime24/case_028/seed_0/rFuzzy0p3"
 FINAL_OPEN_POS = 30953   # first <|channel|>final<|message|> -- abandoned
 RESTART_POS = 31478      # <|end|><|start|>assistant<|channel|>analysis<|message|> -- the restart
 K_VALUES = (8, 16, 32, 64)

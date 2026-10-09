@@ -36,17 +36,17 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 CONFIRMED_ONSETS = [
     (
         "window-entropy hit: case_028 pos=31322 (garbled congruence system, guessed non-answer)",
-        REPO_ROOT / "runs/semantic_guard_pilot/aime24/case_028/seed_0/rFuzzy0p3",
+        REPO_ROOT / "runs_phase1/semantic_guard_pilot/aime24/case_028/seed_0/rFuzzy0p3",
         31322,
     ),
     (
         "hidden-state hit: case_020 pos=3673 (algebraic re-derivation loop)",
-        REPO_ROOT / "runs/hidden_state_pilot/aime24/case_020/seed_0/rFuzzy0p3",
+        REPO_ROOT / "runs_phase1/hidden_state_pilot/aime24/case_020/seed_0/rFuzzy0p3",
         3673,
     ),
     (
         "hidden-state hit: case_020 pos=28786 (repetitive mod-exponentiation confusion)",
-        REPO_ROOT / "runs/hidden_state_pilot/aime24/case_020/seed_0/rFuzzy0p3",
+        REPO_ROOT / "runs_phase1/hidden_state_pilot/aime24/case_020/seed_0/rFuzzy0p3",
         28786,
     ),
 ]

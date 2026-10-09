@@ -20,7 +20,7 @@ crossing into a different run/case).
 
 Usage:
     python3 analysis/semantic_guard/calibrate_window_entropy_guard.py \\
-        --runs-roots runs/aime24_fresh runs/humaneval_fresh --tag strict
+        --runs-roots runs_phase1/aime24_fresh runs_phase1/humaneval_fresh --tag strict
 """
 
 from __future__ import annotations

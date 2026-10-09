@@ -12,8 +12,8 @@ final channel together, exactly as produced), grouped by case and by arm.
 Matching is whole-word/whole-phrase, case-insensitive (`\bwait\b`, `\bhmm+\b`,
 `\blet's\b`, `\bactually\b`, `\bbut\b`).
 
-Source data: `runs/aime24_fresh` (180 runs, 30 cases × 6 arms) and
-`runs/humaneval_fresh` (984 runs, 164 cases × 6 arms) — the same runs the
+Source data: `runs_phase1/aime24_fresh` (180 runs, 30 cases × 6 arms) and
+`runs_phase1/humaneval_fresh` (984 runs, 164 cases × 6 arms) — the same runs the
 top-level README's tables are built from, read the same way
 `scripts/summarize_arms.py` reads them.
 
@@ -21,9 +21,9 @@ Reproduce:
 
 ```
 python3 analysis/semantic_guard/count_hesitation.py \
-    --runs-root runs/aime24_fresh --out-prefix analysis/semantic_guard/results/aime24
+    --runs-root runs_phase1/aime24_fresh --out-prefix analysis/semantic_guard/results/aime24
 python3 analysis/semantic_guard/count_hesitation.py \
-    --runs-root runs/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval
+    --runs-root runs_phase1/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval
 ```
 
 ## Per-case comparison
@@ -232,9 +232,9 @@ environment for `openai-harmony`):
 ```
 source .venv-vllm/bin/activate
 python3 analysis/semantic_guard/count_relaxed_only_hesitation.py \
-    --runs-root runs/aime24_fresh --out-prefix analysis/semantic_guard/results/aime24
+    --runs-root runs_phase1/aime24_fresh --out-prefix analysis/semantic_guard/results/aime24
 python3 analysis/semantic_guard/count_relaxed_only_hesitation.py \
-    --runs-root runs/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval
+    --runs-root runs_phase1/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval
 ```
 
 ## Reading these
@@ -310,7 +310,7 @@ experimental variant" section for how it's wired into the repo as a proper
 **Design**: `r_fuzzy` vs. `r_fuzzy_semantic_guard`, both α=0.3, 8 AIME24
 cases, one fresh server per run (16 runs total), collected in the same
 batch back-to-back for a clean A/B -- re-running the `r_fuzzy` baseline
-rather than reusing `runs/aime24_fresh`'s existing data, since this repo's
+rather than reusing `runs_phase1/aime24_fresh`'s existing data, since this repo's
 own tooling documents real run-to-run GPU nondeterminism even at a fixed
 seed (`remote/run_server_vllm.sh`'s comment: three fresh servers, same
 prompt+seed, gave 1686/1505/1640 tokens). Cases were **not** randomly
@@ -377,7 +377,7 @@ magnitude and the net effect on measured generation wall-time is still a
 solid -28%, not eaten by it. Re-check at full-sweep scale (n=30/n=164)
 before trusting the exact percentage, since this is 8 cases: `python3
 analysis/semantic_guard/check_round_throughput.py --runs-root
-runs/aime24_fresh --tags rFuzzy0p3 rFuzzySemanticGuard0p3` (swap
+runs_phase1/aime24_fresh --tags rFuzzy0p3 rFuzzySemanticGuard0p3` (swap
 `--runs-root`/tags for HumanEval).
 
 Six of eight cases got shorter, several dramatically (case_011 finished in
@@ -427,21 +427,21 @@ python3 scripts/fresh_server_replay.py \
     --arms r_fuzzy r_fuzzy_semantic_guard \
     --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
     --r-fuzzy-alpha 0.3 --r-fuzzy-semantic-guard-alpha 0.3 \
-    --prompt-root prompts/aime24 --runs-root runs/semantic_guard_pilot/aime24 \
+    --prompt-root prompts/aime24 --runs-root runs_phase1/semantic_guard_pilot/aime24 \
     --log-root logs/semantic_guard_pilot/aime24 --max-new-tokens 32768
-python3 scripts/summarize_arms.py --runs-root runs/semantic_guard_pilot/aime24 --prompt-root prompts/aime24
+python3 scripts/summarize_arms.py --runs-root runs_phase1/semantic_guard_pilot/aime24 --prompt-root prompts/aime24
 python3 analysis/semantic_guard/count_relaxed_only_hesitation.py \
-    --runs-root runs/semantic_guard_pilot/aime24 --out-prefix analysis/semantic_guard/results/pilot_aime24
+    --runs-root runs_phase1/semantic_guard_pilot/aime24 --out-prefix analysis/semantic_guard/results/pilot_aime24
 ```
 
-Full per-run detail: [`runs/semantic_guard_pilot/aime24/summary.json`](../../runs/semantic_guard_pilot/aime24/summary.json),
+Full per-run detail: [`runs_phase1/semantic_guard_pilot/aime24/summary.json`](../../runs_phase1/semantic_guard_pilot/aime24/summary.json),
 [`results/pilot_aime24_relaxed_only_totals_by_arm.csv`](results/pilot_aime24_relaxed_only_totals_by_arm.csv).
 
 ## Full-scale results: `r_fuzzy` vs. `r_fuzzy_semantic_guard`, all cases
 
 Answers open question 1 above. `r_fuzzy_semantic_guard` run across all 30
 AIME24 cases and all 164 HumanEval cases (194 fresh-server runs, into
-`runs/aime24_fresh`/`runs/humaneval_fresh` alongside the other six arms, not
+`runs_phase1/aime24_fresh`/`runs_phase1/humaneval_fresh` alongside the other six arms, not
 a separate pilot directory) and compared against the existing `r_fuzzy`
 baseline already collected there -- not re-run fresh this time, unlike the
 8-case pilot: at n=30/n=164 the run-to-run GPU nondeterminism that justified
@@ -521,17 +521,17 @@ source .venv-vllm/bin/activate
 python3 scripts/fresh_server_replay.py \
     --arms r_fuzzy_semantic_guard --cases $(ls prompts/aime24 | grep '^case_') \
     --r-fuzzy-semantic-guard-alpha 0.3 --prompt-root prompts/aime24 \
-    --runs-root runs/aime24_fresh --log-root logs/aime24_fresh --max-new-tokens 32768
+    --runs-root runs_phase1/aime24_fresh --log-root logs/aime24_fresh --max-new-tokens 32768
 python3 scripts/fresh_server_replay.py \
     --arms r_fuzzy_semantic_guard --cases $(ls prompts/humaneval | grep '^case_') \
     --r-fuzzy-semantic-guard-alpha 0.3 --prompt-root prompts/humaneval \
-    --runs-root runs/humaneval_fresh --log-root logs/humaneval_fresh --max-new-tokens 9000
-python3 scripts/summarize_arms.py --runs-root runs/aime24_fresh --prompt-root prompts/aime24
-python3 scripts/summarize_arms.py --runs-root runs/humaneval_fresh --prompt-root prompts/humaneval
-python3 analysis/semantic_guard/count_relaxed_only_hesitation.py --runs-root runs/aime24_fresh --out-prefix analysis/semantic_guard/results/aime24_full7
-python3 analysis/semantic_guard/count_relaxed_only_hesitation.py --runs-root runs/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval_full7
-python3 analysis/semantic_guard/check_round_throughput.py --runs-root runs/aime24_fresh --tags rFuzzy0p3 rFuzzySemanticGuard0p3
-python3 analysis/semantic_guard/check_round_throughput.py --runs-root runs/humaneval_fresh --tags rFuzzy0p3 rFuzzySemanticGuard0p3
+    --runs-root runs_phase1/humaneval_fresh --log-root logs/humaneval_fresh --max-new-tokens 9000
+python3 scripts/summarize_arms.py --runs-root runs_phase1/aime24_fresh --prompt-root prompts/aime24
+python3 scripts/summarize_arms.py --runs-root runs_phase1/humaneval_fresh --prompt-root prompts/humaneval
+python3 analysis/semantic_guard/count_relaxed_only_hesitation.py --runs-root runs_phase1/aime24_fresh --out-prefix analysis/semantic_guard/results/aime24_full7
+python3 analysis/semantic_guard/count_relaxed_only_hesitation.py --runs-root runs_phase1/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval_full7
+python3 analysis/semantic_guard/check_round_throughput.py --runs-root runs_phase1/aime24_fresh --tags rFuzzy0p3 rFuzzySemanticGuard0p3
+python3 analysis/semantic_guard/check_round_throughput.py --runs-root runs_phase1/humaneval_fresh --tags rFuzzy0p3 rFuzzySemanticGuard0p3
 ```
 
 ## `r-fuzzy-semantic-guard-v2`: a wider marker set, not yet run
@@ -734,7 +734,7 @@ confirmed genuinely divergent) instead, and that substitution is used
 throughout below.
 
 **Results** (`analysis/semantic_guard/results/counterfactual_continuation_manifest.json`,
-runs under `runs/counterfactual_continuation/`):
+runs under `runs_phase1/counterfactual_continuation/`):
 
 | case | intervention (orig -> counterfactual) | seed | outcome | tokens to resolve | original's own tokens-to-resolve from same point |
 |---|---|---:|---|---:|---:|
@@ -1060,17 +1060,17 @@ python3 scripts/fresh_server_replay.py \
     --spec-casc-tok-alpha 0.3 --spec-casc-tok-semantic-guard-alpha 0.3 \
     --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
     --prompt-root prompts/aime24 \
-    --runs-root runs/spec_casc_tok_semantic_guard_pilot/aime24 \
+    --runs-root runs_phase1/spec_casc_tok_semantic_guard_pilot/aime24 \
     --log-root logs/spec_casc_tok_semantic_guard_pilot/aime24 --max-new-tokens 32768
-python3 scripts/grade_aime.py --runs-root runs/spec_casc_tok_semantic_guard_pilot/aime24 --prompt-root prompts/aime24
-python3 analysis/semantic_guard/count_relaxed_only_hesitation.py --runs-root runs/spec_casc_tok_semantic_guard_pilot/aime24 --out-prefix analysis/semantic_guard/results/spec_casc_tok_guard_pilot
-python3 analysis/semantic_guard/check_round_throughput.py --runs-root runs/spec_casc_tok_semantic_guard_pilot/aime24 --tags specCascTok0p3 specCascTokSemanticGuard0p3
+python3 scripts/grade_aime.py --runs-root runs_phase1/spec_casc_tok_semantic_guard_pilot/aime24 --prompt-root prompts/aime24
+python3 analysis/semantic_guard/count_relaxed_only_hesitation.py --runs-root runs_phase1/spec_casc_tok_semantic_guard_pilot/aime24 --out-prefix analysis/semantic_guard/results/spec_casc_tok_guard_pilot
+python3 analysis/semantic_guard/check_round_throughput.py --runs-root runs_phase1/spec_casc_tok_semantic_guard_pilot/aime24 --tags specCascTok0p3 specCascTokSemanticGuard0p3
 ```
 
 ## Full-scale AIME24 results: the pilot's picture reverses completely
 
 `spec_casc_tok_semantic_guard` run across all 30 AIME24 cases (fresh, into
-`runs/aime24_fresh` alongside the other arms, same convention as
+`runs_phase1/aime24_fresh` alongside the other arms, same convention as
 `r_fuzzy_semantic_guard`'s full-scale section above -- existing
 `spec_casc_tok` baseline reused, not re-run). HumanEval (164 cases) was
 launched in the same sweep and is reported separately once it finishes;
@@ -1116,7 +1116,7 @@ other, not just with the pilot.
 ## Full-scale HumanEval results, and the combined picture: the two benchmarks disagree
 
 Same sweep, same run (`spec_casc_tok_semantic_guard` fresh across all 164
-HumanEval cases, into `runs/humaneval_fresh`, existing `spec_casc_tok`
+HumanEval cases, into `runs_phase1/humaneval_fresh`, existing `spec_casc_tok`
 baseline reused), finished after AIME24. Where AIME24 showed a clear net
 loss on every axis, HumanEval shows the opposite:
 
@@ -1189,11 +1189,11 @@ Reproduce (HumanEval half):
 python3 scripts/fresh_server_replay.py \
     --arms spec_casc_tok_semantic_guard --spec-casc-tok-semantic-guard-alpha 0.3 \
     --cases $(ls prompts/humaneval | grep '^case_') \
-    --prompt-root prompts/humaneval --runs-root runs/humaneval_fresh \
+    --prompt-root prompts/humaneval --runs-root runs_phase1/humaneval_fresh \
     --log-root logs/humaneval_fresh --max-new-tokens 9000
-python3 scripts/grade_humaneval.py --runs-root runs/humaneval_fresh --prompt-root prompts/humaneval --tags specCascTok0p3 specCascTokSemanticGuard0p3
-python3 analysis/semantic_guard/count_relaxed_only_hesitation.py --runs-root runs/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval_spec_casc_tok_guard_full
-python3 analysis/semantic_guard/check_round_throughput.py --runs-root runs/humaneval_fresh --tags specCascTok0p3 specCascTokSemanticGuard0p3
+python3 scripts/grade_humaneval.py --runs-root runs_phase1/humaneval_fresh --prompt-root prompts/humaneval --tags specCascTok0p3 specCascTokSemanticGuard0p3
+python3 analysis/semantic_guard/count_relaxed_only_hesitation.py --runs-root runs_phase1/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval_spec_casc_tok_guard_full
+python3 analysis/semantic_guard/check_round_throughput.py --runs-root runs_phase1/humaneval_fresh --tags specCascTok0p3 specCascTokSemanticGuard0p3
 ```
 
 ## Does hidden-state recurrence fire under the TRUE lossless baseline, and is it a real reasoning loop when it does?
@@ -1293,13 +1293,13 @@ Reproduce:
 ```
 python3 scripts/fresh_server_replay.py \
     --arms strict --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
-    --prompt-root prompts/aime24 --runs-root runs/hidden_state_strict_pilot/aime24 \
+    --prompt-root prompts/aime24 --runs-root runs_phase1/hidden_state_strict_pilot/aime24 \
     --log-root logs/hidden_state_strict_pilot/aime24 --max-new-tokens 32768 --capture-hidden-states
 python3 analysis/semantic_guard/find_hidden_state_recurrence_onsets.py \
-    --runs-root runs/hidden_state_strict_pilot/aime24 --tag strict --k 8 --percentile 99 --min-gap 32 \
+    --runs-root runs_phase1/hidden_state_strict_pilot/aime24 --tag strict --k 8 --percentile 99 --min-gap 32 \
     --out analysis/semantic_guard/results/strict_hidden_state_recurrence_onsets.jsonl
 python3 analysis/semantic_guard/find_macro_loop_restarts.py \
-    --runs-root runs/hidden_state_strict_pilot/aime24 --tag strict \
+    --runs-root runs_phase1/hidden_state_strict_pilot/aime24 --tag strict \
     --out analysis/semantic_guard/results/strict_macro_loop_restarts.jsonl
 ```
 
@@ -1332,7 +1332,7 @@ python3 scripts/fresh_server_replay.py \
     --spec-casc-tok-alpha 0.3 --spec-casc-tok-semantic-guard-future-guard-alpha 0.3 \
     --spec-casc-tok-semantic-guard-future-guard-k 8 \
     --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
-    --prompt-root prompts/aime24 --runs-root runs/spec_casc_tok_semantic_guard_future_guard_pilot/aime24 \
+    --prompt-root prompts/aime24 --runs-root runs_phase1/spec_casc_tok_semantic_guard_future_guard_pilot/aime24 \
     --log-root logs/spec_casc_tok_semantic_guard_future_guard_pilot/aime24 --max-new-tokens 32768
 ```
 
@@ -1344,7 +1344,7 @@ python3 scripts/fresh_server_replay.py \
     --spec-casc-tok-alpha 0.3 --spec-casc-tok-semantic-guard-future-guard-and-alpha 0.3 \
     --spec-casc-tok-semantic-guard-future-guard-and-k 8 \
     --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
-    --prompt-root prompts/aime24 --runs-root runs/spec_casc_tok_semantic_guard_future_guard_and_pilot/aime24 \
+    --prompt-root prompts/aime24 --runs-root runs_phase1/spec_casc_tok_semantic_guard_future_guard_and_pilot/aime24 \
     --log-root logs/spec_casc_tok_semantic_guard_future_guard_and_pilot/aime24 --max-new-tokens 32768
 ```
 
@@ -1407,7 +1407,7 @@ throughout.
 
 Same protocol as K=4 above, K=8 instead (existing `spec_casc_tok` baseline
 reused; mechanism-check numbers filtered by `tag` the same way, since both
-K=4 and K=8 traces now coexist under `runs/aime24_fresh` and share the same
+K=4 and K=8 traces now coexist under `runs_phase1/aime24_fresh` and share the same
 underlying arm label).
 
 | metric | **lossless (strict)** | baseline (spec_casc_tok) | override-guard | AND-guard | future-guard K=4 | future-guard K=8 |
@@ -1517,7 +1517,7 @@ python3 scripts/fresh_server_replay.py \
     --spec-casc-tok-alpha 0.5 --spec-casc-tok-semantic-guard-future-guard-alpha 0.5 \
     --spec-casc-tok-semantic-guard-future-guard-k 8 \
     --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
-    --prompt-root prompts/aime24 --runs-root runs/spec_casc_tok_alpha0p5_pilot/aime24 \
+    --prompt-root prompts/aime24 --runs-root runs_phase1/spec_casc_tok_alpha0p5_pilot/aime24 \
     --log-root logs/spec_casc_tok_alpha0p5_pilot/aime24 --max-new-tokens 32768
 ```
 
@@ -1662,7 +1662,7 @@ python3 scripts/fresh_server_replay.py \
     --spec-casc-tok-semantic-guard-future-guard-and-alpha 0.3 \
     --spec-casc-tok-semantic-guard-future-guard-and-k 8 \
     --cases $(ls prompts/aime24 | grep '^case_') \
-    --prompt-root prompts/aime24 --runs-root runs/aime24_fresh \
+    --prompt-root prompts/aime24 --runs-root runs_phase1/aime24_fresh \
     --log-root logs/aime24_fresh --max-new-tokens 32768
 ```
 
@@ -1724,7 +1724,7 @@ python3 scripts/fresh_server_replay.py \
     --arms spec_casc_tok spec_casc_tok_semantic_guard_v2 \
     --spec-casc-tok-alpha 0.3 --spec-casc-tok-semantic-guard-v2-alpha 0.3 \
     --cases case_005 case_028 case_002 case_020 case_021 case_015 case_011 case_003 \
-    --prompt-root prompts/aime24 --runs-root runs/spec_casc_tok_semantic_guard_v2_pilot/aime24 \
+    --prompt-root prompts/aime24 --runs-root runs_phase1/spec_casc_tok_semantic_guard_v2_pilot/aime24 \
     --log-root logs/spec_casc_tok_semantic_guard_v2_pilot/aime24 --max-new-tokens 32768
 ```
 
@@ -1784,7 +1784,7 @@ That answer, now resolved:
 actually has the instrumentation field populated (every other future-guard
 run predates the patch that added it, so `window_guard_active` is `null`
 throughout those traces and unusable for this check) --
-`runs/fg_debug_diagnostic/case_004/seed_0/specCascTokSemanticGuardFutureGuard0p7k8/proposals.jsonl`,
+`runs_phase1/fg_debug_diagnostic/case_004/seed_0/specCascTokSemanticGuardFutureGuard0p7k8/proposals.jsonl`,
 K=8, alpha=0.7, 5,756 rounds, 19,144 verified positions. A correct-per-spec
 Python simulation of the arm/decrement algorithm matches the kernel's real
 per-position decisions on **19,132/19,144 (99.94%)** of them.
@@ -1826,7 +1826,7 @@ Reproduce the verification (no live server needed, just the existing trace):
 ```
 python3 -c "
 import json, collections
-rows = [json.loads(l) for l in open('runs/fg_debug_diagnostic/case_004/seed_0/specCascTokSemanticGuardFutureGuard0p7k8/proposals.jsonl')]
+rows = [json.loads(l) for l in open('runs_phase1/fg_debug_diagnostic/case_004/seed_0/specCascTokSemanticGuardFutureGuard0p7k8/proposals.jsonl')]
 by_round = collections.defaultdict(list)
 for r in rows: by_round[r['round']].append(r)
 for k in by_round: by_round[k].sort(key=lambda r: r['pos_in_round'])
@@ -1988,7 +1988,7 @@ python3 scripts/fresh_server_replay.py \
     --spec-casc-tok-alpha 0.3 --spec-casc-tok-semantic-guard-future-guard-alpha 0.3 \
     --spec-casc-tok-semantic-guard-future-guard-k 8 --spec-casc-tok-semantic-guard-v2-alpha 0.3 \
     --cases $(ls prompts/humaneval | grep '^case_' | sort | head -20) \
-    --prompt-root prompts/humaneval --runs-root runs/humaneval_candidates_pilot \
+    --prompt-root prompts/humaneval --runs-root runs_phase1/humaneval_candidates_pilot \
     --log-root logs/humaneval_candidates_pilot --max-new-tokens 9000
 ```
 
@@ -2144,7 +2144,7 @@ the reference).
 
 `spec_casc_tok_hsr_guard` run across all 30 AIME24 cases (baseline for
 cases 1-16 run fresh alongside it; cases 17-30 reused the existing
-`runs/aime24_fresh` baseline instead of re-running it, after confirming
+`runs_phase1/aime24_fresh` baseline instead of re-running it, after confirming
 bit-identical `output_tokens`/`finish_reason` between a fresh re-run and
 that existing data on all 16 overlapping cases -- generation is genuinely
 deterministic run-to-run in this setup at a fixed seed, so reusing
@@ -2208,7 +2208,7 @@ python3 scripts/fresh_server_replay.py \
     --arms spec_casc_tok spec_casc_tok_hsr_guard \
     --spec-casc-tok-alpha 0.3 --spec-casc-tok-hsr-guard-alpha 0.3 \
     --cases $(printf 'case_%03d ' $(seq 1 30)) \
-    --prompt-root prompts/aime24 --runs-root runs/hsr_guard_full/aime24 \
+    --prompt-root prompts/aime24 --runs-root runs_phase1/hsr_guard_full/aime24 \
     --log-root logs/hsr_guard_full/aime24 --max-new-tokens 32768
 ```
 

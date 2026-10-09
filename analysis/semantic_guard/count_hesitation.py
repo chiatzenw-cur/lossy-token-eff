@@ -26,10 +26,10 @@ them.
 
 Usage:
     python3 analysis/semantic_guard/count_hesitation.py \\
-        --runs-root runs/aime24_fresh --out-prefix analysis/semantic_guard/results/aime24
+        --runs-root runs_phase1/aime24_fresh --out-prefix analysis/semantic_guard/results/aime24
 
     python3 analysis/semantic_guard/count_hesitation.py \\
-        --runs-root runs/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval
+        --runs-root runs_phase1/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval
 """
 
 from __future__ import annotations

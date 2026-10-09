@@ -22,7 +22,7 @@ stopped), which are skipped here rather than scored.
 
 Usage:
     python3 analysis/semantic_guard/join_hidden_states.py \\
-        --run-dir runs/semantic_guard_pilot/aime24/case_005/seed_0/rFuzzy0p3 \\
+        --run-dir runs_phase1/semantic_guard_pilot/aime24/case_005/seed_0/rFuzzy0p3 \\
         --out analysis/semantic_guard/results/case_005_hidden_recurrence.jsonl
 """
 

@@ -38,7 +38,7 @@ stays a join against the trace rather than a second computation of it.
 
 Usage:
     python3 analysis/semantic_guard/find_window_entropy_ramp_onsets.py \\
-        --runs-root runs/semantic_guard_pilot/aime24 --tag rFuzzy0p3 \\
+        --runs-root runs_phase1/semantic_guard_pilot/aime24 --tag rFuzzy0p3 \\
         --out analysis/semantic_guard/results/window_entropy_ramp_onsets.jsonl
 """
 

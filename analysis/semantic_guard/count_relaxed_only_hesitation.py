@@ -32,9 +32,9 @@ than special-cased out so the comparison table is uniform across arms.
 
 Usage:
     python3 analysis/semantic_guard/count_relaxed_only_hesitation.py \\
-        --runs-root runs/aime24_fresh --out-prefix analysis/semantic_guard/results/aime24
+        --runs-root runs_phase1/aime24_fresh --out-prefix analysis/semantic_guard/results/aime24
     python3 analysis/semantic_guard/count_relaxed_only_hesitation.py \\
-        --runs-root runs/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval
+        --runs-root runs_phase1/humaneval_fresh --out-prefix analysis/semantic_guard/results/humaneval
 """
 
 from __future__ import annotations
@@ -107,7 +107,7 @@ def load_tokens(proposals_path: pathlib.Path) -> list[dict[str, Any]]:
 # merged span -- and every hesitation-word match anywhere in that span then
 # inherits whichever tokens' lossy_only_accepted flags happened to OR
 # together across it, wildly overcounting "relaxed-only" hits. First caught
-# on runs/semantic_guard_pilot/aime24/case_011: reconstruct() was returning
+# on runs_phase1/semantic_guard_pilot/aime24/case_011: reconstruct() was returning
 # 1,965 spans for a 5,029-token completion (average "token" > 2.5 raw
 # tokens), traced to exactly this.
 _MAX_PENDING_TOKENS = 4
